@@ -1,0 +1,8 @@
+{
+  "git.enabled": true,
+  "git.autoRepositoryDetection": true,
+  "git.openRepositoryInParentFolders": "always",
+  "githubPullRequests.remotes": [
+    "origin"
+  ]
+}
