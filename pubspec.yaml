@@ -1,0 +1,36 @@
+name: adaptive_athlete
+description: "Adaptive Athlete MVP"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  supabase_flutter: ^2.12.0
+  drift: ^2.31.0
+  drift_flutter: ^0.2.5
+  sqlite3_flutter_libs: ^0.5.41
+  flutter_riverpod: ^2.6.1
+  go_router: ^17.0.0
+  uuid: ^4.5.2
+  csv: ^6.0.0
+  file_picker: ^8.1.7
+  excel: ^4.0.6
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  spreadsheet_decoder: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  drift_dev: ^2.31.0
+  build_runner: ^2.4.15
+  sqlite3: ^2.9.4
+
+flutter:
+  uses-material-design: true
