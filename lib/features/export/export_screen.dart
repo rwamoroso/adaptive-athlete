@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/utils/app_providers.dart';
 import '../../db/app_db.dart';
 import '../training/garmin_csv_import_service.dart';
+import '../ui/clinical_widgets.dart';
 import '../training/run_inputs_screen.dart';
 import '../training/strength_history_import_service.dart';
 
@@ -241,7 +242,9 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Card(
+        const SectionHeader(text: 'Import / Export'),
+        const SizedBox(height: 8),
+        GlassCard(
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -318,7 +321,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        Card(
+        GlassCard(
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -386,7 +389,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        Card(
+        GlassCard(
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -436,7 +439,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        Card(
+        GlassCard(
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(

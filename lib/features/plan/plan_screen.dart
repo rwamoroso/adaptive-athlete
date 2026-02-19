@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/rules/recovery_gating.dart';
 import '../../core/utils/app_providers.dart';
 import '../../core/utils/date_utils.dart';
+import '../ui/clinical_widgets.dart';
 import 'ppl_template_service.dart';
 
 class PlanScreen extends ConsumerStatefulWidget {
@@ -106,62 +107,80 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Push / Pull / Legs Template',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 12),
-          Row(
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+      children: [
+        const SectionHeader(text: 'Plan Builder'),
+        const SizedBox(height: 8),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  _templatePath ?? 'No template selected',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              Text(
+                'Push / Pull / Legs Template',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _templatePath ?? 'No template selected',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 130,
+                    child: PrimaryPillButton(
+                      text: 'Pick XLSX',
+                      variant: PillButtonVariant.outlined,
+                      onPressed: _pickTemplateFile,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('First Day of Split: ${toYmd(_startDate)}'),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 130,
+                    child: PrimaryPillButton(
+                      text: 'Change Date',
+                      variant: PillButtonVariant.outlined,
+                      onPressed: _pickStartDate,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Apply progression (+5 lb loaded sets)'),
+                subtitle: const Text(
+                    'Blocked automatically when recovery gate fails (<6h sleep or unknown).'),
+                value: _applyProgression,
+                onChanged: (value) => setState(() => _applyProgression = value),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: PrimaryPillButton(
+                  text: 'Generate Split Plan From Template',
+                  onPressed: _generating ? null : _generatePlan,
                 ),
               ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: _pickTemplateFile,
-                child: const Text('Pick XLSX'),
-              ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Text('First Day of Split: ${toYmd(_startDate)}'),
-              ),
-              OutlinedButton(
-                onPressed: _pickStartDate,
-                child: const Text('Change Date'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Apply progression (+5 lb loaded sets)'),
-            subtitle: const Text(
-                'Blocked automatically when recovery gate fails (<6h sleep or unknown).'),
-            value: _applyProgression,
-            onChanged: (value) => setState(() => _applyProgression = value),
-          ),
-          const SizedBox(height: 8),
-          FilledButton(
-            onPressed: _generating ? null : _generatePlan,
-            child: const Text('Generate Split Plan From Template'),
-          ),
-          const SizedBox(height: 12),
-          Text(_status),
-        ],
-      ),
+        ),
+        const SizedBox(height: 10),
+        GlassCard(child: Text(_status)),
+      ],
     );
   }
 }
