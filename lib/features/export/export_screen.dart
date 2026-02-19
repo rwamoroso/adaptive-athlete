@@ -239,9 +239,52 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final selectedInputs = [
+      _selectedCsvPath,
+      _selectedStrengthPath,
+      _selectedStandardWorkbookPath
+    ].where((e) => e != null && e.isNotEmpty).length;
+
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       children: [
+        Text(
+          'DATA OPERATIONS & AUDIT',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                letterSpacing: 1,
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: 12),
+        const ClinicalBanner(
+          text: 'Clinical Focus: Clean Imports & Traceable Exports',
+        ),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.85,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            MetricTile(
+              title: 'Inputs Ready',
+              valueText: '$selectedInputs',
+              subtitleText: 'Selected import files',
+              leadingIcon: Icons.attach_file_outlined,
+            ),
+            MetricTile(
+              title: 'Exports',
+              valueText: _paths.isEmpty ? 'Pending' : '${_paths.length} files',
+              subtitleText: _weeklyWorkbookPath == null
+                  ? 'Workbook not exported'
+                  : 'Workbook ready',
+              leadingIcon: Icons.download_done_outlined,
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
         const SectionHeader(text: 'Import / Export'),
         const SizedBox(height: 8),
         GlassCard(
@@ -265,9 +308,13 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    OutlinedButton(
-                      onPressed: _pickCsvFile,
-                      child: const Text('Pick CSV'),
+                    SizedBox(
+                      width: 120,
+                      child: PrimaryPillButton(
+                        text: 'Pick CSV',
+                        variant: PillButtonVariant.outlined,
+                        onPressed: _pickCsvFile,
+                      ),
                     ),
                   ],
                 ),
@@ -289,19 +336,27 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
-                FilledButton.tonal(
-                  onPressed: _importing ? null : _importGarminCsv,
-                  child: const Text('Import Garmin CSV'),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: 'Import Garmin CSV',
+                    variant: PillButtonVariant.tonal,
+                    onPressed: _importing ? null : _importGarminCsv,
+                  ),
                 ),
                 const SizedBox(height: 8),
-                OutlinedButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const RunInputsScreen()),
-                    );
-                  },
-                  child: const Text('Open Manual Run Inputs'),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: 'Open Manual Run Inputs',
+                    variant: PillButtonVariant.outlined,
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => const RunInputsScreen()),
+                      );
+                    },
+                  ),
                 ),
                 if (_importResult != null) ...[
                   const SizedBox(height: 12),
@@ -342,9 +397,13 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    OutlinedButton(
-                      onPressed: _pickStandardWorkbookFile,
-                      child: const Text('Pick XLSX'),
+                    SizedBox(
+                      width: 126,
+                      child: PrimaryPillButton(
+                        text: 'Pick XLSX',
+                        variant: PillButtonVariant.outlined,
+                        onPressed: _pickStandardWorkbookFile,
+                      ),
                     ),
                   ],
                 ),
@@ -359,17 +418,25 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                         '${_standardSplitStartDate.day.toString().padLeft(2, '0')}',
                       ),
                     ),
-                    OutlinedButton(
-                      onPressed: _pickStandardSplitStartDate,
-                      child: const Text('Change Date'),
+                    SizedBox(
+                      width: 132,
+                      child: PrimaryPillButton(
+                        text: 'Change Date',
+                        variant: PillButtonVariant.outlined,
+                        onPressed: _pickStandardSplitStartDate,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                FilledButton.tonal(
-                  onPressed:
-                      _standardImporting ? null : _importStandardWorkbook,
-                  child: const Text('Import Standard Workbook'),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: 'Import Standard Workbook',
+                    variant: PillButtonVariant.tonal,
+                    onPressed:
+                        _standardImporting ? null : _importStandardWorkbook,
+                  ),
                 ),
                 if (_standardImportResult != null) ...[
                   const SizedBox(height: 12),
@@ -410,16 +477,25 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    OutlinedButton(
-                      onPressed: _pickStrengthFile,
-                      child: const Text('Pick XLSX'),
+                    SizedBox(
+                      width: 126,
+                      child: PrimaryPillButton(
+                        text: 'Pick XLSX',
+                        variant: PillButtonVariant.outlined,
+                        onPressed: _pickStrengthFile,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                FilledButton.tonal(
-                  onPressed: _strengthImporting ? null : _importStrengthHistory,
-                  child: const Text('Import Strength XLSX'),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: 'Import Strength XLSX',
+                    variant: PillButtonVariant.tonal,
+                    onPressed:
+                        _strengthImporting ? null : _importStrengthHistory,
+                  ),
                 ),
                 if (_strengthImportResult != null) ...[
                   const SizedBox(height: 12),
@@ -460,16 +536,25 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    OutlinedButton(
-                      onPressed: _pickExportDirectory,
-                      child: const Text('Choose Folder'),
+                    SizedBox(
+                      width: 136,
+                      child: PrimaryPillButton(
+                        text: 'Choose Folder',
+                        variant: PillButtonVariant.outlined,
+                        onPressed: _pickExportDirectory,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                FilledButton.tonal(
-                  onPressed: _weeklyExporting ? null : _exportStandardWorkbook,
-                  child: const Text('Export Standard Workbook'),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: 'Export Standard Workbook',
+                    variant: PillButtonVariant.tonal,
+                    onPressed:
+                        _weeklyExporting ? null : _exportStandardWorkbook,
+                  ),
                 ),
                 if (_weeklyWorkbookPath != null) ...[
                   const SizedBox(height: 8),
@@ -481,9 +566,12 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: _exporting ? null : _export,
-                  child: const Text('Export CSVs'),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: 'Export CSVs',
+                    onPressed: _exporting ? null : _export,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 if (_paths.isEmpty)

@@ -21,10 +21,47 @@ class HistoryScreen extends ConsumerWidget {
         }
 
         final days = snapshot.data ?? const <WorkoutDay>[];
+        final latestDate = days.isEmpty ? 'none' : days.first.workoutDate;
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           children: [
+            Text(
+              'ATHLETIC ADAPTATION HISTORY',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    letterSpacing: 1,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            const ClinicalBanner(
+              text: 'Clinical Focus: Trend Continuity & Session Recall',
+            ),
+            const SizedBox(height: 12),
+            GridView.count(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.8,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                MetricTile(
+                  title: 'Total Days',
+                  valueText: '${days.length}',
+                  subtitleText: 'Logged workout days',
+                  leadingIcon: Icons.calendar_month_outlined,
+                ),
+                MetricTile(
+                  title: 'Latest Entry',
+                  valueText: latestDate,
+                  subtitleText:
+                      days.isEmpty ? 'No sessions yet' : 'Most recent',
+                  leadingIcon: Icons.event_note_outlined,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
             const SectionHeader(text: 'Workout History'),
             const SizedBox(height: 8),
             GlassCard(

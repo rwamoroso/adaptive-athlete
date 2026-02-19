@@ -23,6 +23,44 @@ class SettingsScreen extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       children: [
+        Text(
+          'SYSTEM & CLINICAL CONFIG',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                letterSpacing: 1,
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: 12),
+        const ClinicalBanner(
+          text: 'Clinical Focus: Reliable Local State & Sync Integrity',
+        ),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.85,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            MetricTile(
+              title: 'Mode',
+              valueText: settings.localOnly ? 'Local Only' : 'Cloud + Auth',
+              subtitleText: settings.unit == UnitPreference.lb
+                  ? 'Units: lb'
+                  : 'Units: kg',
+              leadingIcon: Icons.tune_outlined,
+            ),
+            MetricTile(
+              title: 'Supabase',
+              valueText: bootstrap.initialized ? 'Connected' : 'Offline',
+              subtitleText:
+                  userId == null ? 'No active user' : 'User authenticated',
+              leadingIcon: Icons.cloud_done_outlined,
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
         const SectionHeader(text: 'Preferences'),
         const SizedBox(height: 8),
         GlassCard(

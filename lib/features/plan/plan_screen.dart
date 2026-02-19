@@ -107,9 +107,49 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final templateStatus = _templatePath == null ? 'Not selected' : 'Selected';
+    final progressionStatus = _applyProgression ? 'Enabled' : 'Disabled';
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       children: [
+        Text(
+          'ATHLETIC ADAPTATION PLANNING',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                letterSpacing: 1,
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: 12),
+        const ClinicalBanner(
+          text: 'Clinical Focus: Structured Load Progression',
+        ),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.85,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            MetricTile(
+              title: 'Template',
+              valueText: templateStatus,
+              subtitleText: _templatePath == null
+                  ? 'Pick XLSX to continue'
+                  : _templatePath!,
+              leadingIcon: Icons.description_outlined,
+            ),
+            MetricTile(
+              title: 'Progression',
+              valueText: progressionStatus,
+              subtitleText: 'Auto-blocked when recovery gate fails',
+              leadingIcon: Icons.trending_up_outlined,
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
         const SectionHeader(text: 'Plan Builder'),
         const SizedBox(height: 8),
         GlassCard(
@@ -121,42 +161,90 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _templatePath ?? 'No template selected',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 130,
-                    child: PrimaryPillButton(
-                      text: 'Pick XLSX',
-                      variant: PillButtonVariant.outlined,
-                      onPressed: _pickTemplateFile,
-                    ),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 560;
+                  if (compact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _templatePath ?? 'No template selected',
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: PrimaryPillButton(
+                            text: 'Pick XLSX',
+                            variant: PillButtonVariant.outlined,
+                            onPressed: _pickTemplateFile,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _templatePath ?? 'No template selected',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 130,
+                        child: PrimaryPillButton(
+                          text: 'Pick XLSX',
+                          variant: PillButtonVariant.outlined,
+                          onPressed: _pickTemplateFile,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text('First Day of Split: ${toYmd(_startDate)}'),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 130,
-                    child: PrimaryPillButton(
-                      text: 'Change Date',
-                      variant: PillButtonVariant.outlined,
-                      onPressed: _pickStartDate,
-                    ),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 560;
+                  if (compact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('First Day of Split: ${toYmd(_startDate)}'),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: PrimaryPillButton(
+                            text: 'Change Date',
+                            variant: PillButtonVariant.outlined,
+                            onPressed: _pickStartDate,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text('First Day of Split: ${toYmd(_startDate)}'),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 130,
+                        child: PrimaryPillButton(
+                          text: 'Change Date',
+                          variant: PillButtonVariant.outlined,
+                          onPressed: _pickStartDate,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 8),
               SwitchListTile(
@@ -179,7 +267,16 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        GlassCard(child: Text(_status)),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionHeader(text: 'Generation Status'),
+              const SizedBox(height: 8),
+              Text(_status),
+            ],
+          ),
+        ),
       ],
     );
   }
