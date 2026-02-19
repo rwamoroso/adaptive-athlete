@@ -1,0 +1,307 @@
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+
+import 'clinical_theme.dart';
+
+enum PillButtonVariant { filled, tonal, outlined }
+
+class GlassCard extends StatelessWidget {
+  const GlassCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(14),
+    this.radius = 18,
+    this.tintColor,
+    this.onTap,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+  final Color? tintColor;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(radius);
+
+    Widget content = DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
+        color: tintColor ?? Colors.white.withValues(alpha: 0.08),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: borderRadius,
+          onTap: onTap,
+          child: Padding(padding: padding, child: child),
+        ),
+      ),
+    );
+
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: content,
+      ),
+    );
+  }
+}
+
+class SectionHeader extends StatelessWidget {
+  const SectionHeader({super.key, required this.text, this.trailing});
+
+  final String text;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            text,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.25,
+            ),
+          ),
+        ),
+        if (trailing != null) trailing!,
+      ],
+    );
+  }
+}
+
+class MetricTile extends StatelessWidget {
+  const MetricTile({
+    super.key,
+    required this.title,
+    required this.valueText,
+    this.subtitleText,
+    this.leadingIcon,
+    this.trailingWidget,
+    this.onTap,
+  });
+
+  final String title;
+  final String valueText;
+  final String? subtitleText;
+  final IconData? leadingIcon;
+  final Widget? trailingWidget;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return GlassCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (leadingIcon != null) ...[
+                Icon(
+                  leadingIcon,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+              ],
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (trailingWidget != null)
+                Flexible(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: trailingWidget,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            valueText,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          if (subtitleText != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitleText!,
+              style: theme.textTheme.bodySmall,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class PrimaryPillButton extends StatelessWidget {
+  const PrimaryPillButton({
+    super.key,
+    required this.text,
+    required this.onPressed,
+    this.variant = PillButtonVariant.filled,
+    this.icon,
+  });
+
+  final String text;
+  final VoidCallback? onPressed;
+  final PillButtonVariant variant;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (variant) {
+      case PillButtonVariant.filled:
+        return FilledButton(
+          onPressed: onPressed,
+          child: _label(),
+        );
+      case PillButtonVariant.tonal:
+        return FilledButton.tonal(
+          onPressed: onPressed,
+          child: _label(),
+        );
+      case PillButtonVariant.outlined:
+        return OutlinedButton(
+          onPressed: onPressed,
+          child: _label(),
+        );
+    }
+  }
+
+  Widget _label() {
+    if (icon == null) {
+      return Text(text, textAlign: TextAlign.center);
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18),
+        const SizedBox(width: 6),
+        Flexible(child: Text(text, textAlign: TextAlign.center)),
+      ],
+    );
+  }
+}
+
+class ClinicalBanner extends StatelessWidget {
+  const ClinicalBanner({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      radius: 22,
+      padding: EdgeInsets.zero,
+      tintColor: const Color(0xFF8B7CFF).withValues(alpha: 0.2),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: LinearGradient(
+            colors: [
+              ClinicalPalette.accent.withValues(alpha: 0.15),
+              const Color(0xFFC782C4).withValues(alpha: 0.24),
+            ],
+          ),
+        ),
+        child: Text(
+          text,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}
+
+class ClinicalDivider extends StatelessWidget {
+  const ClinicalDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Divider(color: Colors.white.withValues(alpha: 0.16), height: 20);
+  }
+}
+
+class RunsTrack extends StatelessWidget {
+  const RunsTrack({
+    super.key,
+    required this.value,
+    this.leftIcon = Icons.directions_run_rounded,
+    this.rightIcon = Icons.monitor_heart_outlined,
+  });
+
+  final double value;
+  final IconData leftIcon;
+  final IconData rightIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    final clamped = value.clamp(0.0, 1.0);
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Icon(leftIcon, color: ClinicalPalette.accentSecondary, size: 22),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SliderTheme(
+              data: Theme.of(context).sliderTheme.copyWith(
+                    trackHeight: 10,
+                    overlayShape:
+                        const RoundSliderOverlayShape(overlayRadius: 16),
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 12),
+                    inactiveTrackColor: Colors.white.withValues(alpha: 0.18),
+                    activeTrackColor: const Color(0xFF59A8E8),
+                  ),
+              child: IgnorePointer(
+                child: Slider(
+                  min: 0,
+                  max: 1,
+                  value: clamped,
+                  onChanged: (_) {},
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(rightIcon, color: const Color(0xFFF58D7A), size: 22),
+        ],
+      ),
+    );
+  }
+}
