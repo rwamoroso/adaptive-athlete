@@ -468,25 +468,9 @@ class _DailyClinicalContent extends StatelessWidget {
             const SizedBox(height: 14),
             _buildAiSummary(context),
             const SizedBox(height: 12),
-            _buildActionRow(context),
+            _buildPrimaryLargeActions(context),
             const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: PrimaryPillButton(
-                text: 'Mark Rest Day + Push Split',
-                icon: Icons.playlist_add_check_circle_outlined,
-                onPressed: onMarkRest,
-              ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: PrimaryPillButton(
-                text: 'Run Mock AI Analysis',
-                variant: PillButtonVariant.outlined,
-                onPressed: onRunMockAi,
-              ),
-            ),
+            _buildSecondaryActionRow(context),
             const SizedBox(height: 16),
             const ClinicalDivider(),
             const SectionHeader(text: 'Prescribed Run'),
@@ -707,7 +691,31 @@ class _DailyClinicalContent extends StatelessWidget {
     );
   }
 
-  Widget _buildActionRow(BuildContext context) {
+  Widget _buildPrimaryLargeActions(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: PrimaryPillButton(
+            text: 'Run Inputs',
+            variant: PillButtonVariant.tonal,
+            onPressed: onRunInputs,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: PrimaryPillButton(
+            text: 'Open Workout Day Detail',
+            variant: PillButtonVariant.tonal,
+            onPressed: onOpenWorkoutDetail,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSecondaryActionRow(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final textScale = MediaQuery.textScalerOf(context).scale(1);
@@ -718,18 +726,19 @@ class _DailyClinicalContent extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: PrimaryPillButton(
-                  text: 'Run Inputs',
+                  text: 'Mark Rest Day + Push Split',
+                  icon: Icons.playlist_add_check_circle_outlined,
                   variant: PillButtonVariant.tonal,
-                  onPressed: onRunInputs,
+                  onPressed: onMarkRest,
                 ),
               ),
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: PrimaryPillButton(
-                  text: 'Open Workout Day Detail',
-                  variant: PillButtonVariant.tonal,
-                  onPressed: onOpenWorkoutDetail,
+                  text: 'Run Mock AI Analysis',
+                  variant: PillButtonVariant.outlined,
+                  onPressed: onRunMockAi,
                 ),
               ),
             ],
@@ -740,17 +749,18 @@ class _DailyClinicalContent extends StatelessWidget {
           children: [
             Expanded(
               child: PrimaryPillButton(
-                text: 'Run Inputs',
+                text: 'Mark Rest Day + Push Split',
+                icon: Icons.playlist_add_check_circle_outlined,
                 variant: PillButtonVariant.tonal,
-                onPressed: onRunInputs,
+                onPressed: onMarkRest,
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: PrimaryPillButton(
-                text: 'Open Workout Day Detail',
-                variant: PillButtonVariant.tonal,
-                onPressed: onOpenWorkoutDetail,
+                text: 'Run Mock AI Analysis',
+                variant: PillButtonVariant.outlined,
+                onPressed: onRunMockAi,
               ),
             ),
           ],
