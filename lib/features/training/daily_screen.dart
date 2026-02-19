@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,8 @@ import '../../core/utils/app_providers.dart';
 import '../../core/utils/date_utils.dart';
 import '../../db/app_db.dart';
 import '../ai/ai_analyze_service.dart';
+import '../ui/clinical_theme.dart';
+import '../ui/clinical_widgets.dart';
 import 'run_inputs_screen.dart';
 import 'workout_day_detail_screen.dart';
 
@@ -19,6 +22,41 @@ String _formatMinutesAsHoursMinutes(int? totalMinutes) {
   final hours = totalMinutes ~/ 60;
   final minutes = totalMinutes % 60;
   return '${hours}h ${minutes}m';
+}
+
+String _formatDuration(int? seconds) {
+  if (seconds == null) {
+    return 'unknown';
+  }
+  final minutes = seconds ~/ 60;
+  final remaining = seconds % 60;
+  return '${minutes}m ${remaining.toString().padLeft(2, '0')}s';
+}
+
+String _formatDistanceKm(double? meters) {
+  if (meters == null) {
+    return 'unknown';
+  }
+  return '${(meters / 1000).toStringAsFixed(1)} km';
+}
+
+String _formatHeaderDate(String ymd) {
+  final date = parseYmd(ymd);
+  const months = <String>[
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec'
+  ];
+  return '${months[date.month - 1]} ${date.day}, ${date.year}';
 }
 
 class DailyScreen extends ConsumerStatefulWidget {
@@ -210,6 +248,63 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  AiAnalyzeResponse? _latestAiSummary(WorkoutDayDetail detail) {
+    if (detail.aiAudits.isEmpty) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(detail.aiAudits.first.responseJson);
+      if (decoded is Map<String, dynamic>) {
+        return AiAnalyzeResponse.fromJson(decoded);
+      }
+      if (decoded is Map) {
+        return AiAnalyzeResponse.fromJson(
+          decoded.map((key, value) => MapEntry(key.toString(), value)),
+        );
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<double> _sparklineSeries(WorkoutDayDetail detail) {
+    if (detail.runSessions.isEmpty) {
+      return const <double>[0.16, 0.24, 0.21, 0.44, 0.58, 0.52, 0.56];
+    }
+
+    final raw = detail.runSessions
+        .map((run) {
+          final distance = run.session.distanceM;
+          if (distance != null && distance > 0) {
+            return distance / 1000;
+          }
+          final duration = run.session.durationS;
+          if (duration != null && duration > 0) {
+            return duration / 600;
+          }
+          return 0.2;
+        })
+        .toList()
+        .cast<double>();
+
+    final start = math.max(0, raw.length - 7);
+    final sliced = raw.sublist(start);
+
+    while (sliced.length < 7) {
+      sliced.insert(0, 0.15);
+    }
+
+    final maxVal = sliced.reduce(math.max);
+    if (maxVal <= 0) {
+      return List<double>.filled(7, 0.2);
+    }
+
+    return sliced
+        .map((value) => (value / maxVal).clamp(0.08, 1.0).toDouble())
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final db = ref.watch(appDbProvider);
@@ -265,218 +360,762 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
           excluded += detectorResult.excludedCount;
         }
 
-        return RefreshIndicator(
+        final aiSummary = _latestAiSummary(safeDetail);
+        final runSeries = _sparklineSeries(safeDetail);
+        final runProgress = safeDetail.runSessions.isEmpty
+            ? 0.0
+            : (safeDetail.runSessions.length / 7).clamp(0.0, 1.0).toDouble();
+        final totalRunDistance = safeDetail.runSessions.fold<double>(
+          0,
+          (sum, run) => sum + (run.session.distanceM ?? 0),
+        );
+
+        return _DailyClinicalContent(
+          selectedDate: _selectedDate,
+          safeDetail: safeDetail,
+          sleepNight: sleepNight,
+          sleepMin: sleepMin,
+          gate: gate,
+          excluded: excluded,
+          aiSummary: aiSummary,
+          runSeries: runSeries,
+          runProgress: runProgress,
+          totalRunDistance: totalRunDistance,
+          sessionTypeLabel: _sessionTypeLabel,
+          onPickDate: _pickDate,
+          onOpenSleepEditor: _openSleepEditor,
+          onRunInputs: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const RunInputsScreen()),
+            );
+          },
+          onOpenWorkoutDetail: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => WorkoutDayDetailScreen(date: _selectedDate),
+              ),
+            );
+          },
+          onMarkRest: safeDetail.planDayNumber == null
+              ? null
+              : () => _markRestDayAndPush(safeDetail),
+          onRunMockAi: () => _runMockAi(safeDetail, excluded, gate),
           onRefresh: () async => setState(() => _refresh++),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Row(
-                children: [
-                  Expanded(child: Text('Selected Date: $_selectedDate')),
-                  OutlinedButton(
-                      onPressed: _pickDate, child: const Text('Pick Date')),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  _SummaryCard(
-                    title: 'Sleep',
-                    value: _formatMinutesAsHoursMinutes(sleepMin),
-                    subtitle: 'Tap to view/edit',
-                    onTap: () => _openSleepEditor(sleepNight),
-                  ),
-                  _SummaryCard(
-                      title: 'Run',
-                      value: '${safeDetail.runSessions.length} sessions'),
-                  _SummaryCard(
-                    title: 'Flags',
-                    value:
-                        '${gate.progressionAllowed ? 'ok' : gate.reasoning}; artifacts: $excluded',
-                  ),
-                  _SummaryCard(
-                    title: 'Split',
-                    value: safeDetail.planDayNumber == null
-                        ? 'No split linked'
-                        : 'Day ${safeDetail.planDayNumber} • ${_sessionTypeLabel(safeDetail.planSessionType)}',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  OutlinedButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const RunInputsScreen()),
-                      );
-                    },
-                    child: const Text('Run Inputs'),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                WorkoutDayDetailScreen(date: _selectedDate)),
-                      );
-                    },
-                    child: const Text('Open Workout Day Detail'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              FilledButton.tonal(
-                onPressed: safeDetail.planDayNumber == null
-                    ? null
-                    : () => _markRestDayAndPush(safeDetail),
-                child: const Text('Mark Rest Day + Push Split'),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: () => _runMockAi(safeDetail, excluded, gate),
-                child: const Text('Run Mock AI Analysis'),
-              ),
-              const SizedBox(height: 16),
-              Text('Prescribed Run',
-                  style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    safeDetail.prescribedRun?.runType == null
-                        ? 'No prescribed run linked to this day.'
-                        : 'Type: ${safeDetail.prescribedRun?.runType}\n'
-                            'Duration: ${safeDetail.prescribedRun?.durationText ?? 'unknown'}\n'
-                            'Pace: ${safeDetail.prescribedRun?.targetPace ?? 'unknown'}\n'
-                            'Guardrails: ${safeDetail.prescribedRun?.effortHrGuardrails ?? 'unknown'}',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text('Runs', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              if (safeDetail.runSessions.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('No runs logged for this date.'),
-                  ),
-                )
-              else
-                ...safeDetail.runSessions.map(
-                  (run) => Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              Chip(label: Text(run.session.source)),
-                              if (run.overrodeManual)
-                                const Chip(label: Text('overrode manual')),
-                            ],
-                          ),
-                          Text(run.session.title ?? 'untitled run'),
-                          Text(
-                            'Duration: ${run.session.durationS ?? 'unknown'} s | Distance: ${run.session.distanceM?.toStringAsFixed(1) ?? 'unknown'} m',
-                          ),
-                          Text(
-                            'Avg HR: ${run.session.avgHr ?? 'unknown'} | Max HR: ${run.session.maxHr ?? 'unknown'}',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 16),
-              Text('Strength', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              if (safeDetail.groups.isEmpty)
-                const Card(
-                    child: Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Text('No prescribed/actual sets for this day.')))
-              else
-                ...safeDetail.groups.map((group) {
-                  return Card(
-                    child: ListTile(
-                      title: Text(group.exercise),
-                      subtitle: Text(
-                          'Prescribed: ${group.prescribed.length} | Actual: ${group.actual.length}'),
-                    ),
-                  );
-                }),
-              const SizedBox(height: 16),
-              Text('Latest AI Output (summary first):',
-                  style: Theme.of(context).textTheme.titleMedium),
-              if (safeDetail.aiAudits.isEmpty)
-                const Text('No AI audits yet.')
-              else
-                Text(
-                  const JsonEncoder.withIndent('  ').convert(
-                    jsonDecode(safeDetail.aiAudits.first.responseJson)
-                        as Map<String, dynamic>,
-                  ),
-                ),
-            ],
-          ),
         );
       },
     );
   }
 }
 
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.title,
-    required this.value,
-    this.subtitle,
-    this.onTap,
+class _DailyClinicalContent extends StatelessWidget {
+  const _DailyClinicalContent({
+    required this.selectedDate,
+    required this.safeDetail,
+    required this.sleepNight,
+    required this.sleepMin,
+    required this.gate,
+    required this.excluded,
+    required this.aiSummary,
+    required this.runSeries,
+    required this.runProgress,
+    required this.totalRunDistance,
+    required this.sessionTypeLabel,
+    required this.onPickDate,
+    required this.onOpenSleepEditor,
+    required this.onRunInputs,
+    required this.onOpenWorkoutDetail,
+    required this.onMarkRest,
+    required this.onRunMockAi,
+    required this.onRefresh,
   });
 
-  final String title;
-  final String value;
-  final String? subtitle;
-  final VoidCallback? onTap;
+  final String selectedDate;
+  final WorkoutDayDetail safeDetail;
+  final SleepNight? sleepNight;
+  final int? sleepMin;
+  final RecoveryGateResult gate;
+  final int excluded;
+  final AiAnalyzeResponse? aiSummary;
+  final List<double> runSeries;
+  final double runProgress;
+  final double totalRunDistance;
+  final String Function(String?) sessionTypeLabel;
+  final VoidCallback onPickDate;
+  final void Function(SleepNight?) onOpenSleepEditor;
+  final VoidCallback onRunInputs;
+  final VoidCallback onOpenWorkoutDetail;
+  final VoidCallback? onMarkRest;
+  final VoidCallback onRunMockAi;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 220,
-      child: Card(
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.labelLarge),
-                const SizedBox(height: 4),
-                Text(value),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle!,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ],
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 120),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(context),
+            const SizedBox(height: 14),
+            const ClinicalBanner(
+              text: 'Clinical Focus: Sustainable Progress & Recovery',
             ),
-          ),
+            const SizedBox(height: 14),
+            _buildMetricGrid(context),
+            const SizedBox(height: 14),
+            _buildAiSummary(context),
+            const SizedBox(height: 12),
+            _buildActionRow(context),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: PrimaryPillButton(
+                text: 'Mark Rest Day + Push Split',
+                icon: Icons.playlist_add_check_circle_outlined,
+                onPressed: onMarkRest,
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: PrimaryPillButton(
+                text: 'Run Mock AI Analysis',
+                variant: PillButtonVariant.outlined,
+                onPressed: onRunMockAi,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const ClinicalDivider(),
+            const SectionHeader(text: 'Prescribed Run'),
+            const SizedBox(height: 8),
+            _buildPrescribedRun(context),
+            const SizedBox(height: 16),
+            const SectionHeader(text: 'Runs'),
+            const SizedBox(height: 8),
+            RunsTrack(value: runProgress),
+            const SizedBox(height: 6),
+            Text(
+              '${safeDetail.runSessions.length} session${safeDetail.runSessions.length == 1 ? '' : 's'} logged • '
+              '${totalRunDistance <= 0 ? 'No total distance' : _formatDistanceKm(totalRunDistance)}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            _buildRunsList(context),
+            const SizedBox(height: 8),
+            const SectionHeader(text: 'Strength'),
+            const SizedBox(height: 8),
+            _buildStrength(context),
+          ],
         ),
       ),
     );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 680;
+        final title = Text(
+          'ATHLETIC ADAPTATION PROGRESS - ${_formatHeaderDate(selectedDate)}',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                letterSpacing: 1,
+                fontWeight: FontWeight.w800,
+                height: 1.15,
+              ),
+        );
+
+        final pickDateButton = SizedBox(
+          width: compact ? double.infinity : 160,
+          child: PrimaryPillButton(
+            text: 'Pick Date',
+            icon: Icons.calendar_month_outlined,
+            variant: PillButtonVariant.outlined,
+            onPressed: onPickDate,
+          ),
+        );
+
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              title,
+              const SizedBox(height: 12),
+              pickDateButton,
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: title),
+            const SizedBox(width: 12),
+            pickDateButton,
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMetricGrid(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final ratio = constraints.maxWidth < 450 ? 1.15 : 1.75;
+        return GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: ratio,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          children: [
+            MetricTile(
+              title: 'Sleep',
+              leadingIcon: Icons.bedtime_outlined,
+              valueText: _formatMinutesAsHoursMinutes(sleepMin),
+              subtitleText: 'Tap to view/edit',
+              trailingWidget: Icon(
+                Icons.monitor_heart_outlined,
+                color: const Color(0xFFF08A7F).withValues(alpha: 0.95),
+              ),
+              onTap: () => onOpenSleepEditor(sleepNight),
+            ),
+            MetricTile(
+              title: 'Run',
+              leadingIcon: Icons.directions_run_rounded,
+              valueText:
+                  '${safeDetail.runSessions.length} session${safeDetail.runSessions.length == 1 ? '' : 's'}',
+              subtitleText: totalRunDistance <= 0
+                  ? 'No distance captured yet'
+                  : _formatDistanceKm(totalRunDistance),
+              trailingWidget: SizedBox(
+                width: 96,
+                height: 36,
+                child: CustomPaint(
+                  painter: _RunSparklinePainter(values: runSeries),
+                ),
+              ),
+            ),
+            MetricTile(
+              title: 'Health Alerts',
+              leadingIcon: Icons.health_and_safety_outlined,
+              valueText: gate.progressionAllowed
+                  ? 'Recovery stable'
+                  : 'Needs recovery',
+              subtitleText: '${gate.reasoning}; artifacts: $excluded',
+              trailingWidget: _AlertIconStrip(
+                progressionAllowed: gate.progressionAllowed,
+                artifacts: excluded,
+              ),
+            ),
+            MetricTile(
+              title: 'Split',
+              leadingIcon: Icons.fitness_center_outlined,
+              valueText: safeDetail.planDayNumber == null
+                  ? 'No split linked'
+                  : 'Day ${safeDetail.planDayNumber} • ${sessionTypeLabel(safeDetail.planSessionType)}',
+              subtitleText: 'Tap Open Workout Day Detail below',
+              trailingWidget: const Icon(
+                Icons.fitness_center,
+                color: Color(0xFFE4B6FF),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAiSummary(BuildContext context) {
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.analytics_outlined, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Clinical AI Snapshot',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (aiSummary == null)
+            Text(
+              'No AI audits yet. Run Mock AI Analysis to generate a summary.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
+          else ...[
+            Text(
+              aiSummary!.reasoning,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _FlagChip(
+                  label: aiSummary!.progressionAllowed
+                      ? 'Progression allowed'
+                      : 'Progression held',
+                  color: aiSummary!.progressionAllowed
+                      ? ClinicalPalette.accentSecondary
+                      : ClinicalPalette.warningMuted,
+                ),
+                if (aiSummary!.flags.lowSleep)
+                  const _FlagChip(
+                    label: 'Low sleep',
+                    color: ClinicalPalette.warningMuted,
+                  ),
+                if (aiSummary!.flags.treadmillArtifactsDetected)
+                  const _FlagChip(
+                    label: 'Treadmill artifacts',
+                    color: ClinicalPalette.warningMuted,
+                  ),
+                if (aiSummary!.flags.missingMetrics)
+                  const _FlagChip(
+                    label: 'Missing metrics',
+                    color: ClinicalPalette.warningMuted,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Runs: ${aiSummary!.extractedDataSummary.runsSummary} | '
+              'Sleep: ${aiSummary!.extractedDataSummary.sleepSummary} | '
+              'Strength: ${aiSummary!.extractedDataSummary.strengthSummary}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionRow(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 680;
+        if (compact) {
+          return Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: PrimaryPillButton(
+                  text: 'Run Inputs',
+                  variant: PillButtonVariant.tonal,
+                  onPressed: onRunInputs,
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: PrimaryPillButton(
+                  text: 'Open Workout Day Detail',
+                  variant: PillButtonVariant.tonal,
+                  onPressed: onOpenWorkoutDetail,
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(
+              child: PrimaryPillButton(
+                text: 'Run Inputs',
+                variant: PillButtonVariant.tonal,
+                onPressed: onRunInputs,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: PrimaryPillButton(
+                text: 'Open Workout Day Detail',
+                variant: PillButtonVariant.tonal,
+                onPressed: onOpenWorkoutDetail,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPrescribedRun(BuildContext context) {
+    return GlassCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: safeDetail.prescribedRun?.runType == null
+                ? const Text('No prescribed run linked to this day.')
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Clinical Prescription',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 6),
+                      _LabeledLine(
+                        label: 'Type',
+                        value: safeDetail.prescribedRun?.runType ?? 'unknown',
+                      ),
+                      _LabeledLine(
+                        label: 'Duration',
+                        value:
+                            safeDetail.prescribedRun?.durationText ?? 'unknown',
+                      ),
+                      _LabeledLine(
+                        label: 'Pace',
+                        value:
+                            safeDetail.prescribedRun?.targetPace ?? 'unknown',
+                      ),
+                      _LabeledLine(
+                        label: 'HR Zone',
+                        value: safeDetail.prescribedRun?.effortHrGuardrails ??
+                            'unknown',
+                      ),
+                      _LabeledLine(
+                        label: 'Focus',
+                        value: safeDetail.prescribedRun?.notes ??
+                            safeDetail.prescribedRun?.liftFocus ??
+                            'Mechanics & Recovery',
+                      ),
+                    ],
+                  ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.directions_run),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRunsList(BuildContext context) {
+    if (safeDetail.runSessions.isEmpty) {
+      return const GlassCard(child: Text('No runs logged for this date.'));
+    }
+
+    return Column(
+      children: safeDetail.runSessions.map((run) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(label: Text(run.session.source)),
+                    if (run.overrodeManual)
+                      const Chip(label: Text('overrode manual')),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  run.session.title ?? 'untitled run',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Duration: ${_formatDuration(run.session.durationS)} | '
+                  'Distance: ${_formatDistanceKm(run.session.distanceM)}',
+                ),
+                Text(
+                  'Avg HR: ${run.session.avgHr ?? 'unknown'} | '
+                  'Max HR: ${run.session.maxHr ?? 'unknown'}',
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildStrength(BuildContext context) {
+    if (safeDetail.groups.isEmpty) {
+      return const GlassCard(
+        child: Text('No prescribed/actual sets for this day.'),
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Exercise',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              SizedBox(
+                width: 72,
+                child: Text(
+                  'Prescribed',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ),
+              SizedBox(
+                width: 56,
+                child: Text(
+                  'Actual',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ...safeDetail.groups.map((group) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: GlassCard(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          group.exercise,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${group.prescribed.length + group.actual.length} total sets tracked',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: 72,
+                    child: Text(
+                      '${group.prescribed.length}',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 56,
+                    child: Text(
+                      '${group.actual.length}',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.fitness_center, size: 20),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+}
+
+class _LabeledLine extends StatelessWidget {
+  const _LabeledLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            TextSpan(text: value),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FlagChip extends StatelessWidget {
+  const _FlagChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: color.withValues(alpha: 0.18),
+        border: Border.all(color: color.withValues(alpha: 0.55)),
+      ),
+      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+    );
+  }
+}
+
+class _AlertIconStrip extends StatelessWidget {
+  const _AlertIconStrip({
+    required this.progressionAllowed,
+    required this.artifacts,
+  });
+
+  final bool progressionAllowed;
+  final int artifacts;
+
+  @override
+  Widget build(BuildContext context) {
+    final iconColor = progressionAllowed
+        ? ClinicalPalette.accentSecondary
+        : ClinicalPalette.warningMuted;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.warning_amber_rounded, size: 18, color: iconColor),
+        const SizedBox(width: 3),
+        Icon(
+          Icons.warning_amber_rounded,
+          size: 18,
+          color: artifacts > 0
+              ? ClinicalPalette.warningMuted
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 3),
+        Icon(
+          Icons.error_outline,
+          size: 18,
+          color: artifacts > 0
+              ? const Color(0xFFE7A17E)
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ],
+    );
+  }
+}
+
+class _RunSparklinePainter extends CustomPainter {
+  const _RunSparklinePainter({required this.values});
+
+  final List<double> values;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.isEmpty) {
+      return;
+    }
+
+    final gridPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.14)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    final lowerGrid = Path()
+      ..moveTo(0, size.height * 0.75)
+      ..lineTo(size.width, size.height * 0.75);
+    final midGrid = Path()
+      ..moveTo(0, size.height * 0.45)
+      ..lineTo(size.width, size.height * 0.45);
+
+    canvas.drawPath(lowerGrid, gridPaint);
+    canvas.drawPath(midGrid, gridPaint);
+
+    final path = Path();
+    final n = values.length;
+    for (var i = 0; i < n; i++) {
+      final x = n == 1 ? size.width / 2 : size.width * (i / (n - 1));
+      final y = size.height - (values[i].clamp(0.0, 1.0) * size.height);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    final areaPath = Path.from(path)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          ClinicalPalette.accent.withValues(alpha: 0.35),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final linePaint = Paint()
+      ..color = const Color(0xFFF38E71)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 2;
+
+    canvas.drawPath(areaPath, fillPaint);
+    canvas.drawPath(path, linePaint);
+
+    final dotPaint = Paint()..color = const Color(0xFFF38E71);
+    for (var i = 0; i < n; i++) {
+      final x = n == 1 ? size.width / 2 : size.width * (i / (n - 1));
+      final y = size.height - (values[i].clamp(0.0, 1.0) * size.height);
+      canvas.drawCircle(Offset(x, y), 2.2, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RunSparklinePainter oldDelegate) {
+    if (oldDelegate.values.length != values.length) {
+      return true;
+    }
+    for (var i = 0; i < values.length; i++) {
+      if (oldDelegate.values[i] != values[i]) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
