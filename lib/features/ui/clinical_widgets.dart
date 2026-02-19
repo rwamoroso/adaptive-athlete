@@ -106,6 +106,8 @@ class MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final stackTrailing = textScale > 1.2 && trailingWidget != null;
 
     return GlassCard(
       onTap: onTap,
@@ -126,12 +128,14 @@ class MetricTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-              if (trailingWidget != null)
+              if (!stackTrailing && trailingWidget != null)
                 Flexible(
                   child: Align(
                     alignment: Alignment.centerRight,
@@ -140,9 +144,15 @@ class MetricTile extends StatelessWidget {
                 ),
             ],
           ),
+          if (stackTrailing) ...[
+            const SizedBox(height: 6),
+            Align(alignment: Alignment.centerRight, child: trailingWidget),
+          ],
           const SizedBox(height: 8),
           Text(
             valueText,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: theme.textTheme.titleMedium?.copyWith(
               color: theme.colorScheme.onSurface,
             ),
@@ -152,7 +162,7 @@ class MetricTile extends StatelessWidget {
             Text(
               subtitleText!,
               style: theme.textTheme.bodySmall,
-              maxLines: 2,
+              maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
           ],
@@ -182,31 +192,53 @@ class PrimaryPillButton extends StatelessWidget {
       case PillButtonVariant.filled:
         return FilledButton(
           onPressed: onPressed,
-          child: _label(),
+          child: _label(context),
         );
       case PillButtonVariant.tonal:
         return FilledButton.tonal(
           onPressed: onPressed,
-          child: _label(),
+          child: _label(context),
         );
       case PillButtonVariant.outlined:
         return OutlinedButton(
           onPressed: onPressed,
-          child: _label(),
+          child: _label(context),
         );
     }
   }
 
-  Widget _label() {
+  Widget _label(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final largeText = textScale > 1.2;
+
+    final label = Text(
+      text,
+      textAlign: TextAlign.center,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
+
     if (icon == null) {
-      return Text(text, textAlign: TextAlign.center);
+      return label;
     }
+
+    if (largeText) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(height: 4),
+          label,
+        ],
+      );
+    }
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 18),
         const SizedBox(width: 6),
-        Flexible(child: Text(text, textAlign: TextAlign.center)),
+        Flexible(child: label),
       ],
     );
   }

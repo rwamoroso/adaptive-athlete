@@ -517,9 +517,12 @@ class _DailyClinicalContent extends StatelessWidget {
   Widget _buildHeader(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 680;
+        final textScale = MediaQuery.textScalerOf(context).scale(1);
+        final compact = constraints.maxWidth < 680 || textScale > 1.15;
         final title = Text(
           'ATHLETIC ADAPTATION PROGRESS - ${_formatHeaderDate(selectedDate)}',
+          maxLines: compact ? 3 : 2,
+          overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 letterSpacing: 1,
                 fontWeight: FontWeight.w800,
@@ -563,9 +566,13 @@ class _DailyClinicalContent extends StatelessWidget {
   Widget _buildMetricGrid(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final ratio = constraints.maxWidth < 450 ? 1.15 : 1.75;
+        final textScale = MediaQuery.textScalerOf(context).scale(1);
+        final singleColumn = constraints.maxWidth < 390 || textScale >= 1.25;
+        final ratio = singleColumn
+            ? 2.2
+            : (constraints.maxWidth < 450 || textScale > 1.1 ? 1.15 : 1.75);
         return GridView.count(
-          crossAxisCount: 2,
+          crossAxisCount: singleColumn ? 1 : 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           childAspectRatio: ratio,
@@ -634,10 +641,12 @@ class _DailyClinicalContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Icon(Icons.analytics_outlined, size: 18),
-              const SizedBox(width: 8),
               Text(
                 'Clinical AI Snapshot',
                 style: Theme.of(context).textTheme.titleMedium,
@@ -701,7 +710,8 @@ class _DailyClinicalContent extends StatelessWidget {
   Widget _buildActionRow(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 680;
+        final textScale = MediaQuery.textScalerOf(context).scale(1);
+        final compact = constraints.maxWidth < 680 || textScale > 1.15;
         if (compact) {
           return Column(
             children: [
@@ -750,64 +760,76 @@ class _DailyClinicalContent extends StatelessWidget {
   }
 
   Widget _buildPrescribedRun(BuildContext context) {
-    return GlassCard(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: safeDetail.prescribedRun?.runType == null
-                ? const Text('No prescribed run linked to this day.')
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Clinical Prescription',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 6),
-                      _LabeledLine(
-                        label: 'Type',
-                        value: safeDetail.prescribedRun?.runType ?? 'unknown',
-                      ),
-                      _LabeledLine(
-                        label: 'Duration',
-                        value:
-                            safeDetail.prescribedRun?.durationText ?? 'unknown',
-                      ),
-                      _LabeledLine(
-                        label: 'Pace',
-                        value:
-                            safeDetail.prescribedRun?.targetPace ?? 'unknown',
-                      ),
-                      _LabeledLine(
-                        label: 'HR Zone',
-                        value: safeDetail.prescribedRun?.effortHrGuardrails ??
-                            'unknown',
-                      ),
-                      _LabeledLine(
-                        label: 'Focus',
-                        value: safeDetail.prescribedRun?.notes ??
-                            safeDetail.prescribedRun?.liftFocus ??
-                            'Mechanics & Recovery',
-                      ),
-                    ],
-                  ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.directions_run),
-          ),
-        ],
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final stackIcon = textScale > 1.2;
+
+    final content = safeDetail.prescribedRun?.runType == null
+        ? const Text('No prescribed run linked to this day.')
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Clinical Prescription',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              _LabeledLine(
+                label: 'Type',
+                value: safeDetail.prescribedRun?.runType ?? 'unknown',
+              ),
+              _LabeledLine(
+                label: 'Duration',
+                value: safeDetail.prescribedRun?.durationText ?? 'unknown',
+              ),
+              _LabeledLine(
+                label: 'Pace',
+                value: safeDetail.prescribedRun?.targetPace ?? 'unknown',
+              ),
+              _LabeledLine(
+                label: 'HR Zone',
+                value:
+                    safeDetail.prescribedRun?.effortHrGuardrails ?? 'unknown',
+              ),
+              _LabeledLine(
+                label: 'Focus',
+                value: safeDetail.prescribedRun?.notes ??
+                    safeDetail.prescribedRun?.liftFocus ??
+                    'Mechanics & Recovery',
+              ),
+            ],
+          );
+
+    final iconBubble = Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        shape: BoxShape.circle,
       ),
+      child: const Icon(Icons.directions_run),
+    );
+
+    return GlassCard(
+      child: stackIcon
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                content,
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerRight, child: iconBubble),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: content),
+                const SizedBox(width: 12),
+                iconBubble,
+              ],
+            ),
     );
   }
 
@@ -862,6 +884,53 @@ class _DailyClinicalContent extends StatelessWidget {
     if (safeDetail.groups.isEmpty) {
       return const GlassCard(
         child: Text('No prescribed/actual sets for this day.'),
+      );
+    }
+
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final stackCounts = textScale > 1.2;
+
+    if (stackCounts) {
+      return Column(
+        children: safeDetail.groups.map((group) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: GlassCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    group.exercise,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${group.prescribed.length + group.actual.length} total sets tracked',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _StrengthCountPill(
+                        label: 'Prescribed',
+                        value: group.prescribed.length,
+                      ),
+                      _StrengthCountPill(
+                        label: 'Actual',
+                        value: group.actual.length,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
       );
     }
 
@@ -990,6 +1059,32 @@ class _FlagChip extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.55)),
       ),
       child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+    );
+  }
+}
+
+class _StrengthCountPill extends StatelessWidget {
+  const _StrengthCountPill({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: Colors.white.withValues(alpha: 0.08),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+      ),
+      child: Text(
+        '$label: $value',
+        style: Theme.of(context).textTheme.labelMedium,
+      ),
     );
   }
 }
