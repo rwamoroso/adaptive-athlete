@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,10 +11,14 @@ import 'config/supabase_config.dart';
 import 'core/utils/app_providers.dart';
 import 'core/utils/go_router_refresh_stream.dart';
 import 'features/auth/auth_screen.dart';
+import 'features/auth/reset_password_screen.dart';
 import 'features/training/home_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (kIsWeb) {
+    usePathUrlStrategy();
+  }
 
   var initialized = false;
   String? error;
@@ -53,6 +61,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/auth',
           builder: (context, state) => const Scaffold(body: AuthScreen())),
+      GoRoute(
+          path: '/reset-password',
+          builder: (context, state) =>
+              const Scaffold(body: ResetPasswordScreen())),
       GoRoute(path: '/home', builder: (context, state) => const HomeShell()),
     ],
     redirect: (context, state) {
@@ -64,8 +76,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           ? Supabase.instance.client.auth.currentSession
           : null;
       final onAuth = state.matchedLocation == '/auth';
+      final onResetPassword = state.matchedLocation == '/reset-password';
 
-      if (session == null && !onAuth) {
+      if (session == null && !onAuth && !onResetPassword) {
         return '/auth';
       }
       if (session != null && onAuth) {
@@ -76,11 +89,41 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class MyApp extends ConsumerWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends ConsumerState<MyApp> {
+  StreamSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    final bootstrap = ref.read(supabaseBootstrapProvider);
+    if (bootstrap.initialized) {
+      _authSubscription =
+          Supabase.instance.client.auth.onAuthStateChange.listen((event) {
+        if (!mounted) {
+          return;
+        }
+        if (event.event == AuthChangeEvent.passwordRecovery) {
+          ref.read(routerProvider).go('/reset-password');
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(

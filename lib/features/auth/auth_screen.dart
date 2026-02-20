@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -84,6 +85,58 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
   }
 
+  String? _resetRedirectTo() {
+    const configuredRedirect =
+        String.fromEnvironment('SUPABASE_PASSWORD_RESET_REDIRECT');
+    if (configuredRedirect.isNotEmpty) {
+      return configuredRedirect;
+    }
+    if (kIsWeb) {
+      return '${Uri.base.origin}/reset-password';
+    }
+    return null;
+  }
+
+  Future<void> _sendPasswordReset() async {
+    final bootstrap = ref.read(supabaseBootstrapProvider);
+    if (!bootstrap.initialized) {
+      setState(() => _message =
+          'Supabase not initialized. Use local-only mode or configure keys.');
+      return;
+    }
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      setState(() => _message = 'Enter your email first.');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _message = null;
+    });
+
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: _resetRedirectTo(),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() => _message =
+          'Recovery email sent. Open the link from the same browser/app context.');
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _message = e.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -121,6 +174,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   OutlinedButton(
                     onPressed: _loading ? null : _signUp,
                     child: const Text('Sign up'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: _loading ? null : _sendPasswordReset,
+                    child: const Text('Forgot password?'),
                   ),
                   const SizedBox(height: 8),
                   TextButton(
