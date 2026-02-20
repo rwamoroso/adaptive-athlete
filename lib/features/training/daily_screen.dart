@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -347,13 +348,32 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
 
     return FutureBuilder<WorkoutDayDetail>(
       key: ValueKey('daily-$_selectedDate-$_refresh'),
-      future: db.getWorkoutDayDetail(_selectedDate),
+      future: db
+          .getWorkoutDayDetail(_selectedDate)
+          .timeout(const Duration(seconds: 12)),
       builder: (context, snapshot) {
         final detail = snapshot.data;
         final loading = snapshot.connectionState == ConnectionState.waiting;
 
         if (loading && detail == null) {
           return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError && detail == null) {
+          final error = snapshot.error;
+          final timeout = error is TimeoutException;
+          return _DailyLoadError(
+            message: timeout
+                ? 'Daily page load timed out. Try again.'
+                : 'Daily page failed to load.',
+            details: error?.toString(),
+            onRetry: () => setState(() => _refresh++),
+            onOpenRunInputs: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const RunInputsScreen()),
+              );
+            },
+          );
         }
 
         final safeDetail = detail ??
@@ -1275,6 +1295,64 @@ class _RunSparklinePainter extends CustomPainter {
       }
     }
     return false;
+  }
+}
+
+class _DailyLoadError extends StatelessWidget {
+  const _DailyLoadError({
+    required this.message,
+    required this.details,
+    required this.onRetry,
+    required this.onOpenRunInputs,
+  });
+
+  final String message;
+  final String? details;
+  final VoidCallback onRetry;
+  final VoidCallback onOpenRunInputs;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: GlassCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                message,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                details ?? 'No additional error detail available.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton(
+                    onPressed: onRetry,
+                    child: const Text('Retry'),
+                  ),
+                  OutlinedButton(
+                    onPressed: onOpenRunInputs,
+                    child: const Text('Open Run Inputs'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
