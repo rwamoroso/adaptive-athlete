@@ -29,11 +29,11 @@ class GlassCard extends StatelessWidget {
     Widget content = DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: borderRadius,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
-        color: tintColor ?? Colors.white.withValues(alpha: 0.08),
+        border: Border.all(color: Colors.white.withOpacity(0.13)),
+        color: tintColor ?? Colors.white.withOpacity(0.08),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.22),
+            color: Colors.black.withOpacity(0.22),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
@@ -254,7 +254,7 @@ class ClinicalBanner extends StatelessWidget {
     return GlassCard(
       radius: 22,
       padding: EdgeInsets.zero,
-      tintColor: const Color(0xFF8B7CFF).withValues(alpha: 0.2),
+      tintColor: const Color(0xFF8B7CFF).withOpacity(0.2),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -262,8 +262,8 @@ class ClinicalBanner extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
           gradient: LinearGradient(
             colors: [
-              ClinicalPalette.accent.withValues(alpha: 0.15),
-              const Color(0xFFC782C4).withValues(alpha: 0.24),
+              ClinicalPalette.accent.withOpacity(0.15),
+              const Color(0xFFC782C4).withOpacity(0.24),
             ],
           ),
         ),
@@ -284,7 +284,7 @@ class ClinicalDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Divider(color: Colors.white.withValues(alpha: 0.16), height: 20);
+    return Divider(color: Colors.white.withOpacity(0.16), height: 20);
   }
 }
 
@@ -317,7 +317,7 @@ class RunsTrack extends StatelessWidget {
                         const RoundSliderOverlayShape(overlayRadius: 16),
                     thumbShape:
                         const RoundSliderThumbShape(enabledThumbRadius: 12),
-                    inactiveTrackColor: Colors.white.withValues(alpha: 0.18),
+                    inactiveTrackColor: Colors.white.withOpacity(0.18),
                     activeTrackColor: const Color(0xFF59A8E8),
                   ),
               child: IgnorePointer(
