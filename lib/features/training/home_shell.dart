@@ -50,9 +50,9 @@ class _HomeShellState extends State<HomeShell> {
                     center: const Alignment(-0.1, -0.95),
                     radius: 1.45,
                     colors: [
-                      Colors.white.withValues(alpha: 0.06),
+                      Colors.white.withOpacity(0.06),
                       Colors.transparent,
-                      Colors.black.withValues(alpha: 0.30),
+                      Colors.black.withOpacity(0.30),
                     ],
                     stops: const [0, 0.55, 1],
                   ),

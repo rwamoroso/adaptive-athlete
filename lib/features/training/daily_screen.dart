@@ -626,7 +626,7 @@ class _DailyClinicalContent extends StatelessWidget {
               subtitleText: 'Tap to view/edit',
               trailingWidget: Icon(
                 Icons.monitor_heart_outlined,
-                color: const Color(0xFFF08A7F).withValues(alpha: 0.95),
+                color: const Color(0xFFF08A7F).withOpacity(0.95),
               ),
               onTap: () => onOpenSleepEditor(sleepNight),
             ),
@@ -872,7 +872,7 @@ class _DailyClinicalContent extends StatelessWidget {
       width: 52,
       height: 52,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: Colors.white.withOpacity(0.08),
         shape: BoxShape.circle,
       ),
       child: const Icon(Icons.directions_run),
@@ -1139,8 +1139,8 @@ class _FlagChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: color.withValues(alpha: 0.18),
-        border: Border.all(color: color.withValues(alpha: 0.55)),
+        color: color.withOpacity(0.18),
+        border: Border.all(color: color.withOpacity(0.55)),
       ),
       child: Text(label, style: Theme.of(context).textTheme.labelSmall),
     );
@@ -1162,8 +1162,8 @@ class _StrengthCountPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: Colors.white.withValues(alpha: 0.08),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+        color: Colors.white.withOpacity(0.08),
+        border: Border.all(color: Colors.white.withOpacity(0.15)),
       ),
       child: Text(
         '$label: $value',
@@ -1225,7 +1225,7 @@ class _RunSparklinePainter extends CustomPainter {
     }
 
     final gridPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.14)
+      ..color = Colors.white.withOpacity(0.14)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
@@ -1261,7 +1261,7 @@ class _RunSparklinePainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          ClinicalPalette.accent.withValues(alpha: 0.35),
+          ClinicalPalette.accent.withOpacity(0.35),
           Colors.transparent,
         ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));

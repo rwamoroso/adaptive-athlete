@@ -20,7 +20,7 @@ ThemeData buildClinicalTheme() {
     secondary: ClinicalPalette.accentSecondary,
     surface: const Color(0xFF151935),
     surfaceContainerHighest: const Color(0xFF20264A),
-    outline: Colors.white.withValues(alpha: 0.18),
+    outline: Colors.white.withOpacity(0.18),
     onSurface: const Color(0xFFF3F5FF),
     onSurfaceVariant: const Color(0xFFD6DBF5),
     onPrimary: Colors.white,
@@ -77,7 +77,7 @@ ThemeData buildClinicalTheme() {
       backgroundColor: const Color(0xB3161D3D),
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      indicatorColor: ClinicalPalette.accent.withValues(alpha: 0.28),
+      indicatorColor: ClinicalPalette.accent.withOpacity(0.28),
       labelTextStyle: WidgetStateProperty.resolveWith<TextStyle?>(
         (states) {
           final selected = states.contains(WidgetState.selected);
@@ -94,14 +94,14 @@ ThemeData buildClinicalTheme() {
         );
       }),
     ),
-    cardTheme: CardThemeData(
-      color: Colors.white.withValues(alpha: 0.06),
+    cardTheme: CardTheme(
+      color: Colors.white.withOpacity(0.06),
       surfaceTintColor: Colors.transparent,
-      shadowColor: Colors.black.withValues(alpha: 0.35),
+      shadowColor: Colors.black.withOpacity(0.35),
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+        side: BorderSide(color: Colors.white.withOpacity(0.12)),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -114,39 +114,39 @@ ThemeData buildClinicalTheme() {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(0, 46),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
+        side: BorderSide(color: Colors.white.withOpacity(0.22)),
         shape: const StadiumBorder(),
         foregroundColor: scheme.onSurface,
         textStyle: textTheme.labelLarge,
       ),
     ),
     chipTheme: base.chipTheme.copyWith(
-      backgroundColor: Colors.white.withValues(alpha: 0.08),
-      side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+      backgroundColor: Colors.white.withOpacity(0.08),
+      side: BorderSide(color: Colors.white.withOpacity(0.12)),
       labelStyle: textTheme.labelSmall?.copyWith(
         color: scheme.onSurface,
       ),
     ),
     sliderTheme: base.sliderTheme.copyWith(
       activeTrackColor: ClinicalPalette.accent,
-      inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
+      inactiveTrackColor: Colors.white.withOpacity(0.2),
       thumbColor: const Color(0xFFDFE5FF),
-      overlayColor: ClinicalPalette.accent.withValues(alpha: 0.22),
+      overlayColor: ClinicalPalette.accent.withOpacity(0.22),
       trackHeight: 8,
     ),
     inputDecorationTheme: base.inputDecorationTheme.copyWith(
       filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.06),
+      fillColor: Colors.white.withOpacity(0.06),
       labelStyle:
           textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.14)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide:
-            BorderSide(color: ClinicalPalette.accent.withValues(alpha: 0.7)),
+            BorderSide(color: ClinicalPalette.accent.withOpacity(0.7)),
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -161,11 +161,11 @@ ThemeData buildClinicalTheme() {
       }),
       trackColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return ClinicalPalette.accent.withValues(alpha: 0.6);
+          return ClinicalPalette.accent.withOpacity(0.6);
         }
-        return Colors.white.withValues(alpha: 0.2);
+        return Colors.white.withOpacity(0.2);
       }),
     ),
-    dividerColor: Colors.white.withValues(alpha: 0.14),
+    dividerColor: Colors.white.withOpacity(0.14),
   );
 }
