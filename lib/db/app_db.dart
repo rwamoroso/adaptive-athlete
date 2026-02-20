@@ -267,6 +267,30 @@ class RunUpsertOutcome {
   final bool preservedGarmin;
 }
 
+class ManualRunSegmentInput {
+  const ManualRunSegmentInput({
+    required this.idx,
+    required this.durationS,
+    required this.distanceM,
+    required this.kind,
+    required this.speedMps,
+  });
+
+  final int idx;
+  final int durationS;
+  final double distanceM;
+  final String kind;
+  final double? speedMps;
+
+  Map<String, dynamic> toJson() => {
+        'idx': idx,
+        'duration_s': durationS,
+        'distance_m': distanceM,
+        'kind': kind,
+        'speed_mps': speedMps,
+      };
+}
+
 @DriftDatabase(
   tables: [
     WorkoutDays,
@@ -1129,7 +1153,11 @@ class AppDb extends _$AppDb {
     required double distanceM,
     required double? avgHr,
     required double? maxHr,
+    List<ManualRunSegmentInput> manualSegments =
+        const <ManualRunSegmentInput>[],
   }) async {
+    final sanitizedSegments = _sanitizeManualRunSegments(manualSegments);
+    final rawMetricsJson = _manualRunRawMetricsJson(sanitizedSegments);
     final runKey = GarminCsvImportService.runKeyFromDateTime(
       DateTime.fromMillisecondsSinceEpoch(startTimeMs),
     );
@@ -1137,16 +1165,57 @@ class AppDb extends _$AppDb {
     final mappedPlanDayId = await _resolvePlanDayIdForDate(dateString);
     final endTimeMs = startTimeMs + (durationS * 1000);
 
-    final existing = await (select(runSessions)
-          ..where((r) => r.runKey.equals(runKey)))
-        .getSingleOrNull();
+    return transaction(() async {
+      final existing = await (select(runSessions)
+            ..where((r) => r.runKey.equals(runKey)))
+          .getSingleOrNull();
 
-    if (existing == null) {
-      final id = _uuid.v4();
-      await into(runSessions).insert(
-        RunSessionsCompanion.insert(
-          id: id,
-          runKey: Value(runKey),
+      if (existing == null) {
+        final id = _uuid.v4();
+        await into(runSessions).insert(
+          RunSessionsCompanion.insert(
+            id: id,
+            runKey: Value(runKey),
+            workoutDayId: Value(workoutDayId),
+            planDayId: Value(mappedPlanDayId),
+            startTime: Value(startTimeMs),
+            endTime: Value(endTimeMs),
+            durationS: Value(durationS),
+            distanceM: Value(distanceM),
+            avgHr: Value(avgHr),
+            maxHr: Value(maxHr),
+            treadmill: const Value(false),
+            rawMetricsJson: Value(rawMetricsJson),
+            source: 'manual',
+            sourcePriority: const Value(10),
+          ),
+        );
+        await _replaceRunSegmentsForManualRun(
+          runSessionId: id,
+          segments: sanitizedSegments,
+        );
+
+        return RunUpsertOutcome(
+          runSessionId: id,
+          inserted: true,
+          updated: false,
+          overriddenManual: false,
+          preservedGarmin: false,
+        );
+      }
+
+      if (existing.sourcePriority >= 100) {
+        return RunUpsertOutcome(
+          runSessionId: existing.id,
+          inserted: false,
+          updated: false,
+          overriddenManual: false,
+          preservedGarmin: true,
+        );
+      }
+
+      await (update(runSessions)..where((r) => r.id.equals(existing.id))).write(
+        RunSessionsCompanion(
           workoutDayId: Value(workoutDayId),
           planDayId: Value(mappedPlanDayId),
           startTime: Value(startTimeMs),
@@ -1155,53 +1224,77 @@ class AppDb extends _$AppDb {
           distanceM: Value(distanceM),
           avgHr: Value(avgHr),
           maxHr: Value(maxHr),
-          treadmill: const Value(false),
-          source: 'manual',
+          rawMetricsJson: Value(rawMetricsJson),
+          source: const Value('manual'),
           sourcePriority: const Value(10),
         ),
       );
-
-      return RunUpsertOutcome(
-        runSessionId: id,
-        inserted: true,
-        updated: false,
-        overriddenManual: false,
-        preservedGarmin: false,
+      await _replaceRunSegmentsForManualRun(
+        runSessionId: existing.id,
+        segments: sanitizedSegments,
       );
-    }
 
-    if (existing.sourcePriority >= 100) {
       return RunUpsertOutcome(
         runSessionId: existing.id,
         inserted: false,
-        updated: false,
+        updated: true,
         overriddenManual: false,
-        preservedGarmin: true,
+        preservedGarmin: false,
+      );
+    });
+  }
+
+  List<ManualRunSegmentInput> _sanitizeManualRunSegments(
+      List<ManualRunSegmentInput> input) {
+    final output = <ManualRunSegmentInput>[];
+    for (final segment in input) {
+      if (segment.durationS <= 0) {
+        continue;
+      }
+      final normalizedKind =
+          segment.kind.trim().toLowerCase() == 'rest' ? 'rest' : 'interval';
+      final safeDistance = segment.distanceM < 0 ? 0.0 : segment.distanceM;
+      output.add(
+        ManualRunSegmentInput(
+          idx: output.length + 1,
+          durationS: segment.durationS,
+          distanceM: safeDistance,
+          kind: normalizedKind,
+          speedMps: segment.speedMps,
+        ),
       );
     }
+    return output;
+  }
 
-    await (update(runSessions)..where((r) => r.id.equals(existing.id))).write(
-      RunSessionsCompanion(
-        workoutDayId: Value(workoutDayId),
-        planDayId: Value(mappedPlanDayId),
-        startTime: Value(startTimeMs),
-        endTime: Value(endTimeMs),
-        durationS: Value(durationS),
-        distanceM: Value(distanceM),
-        avgHr: Value(avgHr),
-        maxHr: Value(maxHr),
-        source: const Value('manual'),
-        sourcePriority: const Value(10),
-      ),
-    );
+  String? _manualRunRawMetricsJson(List<ManualRunSegmentInput> segments) {
+    if (segments.isEmpty) {
+      return null;
+    }
+    return jsonEncode({
+      'manual_segments': segments.map((s) => s.toJson()).toList(),
+    });
+  }
 
-    return RunUpsertOutcome(
-      runSessionId: existing.id,
-      inserted: false,
-      updated: true,
-      overriddenManual: false,
-      preservedGarmin: false,
-    );
+  Future<void> _replaceRunSegmentsForManualRun({
+    required String runSessionId,
+    required List<ManualRunSegmentInput> segments,
+  }) async {
+    await (delete(runSegments)
+          ..where((s) => s.runSessionId.equals(runSessionId)))
+        .go();
+    for (final segment in segments) {
+      await into(runSegments).insert(
+        RunSegmentsCompanion.insert(
+          id: _uuid.v4(),
+          runSessionId: runSessionId,
+          idx: segment.idx,
+          durationS: Value(segment.durationS),
+          distanceM: Value(segment.distanceM),
+          speedMps: Value(segment.speedMps),
+        ),
+      );
+    }
   }
 
   Future<RunUpsertOutcome> upsertGarminRun({

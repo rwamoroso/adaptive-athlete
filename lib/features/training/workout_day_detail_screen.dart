@@ -6,6 +6,42 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/utils/app_providers.dart';
 import '../../db/app_db.dart';
 
+Map<int, String> _manualSegmentLabelsByIdx(String? rawMetricsJson) {
+  if (rawMetricsJson == null || rawMetricsJson.trim().isEmpty) {
+    return const <int, String>{};
+  }
+  try {
+    final decoded = jsonDecode(rawMetricsJson);
+    if (decoded is! Map) {
+      return const <int, String>{};
+    }
+    final rawSegments = decoded['manual_segments'];
+    if (rawSegments is! List) {
+      return const <int, String>{};
+    }
+
+    final labels = <int, String>{};
+    for (final segment in rawSegments) {
+      if (segment is! Map) {
+        continue;
+      }
+      final idx = int.tryParse('${segment['idx'] ?? ''}');
+      if (idx == null) {
+        continue;
+      }
+      final kind = '${segment['kind'] ?? ''}'.trim().toLowerCase();
+      if (kind == 'rest') {
+        labels[idx] = 'Rest';
+      } else if (kind == 'interval') {
+        labels[idx] = 'Interval';
+      }
+    }
+    return labels;
+  } catch (_) {
+    return const <int, String>{};
+  }
+}
+
 class WorkoutDayDetailScreen extends ConsumerStatefulWidget {
   const WorkoutDayDetailScreen({super.key, required this.date});
 
@@ -339,19 +375,42 @@ class _WorkoutDayDetailScreenState
                 ))
               else
                 ...detail.runSessions.map(
-                  (run) => Card(
-                    child: ListTile(
-                      title: Text(run.session.title ??
-                          run.session.activityType ??
-                          'Run'),
-                      subtitle: Text(
-                        'source=${run.session.source} | duration=${run.session.durationS ?? 'unknown'}s | '
-                        'distance=${run.session.distanceM ?? 'unknown'}m | avgHR=${run.session.avgHr ?? 'unknown'} | '
-                        'maxHR=${run.session.maxHr ?? 'unknown'}'
-                        '${run.overrodeManual ? ' | overrode manual' : ''}',
+                  (run) {
+                    final segmentLabels =
+                        _manualSegmentLabelsByIdx(run.session.rawMetricsJson);
+                    return Card(
+                      child: ListTile(
+                        title: Text(run.session.title ??
+                            run.session.activityType ??
+                            'Run'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'source=${run.session.source} | duration=${run.session.durationS ?? 'unknown'}s | '
+                              'distance=${run.session.distanceM ?? 'unknown'}m | avgHR=${run.session.avgHr ?? 'unknown'} | '
+                              'maxHR=${run.session.maxHr ?? 'unknown'}'
+                              '${run.overrodeManual ? ' | overrode manual' : ''}',
+                            ),
+                            if (run.segments.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Segments',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              ...run.segments.map(
+                                (segment) => Text(
+                                  '${segmentLabels[segment.idx] ?? 'Segment'} ${segment.idx}: '
+                                  '${segment.durationS ?? 'unknown'}s | '
+                                  '${segment.distanceM ?? 'unknown'}m',
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               const SizedBox(height: 16),
               Text('Exercises', style: Theme.of(context).textTheme.titleMedium),

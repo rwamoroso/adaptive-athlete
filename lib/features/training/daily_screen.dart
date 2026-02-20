@@ -59,6 +59,42 @@ String _formatHeaderDate(String ymd) {
   return '${months[date.month - 1]} ${date.day}, ${date.year}';
 }
 
+Map<int, String> _manualSegmentLabelsByIdx(String? rawMetricsJson) {
+  if (rawMetricsJson == null || rawMetricsJson.trim().isEmpty) {
+    return const <int, String>{};
+  }
+  try {
+    final decoded = jsonDecode(rawMetricsJson);
+    if (decoded is! Map) {
+      return const <int, String>{};
+    }
+    final rawSegments = decoded['manual_segments'];
+    if (rawSegments is! List) {
+      return const <int, String>{};
+    }
+
+    final labels = <int, String>{};
+    for (final segment in rawSegments) {
+      if (segment is! Map) {
+        continue;
+      }
+      final idx = int.tryParse('${segment['idx'] ?? ''}');
+      if (idx == null) {
+        continue;
+      }
+      final kind = '${segment['kind'] ?? ''}'.trim().toLowerCase();
+      if (kind == 'rest') {
+        labels[idx] = 'Rest';
+      } else if (kind == 'interval') {
+        labels[idx] = 'Interval';
+      }
+    }
+    return labels;
+  } catch (_) {
+    return const <int, String>{};
+  }
+}
+
 class DailyScreen extends ConsumerStatefulWidget {
   const DailyScreen({super.key});
 
@@ -850,6 +886,8 @@ class _DailyClinicalContent extends StatelessWidget {
 
     return Column(
       children: safeDetail.runSessions.map((run) {
+        final segmentLabels =
+            _manualSegmentLabelsByIdx(run.session.rawMetricsJson);
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: GlassCard(
@@ -882,6 +920,22 @@ class _DailyClinicalContent extends StatelessWidget {
                   'Avg HR: ${run.session.avgHr ?? 'unknown'} | '
                   'Max HR: ${run.session.maxHr ?? 'unknown'}',
                 ),
+                if (run.segments.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Segments',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  ...run.segments.map(
+                    (segment) => Text(
+                      '${segmentLabels[segment.idx] ?? 'Segment'} ${segment.idx}: '
+                      '${_formatDuration(segment.durationS)} | '
+                      '${_formatDistanceKm(segment.distanceM)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
