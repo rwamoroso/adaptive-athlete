@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../db/app_db.dart';
@@ -15,26 +16,500 @@ class SyncService {
     }
 
     try {
-      await _upsertWorkoutDays();
-      await _upsertActualStrengthSets();
-      await _upsertPrescribedStrengthSets();
-      await _upsertSleepNights();
-      await _upsertRunSessions();
-      await _upsertRunSegments();
-      await _upsertRunSessionDetails();
-      await _upsertRunOverrideAudit();
-      await _upsertRuleTriggers();
-      await _upsertAiAudit();
-      await _upsertPlanCycles();
-      await _upsertPlanDays();
-      await _upsertPlanPrescribedStrengthSets();
-      await _upsertPlanPrescribedRuns();
-      await _upsertPlanSummarySnapshots();
-      await _upsertPlanImportAudit();
-      return 'Sync complete: local Drift data pushed to Supabase.';
+      await _pullFromSupabase();
+      await _pushToSupabase();
+      return 'Sync complete: cloud pulled to local and local pushed to Supabase.';
     } catch (e) {
       return 'Sync failed: $e';
     }
+  }
+
+  Future<void> _pushToSupabase() async {
+    await _upsertWorkoutDays();
+    await _upsertActualStrengthSets();
+    await _upsertPrescribedStrengthSets();
+    await _upsertSleepNights();
+    await _upsertRunSessions();
+    await _upsertRunSegments();
+    await _upsertRunSessionDetails();
+    await _upsertRunOverrideAudit();
+    await _upsertRuleTriggers();
+    await _upsertAiAudit();
+    await _upsertPlanCycles();
+    await _upsertPlanDays();
+    await _upsertPlanPrescribedStrengthSets();
+    await _upsertPlanPrescribedRuns();
+    await _upsertPlanSummarySnapshots();
+    await _upsertPlanImportAudit();
+  }
+
+  Future<void> _pullFromSupabase() async {
+    await _pullWorkoutDays();
+    await _pullPlanCycles();
+    await _pullPlanDays();
+    await _pullPlanPrescribedStrengthSets();
+    await _pullPlanPrescribedRuns();
+    await _pullPlanSummarySnapshots();
+    await _pullPlanImportAudit();
+    await _pullActualStrengthSets();
+    await _pullPrescribedStrengthSets();
+    await _pullSleepNights();
+    await _pullRunSessions();
+    await _pullRunSegments();
+    await _pullRunSessionDetails();
+    await _pullRunOverrideAudit();
+    await _pullRuleTriggers();
+    await _pullAiAudit();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchRows(String table) async {
+    final response = await client.from(table).select();
+    return (response as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+  }
+
+  String _requiredString(Map<String, dynamic> row, String key) {
+    final value = row[key];
+    if (value == null) {
+      throw StateError('Missing required field "$key".');
+    }
+    return value.toString();
+  }
+
+  int _requiredInt(Map<String, dynamic> row, String key) {
+    final value = _asInt(row[key]);
+    if (value == null) {
+      throw StateError('Missing required int field "$key".');
+    }
+    return value;
+  }
+
+  bool _requiredBool(Map<String, dynamic> row, String key) {
+    final value = _asBool(row[key]);
+    if (value == null) {
+      throw StateError('Missing required bool field "$key".');
+    }
+    return value;
+  }
+
+  int? _asInt(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse(value.toString());
+  }
+
+  double? _asDouble(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is double) {
+      return value;
+    }
+    if (value is num) {
+      return value.toDouble();
+    }
+    return double.tryParse(value.toString());
+  }
+
+  bool? _asBool(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is bool) {
+      return value;
+    }
+    if (value is num) {
+      return value != 0;
+    }
+    final normalized = value.toString().toLowerCase();
+    if (normalized == 'true' || normalized == 't' || normalized == '1') {
+      return true;
+    }
+    if (normalized == 'false' || normalized == 'f' || normalized == '0') {
+      return false;
+    }
+    return null;
+  }
+
+  Future<void> _pullWorkoutDays() async {
+    final rows = await _fetchRows('workout_days');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.workoutDays,
+          WorkoutDaysCompanion(
+            id: Value(_requiredString(r, 'id')),
+            workoutDate: Value(_requiredString(r, 'workout_date')),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+            notes: Value(r['notes']?.toString()),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullActualStrengthSets() async {
+    final rows = await _fetchRows('actual_strength_sets');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.actualStrengthSets,
+          ActualStrengthSetsCompanion(
+            id: Value(_requiredString(r, 'id')),
+            workoutDayId: Value(_requiredString(r, 'workout_day_id')),
+            planDayId: Value(r['plan_day_id']?.toString()),
+            performedAt: Value(_asInt(r['performed_at'])),
+            exerciseCanonical: Value(_requiredString(r, 'exercise_canonical')),
+            setIndex: Value(_requiredInt(r, 'set_index')),
+            weight: Value(_asDouble(r['weight'])),
+            reps: Value(_asInt(r['reps'])),
+            rir: Value(_asInt(r['rir'])),
+            unit: Value(_requiredString(r, 'unit')),
+            source: Value(_requiredString(r, 'source')),
+            rawSetString: Value(r['raw_set_string']?.toString()),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullPrescribedStrengthSets() async {
+    final rows = await _fetchRows('prescribed_strength_sets');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.prescribedStrengthSets,
+          PrescribedStrengthSetsCompanion(
+            id: Value(_requiredString(r, 'id')),
+            workoutDayId: Value(_requiredString(r, 'workout_day_id')),
+            exerciseCanonical: Value(_requiredString(r, 'exercise_canonical')),
+            setIndex: Value(_requiredInt(r, 'set_index')),
+            weight: Value(_asDouble(r['weight'])),
+            reps: Value(_asInt(r['reps'])),
+            rir: Value(_asInt(r['rir'])),
+            unit: Value(_requiredString(r, 'unit')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullSleepNights() async {
+    final rows = await _fetchRows('sleep_nights');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.sleepNights,
+          SleepNightsCompanion(
+            id: Value(_requiredString(r, 'id')),
+            sleepDate: Value(_requiredString(r, 'sleep_date')),
+            startTime: Value(_asInt(r['start_time'])),
+            endTime: Value(_asInt(r['end_time'])),
+            totalSleepMin: Value(_asInt(r['total_sleep_min'])),
+            remMin: Value(_asInt(r['rem_min'])),
+            deepMin: Value(_asInt(r['deep_min'])),
+            lightMin: Value(_asInt(r['light_min'])),
+            awakeMin: Value(_asInt(r['awake_min'])),
+            source: Value(_requiredString(r, 'source')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullRunSessions() async {
+    final rows = await _fetchRows('run_sessions');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.runSessions,
+          RunSessionsCompanion(
+            id: Value(_requiredString(r, 'id')),
+            runKey: Value(_requiredString(r, 'run_key')),
+            workoutDayId: Value(r['workout_day_id']?.toString()),
+            planDayId: Value(r['plan_day_id']?.toString()),
+            startTime: Value(_asInt(r['start_time'])),
+            endTime: Value(_asInt(r['end_time'])),
+            durationS: Value(_asInt(r['duration_s'])),
+            distanceM: Value(_asDouble(r['distance_m'])),
+            avgHr: Value(_asDouble(r['avg_hr'])),
+            maxHr: Value(_asDouble(r['max_hr'])),
+            treadmill: Value(_asBool(r['treadmill'])),
+            title: Value(r['title']?.toString()),
+            activityType: Value(r['activity_type']?.toString()),
+            calories: Value(_asInt(r['calories'])),
+            movingTimeS: Value(_asInt(r['moving_time_s'])),
+            elapsedTimeS: Value(_asInt(r['elapsed_time_s'])),
+            sourcePriority: Value(_asInt(r['source_priority']) ?? 0),
+            importFileName: Value(r['import_file_name']?.toString()),
+            rawMetricsJson: Value(r['raw_metrics_json']?.toString()),
+            source: Value(_requiredString(r, 'source')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullRunSegments() async {
+    final rows = await _fetchRows('run_segments');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.runSegments,
+          RunSegmentsCompanion(
+            id: Value(_requiredString(r, 'id')),
+            runSessionId: Value(_requiredString(r, 'run_session_id')),
+            idx: Value(_requiredInt(r, 'idx')),
+            durationS: Value(_asInt(r['duration_s'])),
+            distanceM: Value(_asDouble(r['distance_m'])),
+            speedMps: Value(_asDouble(r['speed_mps'])),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullRunSessionDetails() async {
+    final rows = await _fetchRows('run_session_details');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.runSessionDetails,
+          RunSessionDetailsCompanion(
+            runSessionId: Value(_requiredString(r, 'run_session_id')),
+            favorite: Value(_asBool(r['favorite'])),
+            aerobicTe: Value(_asDouble(r['aerobic_te'])),
+            avgRunCadence: Value(_asDouble(r['avg_run_cadence'])),
+            maxRunCadence: Value(_asDouble(r['max_run_cadence'])),
+            avgPaceS: Value(_asDouble(r['avg_pace_s'])),
+            bestPaceS: Value(_asDouble(r['best_pace_s'])),
+            totalAscent: Value(_asDouble(r['total_ascent'])),
+            totalDescent: Value(_asDouble(r['total_descent'])),
+            avgStrideLengthM: Value(_asDouble(r['avg_stride_length_m'])),
+            trainingStressScore: Value(_asDouble(r['training_stress_score'])),
+            steps: Value(_asInt(r['steps'])),
+            minTemp: Value(_asDouble(r['min_temp'])),
+            maxTemp: Value(_asDouble(r['max_temp'])),
+            decompression: Value(r['decompression']?.toString()),
+            bestLapTimeS: Value(_asDouble(r['best_lap_time_s'])),
+            numberOfLaps: Value(_asInt(r['number_of_laps'])),
+            minElevation: Value(_asDouble(r['min_elevation'])),
+            maxElevation: Value(_asDouble(r['max_elevation'])),
+            rawMetricsJson:
+                Value(r['raw_metrics_json']?.toString() ?? '{}'),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullRunOverrideAudit() async {
+    final rows = await _fetchRows('run_override_audit');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.runOverrideAudit,
+          RunOverrideAuditCompanion(
+            id: Value(_requiredString(r, 'id')),
+            runKey: Value(_requiredString(r, 'run_key')),
+            workoutDayId: Value(r['workout_day_id']?.toString()),
+            oldSource: Value(_requiredString(r, 'old_source')),
+            newSource: Value(_requiredString(r, 'new_source')),
+            oldSnapshotJson: Value(_requiredString(r, 'old_snapshot_json')),
+            newSnapshotJson: Value(_requiredString(r, 'new_snapshot_json')),
+            reason: Value(_requiredString(r, 'reason')),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullRuleTriggers() async {
+    final rows = await _fetchRows('rule_triggers');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.ruleTriggers,
+          RuleTriggersCompanion(
+            id: Value(_requiredString(r, 'id')),
+            triggerDate: Value(_requiredString(r, 'trigger_date')),
+            ruleCode: Value(_requiredString(r, 'rule_code')),
+            triggered: Value(_requiredBool(r, 'triggered')),
+            detailsJson: Value(_requiredString(r, 'details_json')),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullAiAudit() async {
+    final rows = await _fetchRows('ai_audit');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.aiAudit,
+          AiAuditCompanion(
+            id: Value(_requiredString(r, 'id')),
+            requestedAt: Value(_requiredInt(r, 'requested_at')),
+            dateWindowStart: Value(r['date_window_start']?.toString()),
+            dateWindowEnd: Value(r['date_window_end']?.toString()),
+            inputSnapshotJson: Value(_requiredString(r, 'input_snapshot_json')),
+            responseJson: Value(_requiredString(r, 'response_json')),
+            schemaValid: Value(_requiredBool(r, 'schema_valid')),
+            notes: Value(r['notes']?.toString()),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullPlanCycles() async {
+    final rows = await _fetchRows('plan_cycles');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.planCycles,
+          PlanCyclesCompanion(
+            id: Value(_requiredString(r, 'id')),
+            cycleKey: Value(_requiredString(r, 'cycle_key')),
+            weekStart: Value(_requiredString(r, 'week_start')),
+            weekEnd: Value(_requiredString(r, 'week_end')),
+            source: Value(_requiredString(r, 'source')),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullPlanDays() async {
+    final rows = await _fetchRows('plan_days');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.planDays,
+          PlanDaysCompanion(
+            id: Value(_requiredString(r, 'id')),
+            planCycleId: Value(_requiredString(r, 'plan_cycle_id')),
+            dayNumber: Value(_requiredInt(r, 'day_number')),
+            sheetName: Value(_requiredString(r, 'sheet_name')),
+            estimatedDate: Value(r['estimated_date']?.toString()),
+            sessionType: Value(r['session_type']?.toString()),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullPlanPrescribedStrengthSets() async {
+    final rows = await _fetchRows('plan_prescribed_strength_sets');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.planPrescribedStrengthSets,
+          PlanPrescribedStrengthSetsCompanion(
+            id: Value(_requiredString(r, 'id')),
+            planDayId: Value(_requiredString(r, 'plan_day_id')),
+            exerciseCanonical: Value(_requiredString(r, 'exercise_canonical')),
+            setIndex: Value(_requiredInt(r, 'set_index')),
+            weight: Value(_asDouble(r['weight'])),
+            reps: Value(_asInt(r['reps'])),
+            rir: Value(_asInt(r['rir'])),
+            unit: Value(_requiredString(r, 'unit')),
+            rawSetString: Value(r['raw_set_string']?.toString()),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullPlanPrescribedRuns() async {
+    final rows = await _fetchRows('plan_prescribed_runs');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.planPrescribedRuns,
+          PlanPrescribedRunsCompanion(
+            id: Value(_requiredString(r, 'id')),
+            planDayId: Value(_requiredString(r, 'plan_day_id')),
+            dayLabel: Value(r['day_label']?.toString()),
+            liftFocus: Value(r['lift_focus']?.toString()),
+            runType: Value(r['run_type']?.toString()),
+            durationText: Value(r['duration_text']?.toString()),
+            targetPace: Value(r['target_pace']?.toString()),
+            effortHrGuardrails: Value(r['effort_hr_guardrails']?.toString()),
+            notes: Value(r['notes']?.toString()),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullPlanSummarySnapshots() async {
+    final rows = await _fetchRows('plan_summary_snapshots');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.planSummarySnapshots,
+          PlanSummarySnapshotsCompanion(
+            id: Value(_requiredString(r, 'id')),
+            planCycleId: Value(_requiredString(r, 'plan_cycle_id')),
+            tabName: Value(_requiredString(r, 'tab_name')),
+            snapshotJson: Value(_requiredString(r, 'snapshot_json')),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullPlanImportAudit() async {
+    final rows = await _fetchRows('plan_import_audit');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.planImportAudit,
+          PlanImportAuditCompanion(
+            id: Value(_requiredString(r, 'id')),
+            importedAt: Value(_requiredInt(r, 'imported_at')),
+            fileName: Value(_requiredString(r, 'file_name')),
+            success: Value(_requiredBool(r, 'success')),
+            detailsJson: Value(_requiredString(r, 'details_json')),
+            conflictReportPath: Value(r['conflict_report_path']?.toString()),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
   }
 
   Future<void> _upsertWorkoutDays() async {

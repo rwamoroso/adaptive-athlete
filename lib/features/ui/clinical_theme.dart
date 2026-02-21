@@ -94,7 +94,7 @@ ThemeData buildClinicalTheme() {
         );
       }),
     ),
-    cardTheme: CardThemeData(
+    cardTheme: CardTheme(
       color: Colors.white.withOpacity(0.06),
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.black.withOpacity(0.35),

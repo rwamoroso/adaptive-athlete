@@ -26,11 +26,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     super.dispose();
   }
 
+  String _supabaseNotReadyMessage(SupabaseBootstrap bootstrap) {
+    final details = bootstrap.error;
+    if (details == null || details.isEmpty) {
+      return 'Supabase not initialized. Use local-only mode or configure keys.';
+    }
+    return 'Supabase not initialized: $details';
+  }
+
   Future<void> _signIn() async {
     final bootstrap = ref.read(supabaseBootstrapProvider);
     if (!bootstrap.initialized) {
-      setState(() => _message =
-          'Supabase not initialized. Use local-only mode or configure keys.');
+      setState(() => _message = _supabaseNotReadyMessage(bootstrap));
       return;
     }
 
@@ -59,8 +66,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Future<void> _signUp() async {
     final bootstrap = ref.read(supabaseBootstrapProvider);
     if (!bootstrap.initialized) {
-      setState(() => _message =
-          'Supabase not initialized. Use local-only mode or configure keys.');
+      setState(() => _message = _supabaseNotReadyMessage(bootstrap));
       return;
     }
 
@@ -94,14 +100,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     if (kIsWeb) {
       return '${Uri.base.origin}/reset-password';
     }
-    return null;
+    return 'adaptiveathlete://reset-password';
   }
 
   Future<void> _sendPasswordReset() async {
     final bootstrap = ref.read(supabaseBootstrapProvider);
     if (!bootstrap.initialized) {
-      setState(() => _message =
-          'Supabase not initialized. Use local-only mode or configure keys.');
+      setState(() => _message = _supabaseNotReadyMessage(bootstrap));
       return;
     }
     final email = _emailController.text.trim();

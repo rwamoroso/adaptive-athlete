@@ -24,11 +24,19 @@ Future<void> main() async {
   String? error;
 
   try {
-    await Supabase.initialize(
-      url: SupabaseConfig.url,
-      anonKey: SupabaseConfig.anonKey,
-    );
-    initialized = true;
+    final usingPlaceholderConfig =
+        SupabaseConfig.url.contains('<SUPABASE_URL>') ||
+            SupabaseConfig.anonKey.contains('<SUPABASE_ANON_KEY>');
+    if (usingPlaceholderConfig) {
+      error =
+          'Supabase config is using placeholders. Set real values in lib/config/supabase_config.dart.';
+    } else {
+      await Supabase.initialize(
+        url: SupabaseConfig.url,
+        anonKey: SupabaseConfig.anonKey,
+      );
+      initialized = true;
+    }
   } catch (e) {
     error = e.toString();
   }
