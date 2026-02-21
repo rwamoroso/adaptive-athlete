@@ -16,9 +16,9 @@ class SyncService {
     }
 
     try {
-      await _pullFromSupabase();
       await _pushToSupabase();
-      return 'Sync complete: cloud pulled to local and local pushed to Supabase.';
+      await _pullFromSupabase();
+      return 'Sync complete: local pushed to cloud, then cloud pulled to local.';
     } catch (e) {
       return 'Sync failed: $e';
     }
@@ -799,6 +799,10 @@ class SyncService {
 
   Future<void> _upsertPlanPrescribedStrengthSets() async {
     final rows = await db.select(db.planPrescribedStrengthSets).get();
+    await _deleteRemoteRowsMissingLocally(
+      table: 'plan_prescribed_strength_sets',
+      localIds: rows.map((r) => r.id),
+    );
     if (rows.isEmpty) {
       return;
     }
@@ -823,6 +827,10 @@ class SyncService {
 
   Future<void> _upsertPlanPrescribedRuns() async {
     final rows = await db.select(db.planPrescribedRuns).get();
+    await _deleteRemoteRowsMissingLocally(
+      table: 'plan_prescribed_runs',
+      localIds: rows.map((r) => r.id),
+    );
     if (rows.isEmpty) {
       return;
     }
@@ -882,5 +890,32 @@ class SyncService {
               .toList(),
           onConflict: 'id',
         );
+  }
+
+  Future<void> _deleteRemoteRowsMissingLocally({
+    required String table,
+    required Iterable<String> localIds,
+  }) async {
+    final remote = await client.from(table).select('id');
+    final remoteRows = (remote as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    final localIdSet = localIds.toSet();
+    final staleIds = remoteRows
+        .map((r) => r['id']?.toString())
+        .whereType<String>()
+        .where((id) => !localIdSet.contains(id))
+        .toList();
+    if (staleIds.isEmpty) {
+      return;
+    }
+    const chunkSize = 200;
+    for (var i = 0; i < staleIds.length; i += chunkSize) {
+      final end = (i + chunkSize < staleIds.length)
+          ? i + chunkSize
+          : staleIds.length;
+      final chunk = staleIds.sublist(i, end);
+      await client.from(table).delete().inFilter('id', chunk);
+    }
   }
 }
