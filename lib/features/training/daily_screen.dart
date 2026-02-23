@@ -878,10 +878,10 @@ class _DailyClinicalContent extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final textScale = MediaQuery.textScalerOf(context).scale(1);
-        final singleColumn = constraints.maxWidth < 390 || textScale >= 1.25;
-        final ratio = singleColumn
-            ? 2.2
-            : (constraints.maxWidth < 450 || textScale > 1.1 ? 1.15 : 1.75);
+        // Keep top cards stacked on handset/tablet widths; two-up layout is too
+        // compressed once trend charts are shown.
+        final singleColumn = constraints.maxWidth < 900 || textScale >= 1.25;
+        final ratio = singleColumn ? 2.05 : 1.75;
         return GridView.count(
           crossAxisCount: singleColumn ? 1 : 2,
           shrinkWrap: true,
@@ -1576,12 +1576,36 @@ class _DailyTrendMiniChart extends StatelessWidget {
             const SizedBox(width: 34),
             Expanded(
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(_tickDate(safePoints.first.dateYmd), style: axisStyle),
-                  Text(_tickDate(safePoints[midIndex].dateYmd),
-                      style: axisStyle),
-                  Text(_tickDate(safePoints.last.dateYmd), style: axisStyle),
+                  Expanded(
+                    child: Text(
+                      _tickDate(safePoints.first.dateYmd),
+                      style: axisStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _tickDate(safePoints[midIndex].dateYmd),
+                      style: axisStyle,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _tickDate(safePoints.last.dateYmd),
+                      style: axisStyle,
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1673,15 +1697,35 @@ class _WeeklyMileageMiniChart extends StatelessWidget {
             const SizedBox(width: 32),
             Expanded(
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(_weekTickLabel(safePoints.first.weekStartYmd),
-                      style: axisTextStyle),
-                  Text(_weekTickLabel(safePoints[midIndex].weekStartYmd),
-                      style: axisTextStyle),
-                  Text(
-                    _weekTickLabel(safePoints.last.weekStartYmd),
-                    style: axisTextStyle,
+                  Expanded(
+                    child: Text(
+                      _weekTickLabel(safePoints.first.weekStartYmd),
+                      style: axisTextStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _weekTickLabel(safePoints[midIndex].weekStartYmd),
+                      style: axisTextStyle,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _weekTickLabel(safePoints.last.weekStartYmd),
+                      style: axisTextStyle,
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                    ),
                   ),
                 ],
               ),
