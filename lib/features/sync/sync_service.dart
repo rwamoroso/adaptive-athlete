@@ -16,12 +16,39 @@ class SyncService {
     }
 
     try {
-      await _pushToSupabase();
+      final hasLocalRows = await _hasAnyLocalRows();
+      if (hasLocalRows) {
+        await _pushToSupabase();
+        await _pullFromSupabase();
+        return 'Sync complete: local pushed to cloud, then cloud pulled to local.';
+      }
+
       await _pullFromSupabase();
-      return 'Sync complete: local pushed to cloud, then cloud pulled to local.';
+      await _pushToSupabase();
+      return 'Sync complete: cloud pulled to empty local, then local pushed to cloud.';
     } catch (e) {
       return 'Sync failed: $e';
     }
+  }
+
+  Future<bool> _hasAnyLocalRows() async {
+    if (await (db.select(db.workoutDays)..limit(1)).getSingleOrNull() != null) {
+      return true;
+    }
+    if (await (db.select(db.planCycles)..limit(1)).getSingleOrNull() != null) {
+      return true;
+    }
+    if (await (db.select(db.actualStrengthSets)..limit(1)).getSingleOrNull() !=
+        null) {
+      return true;
+    }
+    if (await (db.select(db.runSessions)..limit(1)).getSingleOrNull() != null) {
+      return true;
+    }
+    if (await (db.select(db.sleepNights)..limit(1)).getSingleOrNull() != null) {
+      return true;
+    }
+    return false;
   }
 
   Future<void> _pushToSupabase() async {
@@ -62,11 +89,37 @@ class SyncService {
     await _pullAiAudit();
   }
 
-  Future<List<Map<String, dynamic>>> _fetchRows(String table) async {
-    final response = await client.from(table).select();
-    return (response as List)
-        .map((row) => Map<String, dynamic>.from(row as Map))
-        .toList();
+  Future<List<Map<String, dynamic>>> _fetchRows(
+    String table, {
+    String? columns,
+  }) async {
+    const pageSize = 1000;
+    final allRows = <Map<String, dynamic>>[];
+    var from = 0;
+
+    while (true) {
+      final response = columns == null
+          ? await client
+              .from(table)
+              .select()
+              .range(from, from + pageSize - 1)
+          : await client
+              .from(table)
+              .select(columns)
+              .range(from, from + pageSize - 1);
+
+      final rows = (response as List)
+          .map((row) => Map<String, dynamic>.from(row as Map))
+          .toList();
+      allRows.addAll(rows);
+
+      if (rows.length < pageSize) {
+        break;
+      }
+      from += pageSize;
+    }
+
+    return allRows;
   }
 
   String _requiredString(Map<String, dynamic> row, String key) {
@@ -310,8 +363,7 @@ class SyncService {
             numberOfLaps: Value(_asInt(r['number_of_laps'])),
             minElevation: Value(_asDouble(r['min_elevation'])),
             maxElevation: Value(_asDouble(r['max_elevation'])),
-            rawMetricsJson:
-                Value(r['raw_metrics_json']?.toString() ?? '{}'),
+            rawMetricsJson: Value(r['raw_metrics_json']?.toString() ?? '{}'),
           ),
           mode: InsertMode.insertOrReplace,
         );
@@ -896,11 +948,11 @@ class SyncService {
     required String table,
     required Iterable<String> localIds,
   }) async {
-    final remote = await client.from(table).select('id');
-    final remoteRows = (remote as List)
-        .map((row) => Map<String, dynamic>.from(row as Map))
-        .toList();
     final localIdSet = localIds.toSet();
+    if (localIdSet.isEmpty) {
+      return;
+    }
+    final remoteRows = await _fetchRows(table, columns: 'id');
     final staleIds = remoteRows
         .map((r) => r['id']?.toString())
         .whereType<String>()
@@ -911,9 +963,8 @@ class SyncService {
     }
     const chunkSize = 200;
     for (var i = 0; i < staleIds.length; i += chunkSize) {
-      final end = (i + chunkSize < staleIds.length)
-          ? i + chunkSize
-          : staleIds.length;
+      final end =
+          (i + chunkSize < staleIds.length) ? i + chunkSize : staleIds.length;
       final chunk = staleIds.sublist(i, end);
       await client.from(table).delete().inFilter('id', chunk);
     }

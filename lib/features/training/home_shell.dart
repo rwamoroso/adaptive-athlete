@@ -39,7 +39,28 @@ class _HomeShellState extends State<HomeShell> {
       data: buildClinicalTheme(),
       child: Scaffold(
         extendBody: true,
-        appBar: AppBar(title: Text(_titles[_index])),
+        appBar: AppBar(
+          title: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/images/icon.png',
+                  width: 30,
+                  height: 30,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _titles[_index],
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
         body: Stack(
           children: [
             const Positioned.fill(child: _ClinicalGradientBackground()),
@@ -50,9 +71,9 @@ class _HomeShellState extends State<HomeShell> {
                     center: const Alignment(-0.1, -0.95),
                     radius: 1.45,
                     colors: [
-                      Colors.white.withOpacity(0.06),
+                      Colors.white.withValues(alpha: 0.06),
                       Colors.transparent,
-                      Colors.black.withOpacity(0.30),
+                      Colors.black.withValues(alpha: 0.30),
                     ],
                     stops: const [0, 0.55, 1],
                   ),

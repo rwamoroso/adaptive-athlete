@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -39,6 +40,24 @@ String _formatDistanceKm(double? meters) {
     return 'unknown';
   }
   return '${(meters / 1000).toStringAsFixed(1)} km';
+}
+
+String _formatDistanceMiles(double? meters, {int decimals = 1}) {
+  if (meters == null) {
+    return 'unknown';
+  }
+  return '${(meters / 1609.344).toStringAsFixed(decimals)} mi';
+}
+
+String _formatMiles(double miles, {int decimals = 1}) {
+  return '${miles.toStringAsFixed(decimals)} mi';
+}
+
+String _formatLoad(double value) {
+  if (value.abs() >= 1000) {
+    return value.toStringAsFixed(0);
+  }
+  return value.toStringAsFixed(1);
 }
 
 String _formatHeaderDate(String ymd) {
@@ -101,6 +120,68 @@ class DailyScreen extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<DailyScreen> createState() => _DailyScreenState();
+}
+
+class _WeeklyMileagePoint {
+  const _WeeklyMileagePoint({
+    required this.weekStartYmd,
+    required this.totalMiles,
+  });
+
+  final String weekStartYmd;
+  final double totalMiles;
+}
+
+class _RunMileageCardSummary {
+  const _RunMileageCardSummary({
+    required this.weeklyPoints,
+    required this.last7DaysMiles,
+  });
+
+  final List<_WeeklyMileagePoint> weeklyPoints;
+  final double last7DaysMiles;
+}
+
+class _DailyTrendPoint {
+  const _DailyTrendPoint({
+    required this.dateYmd,
+    required this.value,
+  });
+
+  final String dateYmd;
+  final double value;
+}
+
+class _StrengthLoadCardSummary {
+  const _StrengthLoadCardSummary({
+    required this.dailyPoints,
+    required this.last7DaysTotalLoad,
+  });
+
+  final List<_DailyTrendPoint> dailyPoints;
+  final double last7DaysTotalLoad;
+}
+
+class _SleepTrendCardSummary {
+  const _SleepTrendCardSummary({
+    required this.dailyPoints,
+  });
+
+  final List<_DailyTrendPoint> dailyPoints;
+}
+
+class _DailyScreenLoadData {
+  const _DailyScreenLoadData({
+    required this.detail,
+    required this.runMileageSummary,
+    required this.strengthLoadSummary,
+    required this.sleepTrendSummary,
+  });
+
+  final WorkoutDayDetail detail;
+  final _RunMileageCardSummary runMileageSummary;
+  final _StrengthLoadCardSummary strengthLoadSummary;
+  final _SleepTrendCardSummary sleepTrendSummary;
 }
 
 class _DailyScreenState extends ConsumerState<DailyScreen> {
@@ -305,54 +386,202 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     }
   }
 
-  List<double> _sparklineSeries(WorkoutDayDetail detail) {
-    if (detail.runSessions.isEmpty) {
-      return const <double>[0.16, 0.24, 0.21, 0.44, 0.58, 0.52, 0.56];
+  DateTime _startOfWeek(DateTime date) {
+    return DateTime(date.year, date.month, date.day)
+        .subtract(Duration(days: date.weekday - 1));
+  }
+
+  Future<_RunMileageCardSummary> _loadRunMileageCardSummary(
+    AppDb db,
+    String anchorYmd,
+  ) async {
+    const weeksToShow = 6;
+    final anchorDate = parseYmd(anchorYmd);
+    final anchorWeekStart = _startOfWeek(anchorDate);
+    final chartStart = anchorWeekStart.subtract(
+      const Duration(days: (weeksToShow - 1) * 7),
+    );
+    final chartEnd = anchorWeekStart.add(const Duration(days: 6));
+    final last7Start = anchorDate.subtract(const Duration(days: 6));
+    final queryStart =
+        last7Start.isBefore(chartStart) ? last7Start : chartStart;
+
+    final rows = await db.customSelect(
+      '''
+      select wd.workout_date as workout_date, coalesce(sum(rs.distance_m), 0) as total_distance_m
+      from run_sessions rs
+      join workout_days wd on wd.id = rs.workout_day_id
+      where wd.workout_date >= ? and wd.workout_date <= ?
+      group by wd.workout_date
+      ''',
+      variables: [
+        Variable.withString(toYmd(queryStart)),
+        Variable.withString(toYmd(chartEnd)),
+      ],
+    ).get();
+
+    final dailyMetersByYmd = <String, double>{};
+    for (final row in rows) {
+      final ymd = row.data['workout_date']?.toString();
+      final totalDistance = row.data['total_distance_m'];
+      if (ymd == null || ymd.isEmpty) {
+        continue;
+      }
+      if (totalDistance is num) {
+        dailyMetersByYmd[ymd] = totalDistance.toDouble();
+      } else {
+        dailyMetersByYmd[ymd] = double.tryParse('$totalDistance') ?? 0;
+      }
     }
 
-    final raw = detail.runSessions
-        .map((run) {
-          final distance = run.session.distanceM;
-          if (distance != null && distance > 0) {
-            return distance / 1000;
-          }
-          final duration = run.session.durationS;
-          if (duration != null && duration > 0) {
-            return duration / 600;
-          }
-          return 0.2;
-        })
-        .toList()
-        .cast<double>();
-
-    final start = math.max(0, raw.length - 7);
-    final sliced = raw.sublist(start);
-
-    while (sliced.length < 7) {
-      sliced.insert(0, 0.15);
+    final weeklyPoints = <_WeeklyMileagePoint>[];
+    for (var i = 0; i < weeksToShow; i++) {
+      final weekStart = chartStart.add(Duration(days: i * 7));
+      var weekMeters = 0.0;
+      for (var d = 0; d < 7; d++) {
+        weekMeters +=
+            dailyMetersByYmd[toYmd(weekStart.add(Duration(days: d)))] ?? 0.0;
+      }
+      weeklyPoints.add(
+        _WeeklyMileagePoint(
+          weekStartYmd: toYmd(weekStart),
+          totalMiles: weekMeters / 1609.344,
+        ),
+      );
     }
 
-    final maxVal = sliced.reduce(math.max);
-    if (maxVal <= 0) {
-      return List<double>.filled(7, 0.2);
+    var last7Meters = 0.0;
+    for (var d = 0; d < 7; d++) {
+      last7Meters +=
+          dailyMetersByYmd[toYmd(last7Start.add(Duration(days: d)))] ?? 0.0;
     }
 
-    return sliced
-        .map((value) => (value / maxVal).clamp(0.08, 1.0).toDouble())
-        .toList();
+    return _RunMileageCardSummary(
+      weeklyPoints: weeklyPoints,
+      last7DaysMiles: last7Meters / 1609.344,
+    );
+  }
+
+  List<_DailyTrendPoint> _buildLast7DailyPoints({
+    required String anchorYmd,
+    required Map<String, double> valuesByDate,
+  }) {
+    final anchor = parseYmd(anchorYmd);
+    final start = anchor.subtract(const Duration(days: 6));
+    return List<_DailyTrendPoint>.generate(7, (index) {
+      final date = start.add(Duration(days: index));
+      final ymd = toYmd(date);
+      return _DailyTrendPoint(
+        dateYmd: ymd,
+        value: valuesByDate[ymd] ?? 0.0,
+      );
+    });
+  }
+
+  Future<_StrengthLoadCardSummary> _loadStrengthLoadCardSummary(
+    AppDb db,
+    String anchorYmd,
+  ) async {
+    final anchor = parseYmd(anchorYmd);
+    final start = anchor.subtract(const Duration(days: 6));
+    final rows = await db.customSelect(
+      '''
+      select wd.workout_date as workout_date,
+             coalesce(sum(coalesce(a.weight, 0) * coalesce(a.reps, 0)), 0) as total_load
+      from actual_strength_sets a
+      join workout_days wd on wd.id = a.workout_day_id
+      where wd.workout_date >= ? and wd.workout_date <= ?
+      group by wd.workout_date
+      ''',
+      variables: [
+        Variable.withString(toYmd(start)),
+        Variable.withString(anchorYmd),
+      ],
+    ).get();
+
+    final loadByDate = <String, double>{};
+    for (final row in rows) {
+      final ymd = row.data['workout_date']?.toString();
+      final total = row.data['total_load'];
+      if (ymd == null || ymd.isEmpty) {
+        continue;
+      }
+      loadByDate[ymd] =
+          total is num ? total.toDouble() : (double.tryParse('$total') ?? 0.0);
+    }
+
+    final points =
+        _buildLast7DailyPoints(anchorYmd: anchorYmd, valuesByDate: loadByDate);
+    return _StrengthLoadCardSummary(
+      dailyPoints: points,
+      last7DaysTotalLoad: points.fold<double>(0, (sum, p) => sum + p.value),
+    );
+  }
+
+  Future<_SleepTrendCardSummary> _loadSleepTrendCardSummary(
+    AppDb db,
+    String anchorYmd,
+  ) async {
+    final anchor = parseYmd(anchorYmd);
+    final start = anchor.subtract(const Duration(days: 6));
+    final rows = await db.customSelect(
+      '''
+      select sleep_date, coalesce(total_sleep_min, 0) as total_sleep_min
+      from sleep_nights
+      where sleep_date >= ? and sleep_date <= ?
+      ''',
+      variables: [
+        Variable.withString(toYmd(start)),
+        Variable.withString(anchorYmd),
+      ],
+    ).get();
+
+    final hoursByDate = <String, double>{};
+    for (final row in rows) {
+      final ymd = row.data['sleep_date']?.toString();
+      final totalSleepMin = row.data['total_sleep_min'];
+      if (ymd == null || ymd.isEmpty) {
+        continue;
+      }
+      final minutes = totalSleepMin is num
+          ? totalSleepMin.toDouble()
+          : (double.tryParse('$totalSleepMin') ?? 0.0);
+      hoursByDate[ymd] = minutes / 60.0;
+    }
+
+    return _SleepTrendCardSummary(
+      dailyPoints: _buildLast7DailyPoints(
+          anchorYmd: anchorYmd, valuesByDate: hoursByDate),
+    );
+  }
+
+  Future<_DailyScreenLoadData> _loadScreenData(AppDb db) async {
+    final results = await Future.wait<dynamic>([
+      db
+          .getWorkoutDayDetail(_selectedDate)
+          .timeout(const Duration(seconds: 12)),
+      _loadRunMileageCardSummary(db, _selectedDate),
+      _loadStrengthLoadCardSummary(db, _selectedDate),
+      _loadSleepTrendCardSummary(db, _selectedDate),
+    ]);
+    return _DailyScreenLoadData(
+      detail: results[0] as WorkoutDayDetail,
+      runMileageSummary: results[1] as _RunMileageCardSummary,
+      strengthLoadSummary: results[2] as _StrengthLoadCardSummary,
+      sleepTrendSummary: results[3] as _SleepTrendCardSummary,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final db = ref.watch(appDbProvider);
 
-    return FutureBuilder<WorkoutDayDetail>(
+    return FutureBuilder<_DailyScreenLoadData>(
       key: ValueKey('daily-$_selectedDate-$_refresh'),
-      future: db
-          .getWorkoutDayDetail(_selectedDate)
-          .timeout(const Duration(seconds: 12)),
+      future: _loadScreenData(db),
       builder: (context, snapshot) {
-        final detail = snapshot.data;
+        final loaded = snapshot.data;
+        final detail = loaded?.detail;
         final loading = snapshot.connectionState == ConnectionState.waiting;
 
         if (loading && detail == null) {
@@ -417,7 +646,43 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
         }
 
         final aiSummary = _latestAiSummary(safeDetail);
-        final runSeries = _sparklineSeries(safeDetail);
+        final runMileageSummary = loaded?.runMileageSummary ??
+            const _RunMileageCardSummary(
+              weeklyPoints: <_WeeklyMileagePoint>[
+                _WeeklyMileagePoint(weekStartYmd: '2000-01-03', totalMiles: 0),
+                _WeeklyMileagePoint(weekStartYmd: '2000-01-10', totalMiles: 0),
+                _WeeklyMileagePoint(weekStartYmd: '2000-01-17', totalMiles: 0),
+                _WeeklyMileagePoint(weekStartYmd: '2000-01-24', totalMiles: 0),
+                _WeeklyMileagePoint(weekStartYmd: '2000-01-31', totalMiles: 0),
+                _WeeklyMileagePoint(weekStartYmd: '2000-02-07', totalMiles: 0),
+              ],
+              last7DaysMiles: 0,
+            );
+        final strengthLoadSummary = loaded?.strengthLoadSummary ??
+            const _StrengthLoadCardSummary(
+              dailyPoints: <_DailyTrendPoint>[
+                _DailyTrendPoint(dateYmd: '2000-01-01', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-02', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-03', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-04', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-05', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-06', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-07', value: 0),
+              ],
+              last7DaysTotalLoad: 0,
+            );
+        final sleepTrendSummary = loaded?.sleepTrendSummary ??
+            const _SleepTrendCardSummary(
+              dailyPoints: <_DailyTrendPoint>[
+                _DailyTrendPoint(dateYmd: '2000-01-01', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-02', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-03', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-04', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-05', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-06', value: 0),
+                _DailyTrendPoint(dateYmd: '2000-01-07', value: 0),
+              ],
+            );
         final runProgress = safeDetail.runSessions.isEmpty
             ? 0.0
             : (safeDetail.runSessions.length / 7).clamp(0.0, 1.0).toDouble();
@@ -434,7 +699,9 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
           gate: gate,
           excluded: excluded,
           aiSummary: aiSummary,
-          runSeries: runSeries,
+          runMileageSummary: runMileageSummary,
+          strengthLoadSummary: strengthLoadSummary,
+          sleepTrendSummary: sleepTrendSummary,
           runProgress: runProgress,
           totalRunDistance: totalRunDistance,
           sessionTypeLabel: _sessionTypeLabel,
@@ -472,7 +739,9 @@ class _DailyClinicalContent extends StatelessWidget {
     required this.gate,
     required this.excluded,
     required this.aiSummary,
-    required this.runSeries,
+    required this.runMileageSummary,
+    required this.strengthLoadSummary,
+    required this.sleepTrendSummary,
     required this.runProgress,
     required this.totalRunDistance,
     required this.sessionTypeLabel,
@@ -492,7 +761,9 @@ class _DailyClinicalContent extends StatelessWidget {
   final RecoveryGateResult gate;
   final int excluded;
   final AiAnalyzeResponse? aiSummary;
-  final List<double> runSeries;
+  final _RunMileageCardSummary runMileageSummary;
+  final _StrengthLoadCardSummary strengthLoadSummary;
+  final _SleepTrendCardSummary sleepTrendSummary;
   final double runProgress;
   final double totalRunDistance;
   final String Function(String?) sessionTypeLabel;
@@ -517,7 +788,7 @@ class _DailyClinicalContent extends StatelessWidget {
             _buildHeader(context),
             const SizedBox(height: 14),
             const ClinicalBanner(
-              text: 'Clinical Focus: Sustainable Progress & Recovery',
+              text: 'Adaptation Focus: Sustainable Progress & Recovery',
             ),
             const SizedBox(height: 14),
             _buildMetricGrid(context),
@@ -623,10 +894,17 @@ class _DailyClinicalContent extends StatelessWidget {
               title: 'Sleep',
               leadingIcon: Icons.bedtime_outlined,
               valueText: _formatMinutesAsHoursMinutes(sleepMin),
-              subtitleText: 'Tap to view/edit',
-              trailingWidget: Icon(
-                Icons.monitor_heart_outlined,
-                color: const Color(0xFFF08A7F).withOpacity(0.95),
+              subtitleText: 'Tap to view/edit • 7-day sleep trend',
+              trailingWidget: SizedBox(
+                width: 176,
+                height: 66,
+                child: _DailyTrendMiniChart(
+                  points: sleepTrendSummary.dailyPoints,
+                  yUnitLabel: 'h',
+                  yDecimals: 1,
+                  lineColor: const Color(0xFFF08A7F),
+                  fillColor: const Color(0xFFF08A7F),
+                ),
               ),
               onTap: () => onOpenSleepEditor(sleepNight),
             ),
@@ -634,17 +912,40 @@ class _DailyClinicalContent extends StatelessWidget {
               title: 'Run',
               leadingIcon: Icons.directions_run_rounded,
               valueText:
-                  '${safeDetail.runSessions.length} session${safeDetail.runSessions.length == 1 ? '' : 's'}',
-              subtitleText: totalRunDistance <= 0
-                  ? 'No distance captured yet'
-                  : _formatDistanceKm(totalRunDistance),
+                  '${_formatMiles(runMileageSummary.last7DaysMiles)} last 7 days',
+              subtitleText:
+                  '${safeDetail.runSessions.length} session${safeDetail.runSessions.length == 1 ? '' : 's'} today'
+                  '${totalRunDistance > 0 ? ' • ${_formatDistanceMiles(totalRunDistance)} today' : ' • No distance today'}'
+                  ' • Tap to log/edit',
               trailingWidget: SizedBox(
-                width: 96,
-                height: 36,
-                child: CustomPaint(
-                  painter: _RunSparklinePainter(values: runSeries),
+                width: 264,
+                height: 66,
+                child: _WeeklyMileageMiniChart(
+                  points: runMileageSummary.weeklyPoints,
                 ),
               ),
+              onTap: onRunInputs,
+            ),
+            MetricTile(
+              title: 'Split',
+              leadingIcon: Icons.fitness_center_outlined,
+              valueText:
+                  '7-day load: ${_formatLoad(strengthLoadSummary.last7DaysTotalLoad)}',
+              subtitleText: safeDetail.planDayNumber == null
+                  ? 'No split linked • Tap to open workout detail'
+                  : 'Day ${safeDetail.planDayNumber} • ${sessionTypeLabel(safeDetail.planSessionType)} • Tap to open workout detail',
+              trailingWidget: SizedBox(
+                width: 176,
+                height: 66,
+                child: _DailyTrendMiniChart(
+                  points: strengthLoadSummary.dailyPoints,
+                  yUnitLabel: 'load',
+                  yDecimals: 0,
+                  lineColor: const Color(0xFFE4B6FF),
+                  fillColor: const Color(0xFFE4B6FF),
+                ),
+              ),
+              onTap: onOpenWorkoutDetail,
             ),
             MetricTile(
               title: 'Health Alerts',
@@ -656,18 +957,6 @@ class _DailyClinicalContent extends StatelessWidget {
               trailingWidget: _AlertIconStrip(
                 progressionAllowed: gate.progressionAllowed,
                 artifacts: excluded,
-              ),
-            ),
-            MetricTile(
-              title: 'Split',
-              leadingIcon: Icons.fitness_center_outlined,
-              valueText: safeDetail.planDayNumber == null
-                  ? 'No split linked'
-                  : 'Day ${safeDetail.planDayNumber} • ${sessionTypeLabel(safeDetail.planSessionType)}',
-              subtitleText: 'Tap Open Workout Day Detail below',
-              trailingWidget: const Icon(
-                Icons.fitness_center,
-                color: Color(0xFFE4B6FF),
               ),
             ),
           ],
@@ -688,7 +977,7 @@ class _DailyClinicalContent extends StatelessWidget {
             children: [
               const Icon(Icons.analytics_outlined, size: 18),
               Text(
-                'Clinical AI Snapshot',
+                'Adaptation AI Snapshot',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ],
@@ -748,27 +1037,7 @@ class _DailyClinicalContent extends StatelessWidget {
   }
 
   Widget _buildPrimaryLargeActions(BuildContext context) {
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          child: PrimaryPillButton(
-            text: 'Run Inputs',
-            variant: PillButtonVariant.tonal,
-            onPressed: onRunInputs,
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          width: double.infinity,
-          child: PrimaryPillButton(
-            text: 'Open Workout Day Detail',
-            variant: PillButtonVariant.tonal,
-            onPressed: onOpenWorkoutDetail,
-          ),
-        ),
-      ],
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildSecondaryActionRow(BuildContext context) {
@@ -835,7 +1104,7 @@ class _DailyClinicalContent extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Clinical Prescription',
+                'Adaptation Prescription',
                 style: Theme.of(context)
                     .textTheme
                     .titleMedium
@@ -872,7 +1141,7 @@ class _DailyClinicalContent extends StatelessWidget {
       width: 52,
       height: 52,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         shape: BoxShape.circle,
       ),
       child: const Icon(Icons.directions_run),
@@ -1139,8 +1408,8 @@ class _FlagChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: color.withOpacity(0.18),
-        border: Border.all(color: color.withOpacity(0.55)),
+        color: color.withValues(alpha: 0.18),
+        border: Border.all(color: color.withValues(alpha: 0.55)),
       ),
       child: Text(label, style: Theme.of(context).textTheme.labelSmall),
     );
@@ -1162,8 +1431,8 @@ class _StrengthCountPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: Colors.white.withOpacity(0.08),
-        border: Border.all(color: Colors.white.withOpacity(0.15)),
+        color: Colors.white.withValues(alpha: 0.08),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
       ),
       child: Text(
         '$label: $value',
@@ -1213,37 +1482,258 @@ class _AlertIconStrip extends StatelessWidget {
   }
 }
 
-class _RunSparklinePainter extends CustomPainter {
-  const _RunSparklinePainter({required this.values});
+class _DailyTrendMiniChart extends StatelessWidget {
+  const _DailyTrendMiniChart({
+    required this.points,
+    required this.yUnitLabel,
+    required this.yDecimals,
+    required this.lineColor,
+    required this.fillColor,
+  });
+
+  final List<_DailyTrendPoint> points;
+  final String yUnitLabel;
+  final int yDecimals;
+  final Color lineColor;
+  final Color fillColor;
+
+  String _tickDate(String ymd) {
+    final d = parseYmd(ymd);
+    return '${d.month}/${d.day}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final safePoints = points.isEmpty
+        ? const <_DailyTrendPoint>[
+            _DailyTrendPoint(dateYmd: '2000-01-01', value: 0)
+          ]
+        : points;
+    final maxValue = safePoints.fold<double>(
+      0.0,
+      (maxVal, p) => math.max(maxVal, p.value),
+    );
+    final yMax = maxValue <= 0 ? 1.0 : (maxValue * 1.15);
+    final midIndex = safePoints.length ~/ 2;
+    final axisStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+          fontSize: 8.5,
+          color: Colors.white.withValues(alpha: 0.78),
+        );
+
+    String fmt(double v) =>
+        yDecimals == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(yDecimals);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: 30,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(fmt(yMax), style: axisStyle),
+                    Text(yUnitLabel,
+                        style: axisStyle,
+                        maxLines: 1,
+                        overflow: TextOverflow.fade),
+                    Text('0', style: axisStyle),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white.withValues(alpha: 0.04),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 2),
+                    child: CustomPaint(
+                      painter: _TrendLineChartPainter(
+                        values: safePoints.map((p) => p.value).toList(),
+                        maxValue: yMax,
+                        lineColor: lineColor,
+                        fillColor: fillColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            const SizedBox(width: 34),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_tickDate(safePoints.first.dateYmd), style: axisStyle),
+                  Text(_tickDate(safePoints[midIndex].dateYmd),
+                      style: axisStyle),
+                  Text(_tickDate(safePoints.last.dateYmd), style: axisStyle),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _WeeklyMileageMiniChart extends StatelessWidget {
+  const _WeeklyMileageMiniChart({required this.points});
+
+  final List<_WeeklyMileagePoint> points;
+
+  String _weekTickLabel(String ymd) {
+    final date = parseYmd(ymd);
+    return '${date.month}/${date.day}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final safePoints = points.isEmpty
+        ? const <_WeeklyMileagePoint>[
+            _WeeklyMileagePoint(weekStartYmd: '2000-01-03', totalMiles: 0),
+          ]
+        : points;
+    final maxMiles = safePoints.fold<double>(
+      0,
+      (maxVal, p) => math.max(maxVal, p.totalMiles),
+    );
+    final yMax = maxMiles <= 0 ? 1.0 : (maxMiles * 1.15);
+    final midIndex = safePoints.length ~/ 2;
+    final axisTextStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+          fontSize: 9,
+          color: Colors.white.withValues(alpha: 0.8),
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: 28,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      yMax >= 10
+                          ? yMax.toStringAsFixed(0)
+                          : yMax.toStringAsFixed(1),
+                      style: axisTextStyle,
+                    ),
+                    Text('mi', style: axisTextStyle),
+                    Text('0', style: axisTextStyle),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white.withValues(alpha: 0.04),
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 2),
+                    child: CustomPaint(
+                      painter: _WeeklyMileageChartPainter(
+                        miles: safePoints.map((p) => p.totalMiles).toList(),
+                        maxMiles: yMax,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            const SizedBox(width: 32),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_weekTickLabel(safePoints.first.weekStartYmd),
+                      style: axisTextStyle),
+                  Text(_weekTickLabel(safePoints[midIndex].weekStartYmd),
+                      style: axisTextStyle),
+                  Text(
+                    _weekTickLabel(safePoints.last.weekStartYmd),
+                    style: axisTextStyle,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _TrendLineChartPainter extends CustomPainter {
+  const _TrendLineChartPainter({
+    required this.values,
+    required this.maxValue,
+    required this.lineColor,
+    required this.fillColor,
+  });
 
   final List<double> values;
+  final double maxValue;
+  final Color lineColor;
+  final Color fillColor;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (values.isEmpty) {
+    if (values.isEmpty || size.width <= 0 || size.height <= 0) {
       return;
     }
 
     final gridPaint = Paint()
-      ..color = Colors.white.withOpacity(0.14)
-      ..style = PaintingStyle.stroke
+      ..color = Colors.white.withValues(alpha: 0.12)
       ..strokeWidth = 1;
+    canvas.drawLine(
+        Offset(0, size.height), Offset(size.width, size.height), gridPaint);
+    canvas.drawLine(
+      Offset(0, size.height * 0.5),
+      Offset(size.width, size.height * 0.5),
+      gridPaint,
+    );
+    canvas.drawLine(const Offset(0, 0), Offset(size.width, 0), gridPaint);
 
-    final lowerGrid = Path()
-      ..moveTo(0, size.height * 0.75)
-      ..lineTo(size.width, size.height * 0.75);
-    final midGrid = Path()
-      ..moveTo(0, size.height * 0.45)
-      ..lineTo(size.width, size.height * 0.45);
-
-    canvas.drawPath(lowerGrid, gridPaint);
-    canvas.drawPath(midGrid, gridPaint);
+    final effectiveMax = maxValue <= 0 ? 1.0 : maxValue;
+    final normalized = values
+        .map((v) => (v / effectiveMax).clamp(0.0, 1.0).toDouble())
+        .toList();
+    final n = normalized.length;
 
     final path = Path();
-    final n = values.length;
     for (var i = 0; i < n; i++) {
       final x = n == 1 ? size.width / 2 : size.width * (i / (n - 1));
-      final y = size.height - (values[i].clamp(0.0, 1.0) * size.height);
+      final y = size.height - (normalized[i] * size.height);
       if (i == 0) {
         path.moveTo(x, y);
       } else {
@@ -1261,7 +1751,108 @@ class _RunSparklinePainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          ClinicalPalette.accent.withOpacity(0.35),
+          fillColor.withValues(alpha: 0.22),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final linePaint = Paint()
+      ..color = lineColor
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 1.8;
+
+    canvas.drawPath(areaPath, fillPaint);
+    canvas.drawPath(path, linePaint);
+
+    final dotPaint = Paint()..color = lineColor;
+    for (var i = 0; i < n; i++) {
+      final x = n == 1 ? size.width / 2 : size.width * (i / (n - 1));
+      final y = size.height - (normalized[i] * size.height);
+      canvas.drawCircle(Offset(x, y), 1.7, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrendLineChartPainter oldDelegate) {
+    if (oldDelegate.maxValue != maxValue ||
+        oldDelegate.values.length != values.length ||
+        oldDelegate.lineColor != lineColor ||
+        oldDelegate.fillColor != fillColor) {
+      return true;
+    }
+    for (var i = 0; i < values.length; i++) {
+      if (oldDelegate.values[i] != values[i]) {
+        return true;
+      }
+    }
+    return false;
+  }
+}
+
+class _WeeklyMileageChartPainter extends CustomPainter {
+  const _WeeklyMileageChartPainter({
+    required this.miles,
+    required this.maxMiles,
+  });
+
+  final List<double> miles;
+  final double maxMiles;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (miles.isEmpty || size.width <= 0 || size.height <= 0) {
+      return;
+    }
+
+    final gridPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.12)
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(size.width, size.height),
+      gridPaint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height * 0.5),
+      Offset(size.width, size.height * 0.5),
+      gridPaint,
+    );
+    canvas.drawLine(
+      const Offset(0, 0),
+      Offset(size.width, 0),
+      gridPaint,
+    );
+
+    final n = miles.length;
+    final effectiveMax = maxMiles <= 0 ? 1.0 : maxMiles;
+    final normalized = miles
+        .map((m) => (m / effectiveMax).clamp(0.0, 1.0).toDouble())
+        .toList();
+
+    final path = Path();
+    for (var i = 0; i < n; i++) {
+      final x = n == 1 ? size.width / 2 : size.width * (i / (n - 1));
+      final y = size.height - (normalized[i] * size.height);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    final areaPath = Path.from(path)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          ClinicalPalette.accent.withValues(alpha: 0.30),
           Colors.transparent,
         ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
@@ -1271,7 +1862,7 @@ class _RunSparklinePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = 2;
+      ..strokeWidth = 1.8;
 
     canvas.drawPath(areaPath, fillPaint);
     canvas.drawPath(path, linePaint);
@@ -1279,18 +1870,19 @@ class _RunSparklinePainter extends CustomPainter {
     final dotPaint = Paint()..color = const Color(0xFFF38E71);
     for (var i = 0; i < n; i++) {
       final x = n == 1 ? size.width / 2 : size.width * (i / (n - 1));
-      final y = size.height - (values[i].clamp(0.0, 1.0) * size.height);
-      canvas.drawCircle(Offset(x, y), 2.2, dotPaint);
+      final y = size.height - (normalized[i] * size.height);
+      canvas.drawCircle(Offset(x, y), 1.8, dotPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _RunSparklinePainter oldDelegate) {
-    if (oldDelegate.values.length != values.length) {
+  bool shouldRepaint(covariant _WeeklyMileageChartPainter oldDelegate) {
+    if (oldDelegate.maxMiles != maxMiles ||
+        oldDelegate.miles.length != miles.length) {
       return true;
     }
-    for (var i = 0; i < values.length; i++) {
-      if (oldDelegate.values[i] != values[i]) {
+    for (var i = 0; i < miles.length; i++) {
+      if (oldDelegate.miles[i] != miles[i]) {
         return true;
       }
     }

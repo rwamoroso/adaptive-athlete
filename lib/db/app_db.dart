@@ -3077,6 +3077,7 @@ class AppDb extends _$AppDb {
     final targetDir = await _resolveExportDirectory(outputDirectoryPath);
     final now = anchorDate ?? DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final historyEndYmd = toYmd(today);
     final startOfCurrentWeek =
         today.subtract(Duration(days: today.weekday - 1));
     final previousWeekStart =
@@ -3084,8 +3085,7 @@ class AppDb extends _$AppDb {
     final previousWeekEnd = previousWeekStart.add(const Duration(days: 6));
     final previousWeekStartYmd = toYmd(previousWeekStart);
     final previousWeekEndYmd = toYmd(previousWeekEnd);
-    final historyStartYmd =
-        toYmd(previousWeekEnd.subtract(const Duration(days: 20)));
+    final historyStartYmd = toYmd(today.subtract(const Duration(days: 20)));
 
     final excel = Excel.createExcel();
     final defaultSheetName = excel.getDefaultSheet();
@@ -3122,7 +3122,7 @@ class AppDb extends _$AppDb {
         continue;
       }
       if (workoutDate.compareTo(historyStartYmd) < 0 ||
-          workoutDate.compareTo(previousWeekEndYmd) > 0) {
+          workoutDate.compareTo(historyEndYmd) > 0) {
         continue;
       }
       _setCell(strengthSheet, strengthRow, 0, TextCellValue(workoutDate));
@@ -3166,7 +3166,7 @@ class AppDb extends _$AppDb {
         continue;
       }
       if (workoutDate.compareTo(historyStartYmd) < 0 ||
-          workoutDate.compareTo(previousWeekEndYmd) > 0) {
+          workoutDate.compareTo(historyEndYmd) > 0) {
         continue;
       }
       final startTime = run.startTime == null
@@ -3430,8 +3430,8 @@ class AppDb extends _$AppDb {
     }
     final fileName = 'WeeklyExecution_wk_${previousWeekStartYmd}_to_'
         '${previousWeekEndYmd}__strength_${historyStartYmd}_to_'
-        '${previousWeekEndYmd}__run_${historyStartYmd}_to_'
-        '$previousWeekEndYmd.xlsx';
+        '${historyEndYmd}__run_${historyStartYmd}_to_'
+        '$historyEndYmd.xlsx';
     final outFile = File(p.join(targetDir.path, fileName));
     await outFile.writeAsBytes(encoded, flush: true);
     return outFile.path;

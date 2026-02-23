@@ -77,6 +77,49 @@ Uint8List _buildStandardWorkbookBytes({bool runConflict = false}) {
   return Uint8List.fromList(encoded);
 }
 
+String _cellText(Data? cell) {
+  final value = cell?.value;
+  if (value == null) {
+    return '';
+  }
+  if (value is TextCellValue) {
+    return value.value.toString();
+  }
+  if (value is IntCellValue) {
+    return value.value.toString();
+  }
+  if (value is DoubleCellValue) {
+    return value.value.toString();
+  }
+  if (value is BoolCellValue) {
+    return value.value.toString();
+  }
+  if (value is DateCellValue) {
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '${value.year}-$month-$day';
+  }
+  return value.toString();
+}
+
+List<String> _columnValues(Excel workbook, String sheetName, int col) {
+  final sheet = workbook.tables[sheetName];
+  if (sheet == null) {
+    return const <String>[];
+  }
+  final values = <String>[];
+  for (final row in sheet.rows.skip(1)) {
+    if (row.length <= col) {
+      continue;
+    }
+    final text = _cellText(row[col]).trim();
+    if (text.isNotEmpty) {
+      values.add(text);
+    }
+  }
+  return values;
+}
+
 void main() {
   test('standard workbook import succeeds and populates plan tables', () async {
     final db = AppDb.forTesting(NativeDatabase.memory());
@@ -173,5 +216,68 @@ void main() {
     ]);
     expect(names[4].toLowerCase().startsWith('day 1'), true);
     expect(names[10].toLowerCase().startsWith('day 7'), true);
+  });
+
+  test('standard workbook export includes history through export date',
+      () async {
+    final db = AppDb.forTesting(NativeDatabase.memory());
+    final dir = await Directory.systemTemp.createTemp('standard-history-');
+
+    addTearDown(() async {
+      await db.close();
+      await dir.delete(recursive: true);
+    });
+
+    await db.upsertActualStrengthSetForDate(
+      dateYmd: '2026-02-18',
+      exerciseCanonical: 'Back Squat',
+      setIndex: 1,
+      weight: 225,
+      reps: 5,
+      rir: 2,
+    );
+    await db.upsertActualStrengthSetForDate(
+      dateYmd: '2026-01-31',
+      exerciseCanonical: 'Bench Press',
+      setIndex: 1,
+      weight: 205,
+      reps: 6,
+      rir: 2,
+    );
+
+    await db.insertOrUpdateManualRun(
+      dateString: '2026-02-18',
+      startTimeMs: DateTime(2026, 2, 18, 7, 30).millisecondsSinceEpoch,
+      durationS: 1800,
+      distanceM: 5000,
+      avgHr: 142,
+      maxHr: 166,
+    );
+    await db.insertOrUpdateManualRun(
+      dateString: '2026-01-31',
+      startTimeMs: DateTime(2026, 1, 31, 7, 30).millisecondsSinceEpoch,
+      durationS: 1200,
+      distanceM: 3200,
+      avgHr: 135,
+      maxHr: 150,
+    );
+
+    final exportPath = await db.exportStandardWorkbookXlsx(
+      anchorDate: DateTime(2026, 2, 21),
+      outputDirectoryPath: dir.path,
+    );
+    final exported = Excel.decodeBytes(await File(exportPath).readAsBytes());
+
+    final strengthDates = _columnValues(exported, 'Strength Data', 0);
+    final runDates = _columnValues(exported, 'Run Data', 0);
+    expect(strengthDates, contains('2026-02-18'));
+    expect(strengthDates, isNot(contains('2026-01-31')));
+    expect(runDates, contains('2026-02-18'));
+    expect(runDates, isNot(contains('2026-01-31')));
+    expect(
+      p.basename(exportPath),
+      contains(
+          '__strength_2026-02-01_to_2026-02-21__run_2026-02-01_to_2026-02-21'),
+    );
   });
 }
