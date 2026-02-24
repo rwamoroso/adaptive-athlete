@@ -136,10 +136,14 @@ class _RunMileageCardSummary {
   const _RunMileageCardSummary({
     required this.weeklyPoints,
     required this.last7DaysMiles,
+    required this.currentWeekActualMiles,
+    required this.currentWeekPlannedMiles,
   });
 
   final List<_WeeklyMileagePoint> weeklyPoints;
   final double last7DaysMiles;
+  final double currentWeekActualMiles;
+  final double currentWeekPlannedMiles;
 }
 
 class _DailyTrendPoint {
@@ -391,6 +395,103 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
         .subtract(Duration(days: date.weekday - 1));
   }
 
+  double? _parsePlannedDurationSeconds(String? raw) {
+    if (raw == null) {
+      return null;
+    }
+    final value = raw.trim().toLowerCase();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    final colonMatch = RegExp(r'(\d{1,2}:\d{2}(?::\d{2})?)').firstMatch(value);
+    if (colonMatch != null) {
+      final parts = colonMatch.group(1)!.split(':').map(double.parse).toList();
+      if (parts.length == 3) {
+        return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+      }
+      if (parts.length == 2) {
+        return (parts[0] * 60) + parts[1];
+      }
+    }
+
+    final hoursMatch = RegExp(r'(\d+(?:\.\d+)?)\s*h').firstMatch(value);
+    final minsMatch = RegExp(r'(\d+(?:\.\d+)?)\s*m').firstMatch(value);
+    final secsMatch = RegExp(r'(\d+(?:\.\d+)?)\s*s').firstMatch(value);
+    if (hoursMatch != null || minsMatch != null || secsMatch != null) {
+      final hours = double.tryParse(hoursMatch?.group(1) ?? '') ?? 0;
+      final mins = double.tryParse(minsMatch?.group(1) ?? '') ?? 0;
+      final secs = double.tryParse(secsMatch?.group(1) ?? '') ?? 0;
+      final total = (hours * 3600) + (mins * 60) + secs;
+      return total > 0 ? total : null;
+    }
+
+    final minWordMatch =
+        RegExp(r'(\d+(?:\.\d+)?)\s*(min|mins|minute|minutes)\b')
+            .firstMatch(value);
+    if (minWordMatch != null) {
+      final mins = double.tryParse(minWordMatch.group(1)!);
+      return mins == null ? null : mins * 60;
+    }
+
+    final numOnly = double.tryParse(value);
+    if (numOnly != null && numOnly > 0) {
+      // Treat plain numeric values as minutes (common in plans).
+      return numOnly * 60;
+    }
+    return null;
+  }
+
+  double? _parseTargetPaceSecondsPerMile(String? raw) {
+    if (raw == null) {
+      return null;
+    }
+    final value = raw.trim().toLowerCase();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    final unitIsKm = value.contains('/km') || value.contains(' per km');
+    final unitIsMi =
+        value.contains('/mi') || value.contains('/mile') || value.contains(' per mile');
+
+    final firstTimeMatch =
+        RegExp(r'(\d{1,2}:\d{2}(?::\d{2})?)').firstMatch(value);
+    if (firstTimeMatch == null) {
+      return null;
+    }
+
+    final parts = firstTimeMatch.group(1)!.split(':').map(double.parse).toList();
+    double seconds;
+    if (parts.length == 3) {
+      seconds = (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+    } else {
+      seconds = (parts[0] * 60) + parts[1];
+    }
+    if (seconds <= 0) {
+      return null;
+    }
+    if (unitIsKm && !unitIsMi) {
+      return seconds * 1.609344;
+    }
+    return seconds;
+  }
+
+  double _estimatePlannedMilesForRun({
+    required String? durationText,
+    required String? targetPace,
+  }) {
+    final durationSeconds = _parsePlannedDurationSeconds(durationText);
+    final paceSecondsPerMile = _parseTargetPaceSecondsPerMile(targetPace);
+    if (durationSeconds == null ||
+        paceSecondsPerMile == null ||
+        durationSeconds <= 0 ||
+        paceSecondsPerMile <= 0) {
+      return 0.0;
+    }
+    return durationSeconds / paceSecondsPerMile;
+  }
+
   Future<_RunMileageCardSummary> _loadRunMileageCardSummary(
     AppDb db,
     String anchorYmd,
@@ -456,9 +557,37 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
           dailyMetersByYmd[toYmd(last7Start.add(Duration(days: d)))] ?? 0.0;
     }
 
+    final plannedRows = await db.customSelect(
+      '''
+      select pd.estimated_date as estimated_date,
+             pr.duration_text as duration_text,
+             pr.target_pace as target_pace
+      from plan_days pd
+      join plan_prescribed_runs pr on pr.plan_day_id = pd.id
+      where pd.estimated_date >= ? and pd.estimated_date <= ?
+      ''',
+      variables: [
+        Variable.withString(toYmd(anchorWeekStart)),
+        Variable.withString(toYmd(chartEnd)),
+      ],
+    ).get();
+
+    var currentWeekPlannedMiles = 0.0;
+    for (final row in plannedRows) {
+      currentWeekPlannedMiles += _estimatePlannedMilesForRun(
+        durationText: row.data['duration_text']?.toString(),
+        targetPace: row.data['target_pace']?.toString(),
+      );
+    }
+
+    final currentWeekActualMiles =
+        weeklyPoints.isEmpty ? 0.0 : weeklyPoints.last.totalMiles;
+
     return _RunMileageCardSummary(
       weeklyPoints: weeklyPoints,
       last7DaysMiles: last7Meters / 1609.344,
+      currentWeekActualMiles: currentWeekActualMiles,
+      currentWeekPlannedMiles: currentWeekPlannedMiles,
     );
   }
 
@@ -610,6 +739,7 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
               date: _selectedDate,
               workoutDay: null,
               planCycleId: null,
+              planDayId: null,
               planDayNumber: null,
               planSessionType: null,
               prescribedRun: null,
@@ -657,6 +787,8 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
                 _WeeklyMileagePoint(weekStartYmd: '2000-02-07', totalMiles: 0),
               ],
               last7DaysMiles: 0,
+              currentWeekActualMiles: 0,
+              currentWeekPlannedMiles: 0,
             );
         final strengthLoadSummary = loaded?.strengthLoadSummary ??
             const _StrengthLoadCardSummary(
@@ -683,9 +815,14 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
                 _DailyTrendPoint(dateYmd: '2000-01-07', value: 0),
               ],
             );
-        final runProgress = safeDetail.runSessions.isEmpty
-            ? 0.0
-            : (safeDetail.runSessions.length / 7).clamp(0.0, 1.0).toDouble();
+        final runProgress = runMileageSummary.currentWeekPlannedMiles > 0
+            ? (runMileageSummary.currentWeekActualMiles /
+                    runMileageSummary.currentWeekPlannedMiles)
+                .clamp(0.0, 1.0)
+                .toDouble()
+            : (safeDetail.runSessions.isEmpty
+                ? 0.0
+                : (safeDetail.runSessions.length / 7).clamp(0.0, 1.0).toDouble());
         final totalRunDistance = safeDetail.runSessions.fold<double>(
           0,
           (sum, run) => sum + (run.session.distanceM ?? 0),
@@ -808,6 +945,14 @@ class _DailyClinicalContent extends StatelessWidget {
             const SizedBox(height: 8),
             RunsTrack(value: runProgress),
             const SizedBox(height: 6),
+            Text(
+              runMileageSummary.currentWeekPlannedMiles > 0
+                  ? 'Week progress: ${_formatMiles(runMileageSummary.currentWeekActualMiles)} / '
+                      '${_formatMiles(runMileageSummary.currentWeekPlannedMiles)} planned'
+                  : 'Week progress: planned mileage unavailable (showing session progress)',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 4),
             Text(
               '${safeDetail.runSessions.length} session${safeDetail.runSessions.length == 1 ? '' : 's'} logged • '
               '${totalRunDistance <= 0 ? 'No total distance' : _formatDistanceKm(totalRunDistance)}',

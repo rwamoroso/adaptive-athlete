@@ -6,6 +6,8 @@ class ActualStrengthSets extends Table {
   TextColumn get planDayId => text().nullable()();
   IntColumn get performedAt => integer().nullable()();
   TextColumn get exerciseCanonical => text()();
+  TextColumn get prescribedExerciseCanonical => text().nullable()();
+  TextColumn get substitutionId => text().nullable()();
   IntColumn get setIndex => integer()();
   RealColumn get weight => real().nullable()();
   IntColumn get reps => integer().nullable()();

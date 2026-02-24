@@ -109,4 +109,45 @@ void main() {
     expect(rows.first.rir, 1);
     expect(rows.first.unit, 'lb');
   });
+
+  test('substituted actual logging preserves prescribed exercise anchor',
+      () async {
+    final db = AppDb.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    const ymd = '2026-02-14';
+    await _seedPlanForDate(db, ymd);
+
+    await db.upsertExerciseSubstitutionForDate(
+      dateYmd: ymd,
+      prescribedExerciseCanonical: 'Bench Press',
+      substituteExerciseCanonical: 'Dumbbell Bench Press',
+      reasonCode: 'equipment_unavailable',
+      matchScore: 88,
+      matchExplanationJson: '{"tier":"strong"}',
+      warningAcknowledged: false,
+    );
+
+    await db.upsertActualStrengthSetForDate(
+      dateYmd: ymd,
+      exerciseCanonical: 'Dumbbell Bench Press',
+      prescribedExerciseCanonical: 'Bench Press',
+      setIndex: 1,
+      weight: 70,
+      reps: 10,
+      rir: 2,
+      substitutionId: 'sub_1',
+    );
+
+    final workoutDay = await (db.select(db.workoutDays)
+          ..where((d) => d.workoutDate.equals(ymd)))
+        .getSingle();
+    final row = await (db.select(db.actualStrengthSets)
+          ..where((a) => a.workoutDayId.equals(workoutDay.id)))
+        .getSingle();
+
+    expect(row.exerciseCanonical, 'Dumbbell Bench Press');
+    expect(row.prescribedExerciseCanonical, 'Bench Press');
+    expect(row.substitutionId, 'sub_1');
+  });
 }

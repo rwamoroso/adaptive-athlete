@@ -311,6 +311,19 @@ class $ActualStrengthSetsTable extends ActualStrengthSets
   late final GeneratedColumn<String> exerciseCanonical =
       GeneratedColumn<String>('exercise_canonical', aliasedName, false,
           type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _prescribedExerciseCanonicalMeta =
+      const VerificationMeta('prescribedExerciseCanonical');
+  @override
+  late final GeneratedColumn<String> prescribedExerciseCanonical =
+      GeneratedColumn<String>(
+          'prescribed_exercise_canonical', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _substitutionIdMeta =
+      const VerificationMeta('substitutionId');
+  @override
+  late final GeneratedColumn<String> substitutionId = GeneratedColumn<String>(
+      'substitution_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _setIndexMeta =
       const VerificationMeta('setIndex');
   @override
@@ -361,6 +374,8 @@ class $ActualStrengthSetsTable extends ActualStrengthSets
         planDayId,
         performedAt,
         exerciseCanonical,
+        prescribedExerciseCanonical,
+        substitutionId,
         setIndex,
         weight,
         reps,
@@ -412,6 +427,19 @@ class $ActualStrengthSetsTable extends ActualStrengthSets
               data['exercise_canonical']!, _exerciseCanonicalMeta));
     } else if (isInserting) {
       context.missing(_exerciseCanonicalMeta);
+    }
+    if (data.containsKey('prescribed_exercise_canonical')) {
+      context.handle(
+          _prescribedExerciseCanonicalMeta,
+          prescribedExerciseCanonical.isAcceptableOrUnknown(
+              data['prescribed_exercise_canonical']!,
+              _prescribedExerciseCanonicalMeta));
+    }
+    if (data.containsKey('substitution_id')) {
+      context.handle(
+          _substitutionIdMeta,
+          substitutionId.isAcceptableOrUnknown(
+              data['substitution_id']!, _substitutionIdMeta));
     }
     if (data.containsKey('set_index')) {
       context.handle(_setIndexMeta,
@@ -474,6 +502,11 @@ class $ActualStrengthSetsTable extends ActualStrengthSets
           .read(DriftSqlType.int, data['${effectivePrefix}performed_at']),
       exerciseCanonical: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}exercise_canonical'])!,
+      prescribedExerciseCanonical: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}prescribed_exercise_canonical']),
+      substitutionId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}substitution_id']),
       setIndex: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}set_index'])!,
       weight: attachedDatabase.typeMapping
@@ -506,6 +539,8 @@ class ActualStrengthSet extends DataClass
   final String? planDayId;
   final int? performedAt;
   final String exerciseCanonical;
+  final String? prescribedExerciseCanonical;
+  final String? substitutionId;
   final int setIndex;
   final double? weight;
   final int? reps;
@@ -520,6 +555,8 @@ class ActualStrengthSet extends DataClass
       this.planDayId,
       this.performedAt,
       required this.exerciseCanonical,
+      this.prescribedExerciseCanonical,
+      this.substitutionId,
       required this.setIndex,
       this.weight,
       this.reps,
@@ -540,6 +577,13 @@ class ActualStrengthSet extends DataClass
       map['performed_at'] = Variable<int>(performedAt);
     }
     map['exercise_canonical'] = Variable<String>(exerciseCanonical);
+    if (!nullToAbsent || prescribedExerciseCanonical != null) {
+      map['prescribed_exercise_canonical'] =
+          Variable<String>(prescribedExerciseCanonical);
+    }
+    if (!nullToAbsent || substitutionId != null) {
+      map['substitution_id'] = Variable<String>(substitutionId);
+    }
     map['set_index'] = Variable<int>(setIndex);
     if (!nullToAbsent || weight != null) {
       map['weight'] = Variable<double>(weight);
@@ -570,6 +614,13 @@ class ActualStrengthSet extends DataClass
           ? const Value.absent()
           : Value(performedAt),
       exerciseCanonical: Value(exerciseCanonical),
+      prescribedExerciseCanonical:
+          prescribedExerciseCanonical == null && nullToAbsent
+              ? const Value.absent()
+              : Value(prescribedExerciseCanonical),
+      substitutionId: substitutionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(substitutionId),
       setIndex: Value(setIndex),
       weight:
           weight == null && nullToAbsent ? const Value.absent() : Value(weight),
@@ -593,6 +644,9 @@ class ActualStrengthSet extends DataClass
       planDayId: serializer.fromJson<String?>(json['planDayId']),
       performedAt: serializer.fromJson<int?>(json['performedAt']),
       exerciseCanonical: serializer.fromJson<String>(json['exerciseCanonical']),
+      prescribedExerciseCanonical:
+          serializer.fromJson<String?>(json['prescribedExerciseCanonical']),
+      substitutionId: serializer.fromJson<String?>(json['substitutionId']),
       setIndex: serializer.fromJson<int>(json['setIndex']),
       weight: serializer.fromJson<double?>(json['weight']),
       reps: serializer.fromJson<int?>(json['reps']),
@@ -612,6 +666,9 @@ class ActualStrengthSet extends DataClass
       'planDayId': serializer.toJson<String?>(planDayId),
       'performedAt': serializer.toJson<int?>(performedAt),
       'exerciseCanonical': serializer.toJson<String>(exerciseCanonical),
+      'prescribedExerciseCanonical':
+          serializer.toJson<String?>(prescribedExerciseCanonical),
+      'substitutionId': serializer.toJson<String?>(substitutionId),
       'setIndex': serializer.toJson<int>(setIndex),
       'weight': serializer.toJson<double?>(weight),
       'reps': serializer.toJson<int?>(reps),
@@ -629,6 +686,8 @@ class ActualStrengthSet extends DataClass
           Value<String?> planDayId = const Value.absent(),
           Value<int?> performedAt = const Value.absent(),
           String? exerciseCanonical,
+          Value<String?> prescribedExerciseCanonical = const Value.absent(),
+          Value<String?> substitutionId = const Value.absent(),
           int? setIndex,
           Value<double?> weight = const Value.absent(),
           Value<int?> reps = const Value.absent(),
@@ -643,6 +702,11 @@ class ActualStrengthSet extends DataClass
         planDayId: planDayId.present ? planDayId.value : this.planDayId,
         performedAt: performedAt.present ? performedAt.value : this.performedAt,
         exerciseCanonical: exerciseCanonical ?? this.exerciseCanonical,
+        prescribedExerciseCanonical: prescribedExerciseCanonical.present
+            ? prescribedExerciseCanonical.value
+            : this.prescribedExerciseCanonical,
+        substitutionId:
+            substitutionId.present ? substitutionId.value : this.substitutionId,
         setIndex: setIndex ?? this.setIndex,
         weight: weight.present ? weight.value : this.weight,
         reps: reps.present ? reps.value : this.reps,
@@ -665,6 +729,12 @@ class ActualStrengthSet extends DataClass
       exerciseCanonical: data.exerciseCanonical.present
           ? data.exerciseCanonical.value
           : this.exerciseCanonical,
+      prescribedExerciseCanonical: data.prescribedExerciseCanonical.present
+          ? data.prescribedExerciseCanonical.value
+          : this.prescribedExerciseCanonical,
+      substitutionId: data.substitutionId.present
+          ? data.substitutionId.value
+          : this.substitutionId,
       setIndex: data.setIndex.present ? data.setIndex.value : this.setIndex,
       weight: data.weight.present ? data.weight.value : this.weight,
       reps: data.reps.present ? data.reps.value : this.reps,
@@ -686,6 +756,8 @@ class ActualStrengthSet extends DataClass
           ..write('planDayId: $planDayId, ')
           ..write('performedAt: $performedAt, ')
           ..write('exerciseCanonical: $exerciseCanonical, ')
+          ..write('prescribedExerciseCanonical: $prescribedExerciseCanonical, ')
+          ..write('substitutionId: $substitutionId, ')
           ..write('setIndex: $setIndex, ')
           ..write('weight: $weight, ')
           ..write('reps: $reps, ')
@@ -705,6 +777,8 @@ class ActualStrengthSet extends DataClass
       planDayId,
       performedAt,
       exerciseCanonical,
+      prescribedExerciseCanonical,
+      substitutionId,
       setIndex,
       weight,
       reps,
@@ -722,6 +796,9 @@ class ActualStrengthSet extends DataClass
           other.planDayId == this.planDayId &&
           other.performedAt == this.performedAt &&
           other.exerciseCanonical == this.exerciseCanonical &&
+          other.prescribedExerciseCanonical ==
+              this.prescribedExerciseCanonical &&
+          other.substitutionId == this.substitutionId &&
           other.setIndex == this.setIndex &&
           other.weight == this.weight &&
           other.reps == this.reps &&
@@ -738,6 +815,8 @@ class ActualStrengthSetsCompanion extends UpdateCompanion<ActualStrengthSet> {
   final Value<String?> planDayId;
   final Value<int?> performedAt;
   final Value<String> exerciseCanonical;
+  final Value<String?> prescribedExerciseCanonical;
+  final Value<String?> substitutionId;
   final Value<int> setIndex;
   final Value<double?> weight;
   final Value<int?> reps;
@@ -753,6 +832,8 @@ class ActualStrengthSetsCompanion extends UpdateCompanion<ActualStrengthSet> {
     this.planDayId = const Value.absent(),
     this.performedAt = const Value.absent(),
     this.exerciseCanonical = const Value.absent(),
+    this.prescribedExerciseCanonical = const Value.absent(),
+    this.substitutionId = const Value.absent(),
     this.setIndex = const Value.absent(),
     this.weight = const Value.absent(),
     this.reps = const Value.absent(),
@@ -769,6 +850,8 @@ class ActualStrengthSetsCompanion extends UpdateCompanion<ActualStrengthSet> {
     this.planDayId = const Value.absent(),
     this.performedAt = const Value.absent(),
     required String exerciseCanonical,
+    this.prescribedExerciseCanonical = const Value.absent(),
+    this.substitutionId = const Value.absent(),
     required int setIndex,
     this.weight = const Value.absent(),
     this.reps = const Value.absent(),
@@ -791,6 +874,8 @@ class ActualStrengthSetsCompanion extends UpdateCompanion<ActualStrengthSet> {
     Expression<String>? planDayId,
     Expression<int>? performedAt,
     Expression<String>? exerciseCanonical,
+    Expression<String>? prescribedExerciseCanonical,
+    Expression<String>? substitutionId,
     Expression<int>? setIndex,
     Expression<double>? weight,
     Expression<int>? reps,
@@ -807,6 +892,9 @@ class ActualStrengthSetsCompanion extends UpdateCompanion<ActualStrengthSet> {
       if (planDayId != null) 'plan_day_id': planDayId,
       if (performedAt != null) 'performed_at': performedAt,
       if (exerciseCanonical != null) 'exercise_canonical': exerciseCanonical,
+      if (prescribedExerciseCanonical != null)
+        'prescribed_exercise_canonical': prescribedExerciseCanonical,
+      if (substitutionId != null) 'substitution_id': substitutionId,
       if (setIndex != null) 'set_index': setIndex,
       if (weight != null) 'weight': weight,
       if (reps != null) 'reps': reps,
@@ -825,6 +913,8 @@ class ActualStrengthSetsCompanion extends UpdateCompanion<ActualStrengthSet> {
       Value<String?>? planDayId,
       Value<int?>? performedAt,
       Value<String>? exerciseCanonical,
+      Value<String?>? prescribedExerciseCanonical,
+      Value<String?>? substitutionId,
       Value<int>? setIndex,
       Value<double?>? weight,
       Value<int?>? reps,
@@ -840,6 +930,9 @@ class ActualStrengthSetsCompanion extends UpdateCompanion<ActualStrengthSet> {
       planDayId: planDayId ?? this.planDayId,
       performedAt: performedAt ?? this.performedAt,
       exerciseCanonical: exerciseCanonical ?? this.exerciseCanonical,
+      prescribedExerciseCanonical:
+          prescribedExerciseCanonical ?? this.prescribedExerciseCanonical,
+      substitutionId: substitutionId ?? this.substitutionId,
       setIndex: setIndex ?? this.setIndex,
       weight: weight ?? this.weight,
       reps: reps ?? this.reps,
@@ -869,6 +962,13 @@ class ActualStrengthSetsCompanion extends UpdateCompanion<ActualStrengthSet> {
     }
     if (exerciseCanonical.present) {
       map['exercise_canonical'] = Variable<String>(exerciseCanonical.value);
+    }
+    if (prescribedExerciseCanonical.present) {
+      map['prescribed_exercise_canonical'] =
+          Variable<String>(prescribedExerciseCanonical.value);
+    }
+    if (substitutionId.present) {
+      map['substitution_id'] = Variable<String>(substitutionId.value);
     }
     if (setIndex.present) {
       map['set_index'] = Variable<int>(setIndex.value);
@@ -908,6 +1008,8 @@ class ActualStrengthSetsCompanion extends UpdateCompanion<ActualStrengthSet> {
           ..write('planDayId: $planDayId, ')
           ..write('performedAt: $performedAt, ')
           ..write('exerciseCanonical: $exerciseCanonical, ')
+          ..write('prescribedExerciseCanonical: $prescribedExerciseCanonical, ')
+          ..write('substitutionId: $substitutionId, ')
           ..write('setIndex: $setIndex, ')
           ..write('weight: $weight, ')
           ..write('reps: $reps, ')
@@ -1343,6 +1445,328 @@ class PrescribedStrengthSetsCompanion
           ..write('reps: $reps, ')
           ..write('rir: $rir, ')
           ..write('unit: $unit, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AppPromptTemplatesTable extends AppPromptTemplates
+    with TableInfo<$AppPromptTemplatesTable, AppPromptTemplate> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AppPromptTemplatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _templateKeyMeta =
+      const VerificationMeta('templateKey');
+  @override
+  late final GeneratedColumn<String> templateKey = GeneratedColumn<String>(
+      'template_key', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _templateTextMeta =
+      const VerificationMeta('templateText');
+  @override
+  late final GeneratedColumn<String> templateText = GeneratedColumn<String>(
+      'template_text', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+      'source', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('user_override'));
+  static const VerificationMeta _versionTagMeta =
+      const VerificationMeta('versionTag');
+  @override
+  late final GeneratedColumn<String> versionTag = GeneratedColumn<String>(
+      'version_tag', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [templateKey, templateText, source, versionTag, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'app_prompt_templates';
+  @override
+  VerificationContext validateIntegrity(Insertable<AppPromptTemplate> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('template_key')) {
+      context.handle(
+          _templateKeyMeta,
+          templateKey.isAcceptableOrUnknown(
+              data['template_key']!, _templateKeyMeta));
+    } else if (isInserting) {
+      context.missing(_templateKeyMeta);
+    }
+    if (data.containsKey('template_text')) {
+      context.handle(
+          _templateTextMeta,
+          templateText.isAcceptableOrUnknown(
+              data['template_text']!, _templateTextMeta));
+    } else if (isInserting) {
+      context.missing(_templateTextMeta);
+    }
+    if (data.containsKey('source')) {
+      context.handle(_sourceMeta,
+          source.isAcceptableOrUnknown(data['source']!, _sourceMeta));
+    }
+    if (data.containsKey('version_tag')) {
+      context.handle(
+          _versionTagMeta,
+          versionTag.isAcceptableOrUnknown(
+              data['version_tag']!, _versionTagMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {templateKey};
+  @override
+  AppPromptTemplate map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AppPromptTemplate(
+      templateKey: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}template_key'])!,
+      templateText: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}template_text'])!,
+      source: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}source'])!,
+      versionTag: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}version_tag']),
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $AppPromptTemplatesTable createAlias(String alias) {
+    return $AppPromptTemplatesTable(attachedDatabase, alias);
+  }
+}
+
+class AppPromptTemplate extends DataClass
+    implements Insertable<AppPromptTemplate> {
+  final String templateKey;
+  final String templateText;
+  final String source;
+  final String? versionTag;
+  final int updatedAt;
+  const AppPromptTemplate(
+      {required this.templateKey,
+      required this.templateText,
+      required this.source,
+      this.versionTag,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['template_key'] = Variable<String>(templateKey);
+    map['template_text'] = Variable<String>(templateText);
+    map['source'] = Variable<String>(source);
+    if (!nullToAbsent || versionTag != null) {
+      map['version_tag'] = Variable<String>(versionTag);
+    }
+    map['updated_at'] = Variable<int>(updatedAt);
+    return map;
+  }
+
+  AppPromptTemplatesCompanion toCompanion(bool nullToAbsent) {
+    return AppPromptTemplatesCompanion(
+      templateKey: Value(templateKey),
+      templateText: Value(templateText),
+      source: Value(source),
+      versionTag: versionTag == null && nullToAbsent
+          ? const Value.absent()
+          : Value(versionTag),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory AppPromptTemplate.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AppPromptTemplate(
+      templateKey: serializer.fromJson<String>(json['templateKey']),
+      templateText: serializer.fromJson<String>(json['templateText']),
+      source: serializer.fromJson<String>(json['source']),
+      versionTag: serializer.fromJson<String?>(json['versionTag']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'templateKey': serializer.toJson<String>(templateKey),
+      'templateText': serializer.toJson<String>(templateText),
+      'source': serializer.toJson<String>(source),
+      'versionTag': serializer.toJson<String?>(versionTag),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+    };
+  }
+
+  AppPromptTemplate copyWith(
+          {String? templateKey,
+          String? templateText,
+          String? source,
+          Value<String?> versionTag = const Value.absent(),
+          int? updatedAt}) =>
+      AppPromptTemplate(
+        templateKey: templateKey ?? this.templateKey,
+        templateText: templateText ?? this.templateText,
+        source: source ?? this.source,
+        versionTag: versionTag.present ? versionTag.value : this.versionTag,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  AppPromptTemplate copyWithCompanion(AppPromptTemplatesCompanion data) {
+    return AppPromptTemplate(
+      templateKey:
+          data.templateKey.present ? data.templateKey.value : this.templateKey,
+      templateText: data.templateText.present
+          ? data.templateText.value
+          : this.templateText,
+      source: data.source.present ? data.source.value : this.source,
+      versionTag:
+          data.versionTag.present ? data.versionTag.value : this.versionTag,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppPromptTemplate(')
+          ..write('templateKey: $templateKey, ')
+          ..write('templateText: $templateText, ')
+          ..write('source: $source, ')
+          ..write('versionTag: $versionTag, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(templateKey, templateText, source, versionTag, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AppPromptTemplate &&
+          other.templateKey == this.templateKey &&
+          other.templateText == this.templateText &&
+          other.source == this.source &&
+          other.versionTag == this.versionTag &&
+          other.updatedAt == this.updatedAt);
+}
+
+class AppPromptTemplatesCompanion extends UpdateCompanion<AppPromptTemplate> {
+  final Value<String> templateKey;
+  final Value<String> templateText;
+  final Value<String> source;
+  final Value<String?> versionTag;
+  final Value<int> updatedAt;
+  final Value<int> rowid;
+  const AppPromptTemplatesCompanion({
+    this.templateKey = const Value.absent(),
+    this.templateText = const Value.absent(),
+    this.source = const Value.absent(),
+    this.versionTag = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AppPromptTemplatesCompanion.insert({
+    required String templateKey,
+    required String templateText,
+    this.source = const Value.absent(),
+    this.versionTag = const Value.absent(),
+    required int updatedAt,
+    this.rowid = const Value.absent(),
+  })  : templateKey = Value(templateKey),
+        templateText = Value(templateText),
+        updatedAt = Value(updatedAt);
+  static Insertable<AppPromptTemplate> custom({
+    Expression<String>? templateKey,
+    Expression<String>? templateText,
+    Expression<String>? source,
+    Expression<String>? versionTag,
+    Expression<int>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (templateKey != null) 'template_key': templateKey,
+      if (templateText != null) 'template_text': templateText,
+      if (source != null) 'source': source,
+      if (versionTag != null) 'version_tag': versionTag,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AppPromptTemplatesCompanion copyWith(
+      {Value<String>? templateKey,
+      Value<String>? templateText,
+      Value<String>? source,
+      Value<String?>? versionTag,
+      Value<int>? updatedAt,
+      Value<int>? rowid}) {
+    return AppPromptTemplatesCompanion(
+      templateKey: templateKey ?? this.templateKey,
+      templateText: templateText ?? this.templateText,
+      source: source ?? this.source,
+      versionTag: versionTag ?? this.versionTag,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (templateKey.present) {
+      map['template_key'] = Variable<String>(templateKey.value);
+    }
+    if (templateText.present) {
+      map['template_text'] = Variable<String>(templateText.value);
+    }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (versionTag.present) {
+      map['version_tag'] = Variable<String>(versionTag.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppPromptTemplatesCompanion(')
+          ..write('templateKey: $templateKey, ')
+          ..write('templateText: $templateText, ')
+          ..write('source: $source, ')
+          ..write('versionTag: $versionTag, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5451,6 +5875,713 @@ class AiAuditCompanion extends UpdateCompanion<AiAuditData> {
   }
 }
 
+class $ExerciseSubstitutionsTable extends ExerciseSubstitutions
+    with TableInfo<$ExerciseSubstitutionsTable, ExerciseSubstitution> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ExerciseSubstitutionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _workoutDayIdMeta =
+      const VerificationMeta('workoutDayId');
+  @override
+  late final GeneratedColumn<String> workoutDayId = GeneratedColumn<String>(
+      'workout_day_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _planDayIdMeta =
+      const VerificationMeta('planDayId');
+  @override
+  late final GeneratedColumn<String> planDayId = GeneratedColumn<String>(
+      'plan_day_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _prescribedExerciseCanonicalMeta =
+      const VerificationMeta('prescribedExerciseCanonical');
+  @override
+  late final GeneratedColumn<String> prescribedExerciseCanonical =
+      GeneratedColumn<String>(
+          'prescribed_exercise_canonical', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _substituteExerciseCanonicalMeta =
+      const VerificationMeta('substituteExerciseCanonical');
+  @override
+  late final GeneratedColumn<String> substituteExerciseCanonical =
+      GeneratedColumn<String>(
+          'substitute_exercise_canonical', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _reasonCodeMeta =
+      const VerificationMeta('reasonCode');
+  @override
+  late final GeneratedColumn<String> reasonCode = GeneratedColumn<String>(
+      'reason_code', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _reasonNotesMeta =
+      const VerificationMeta('reasonNotes');
+  @override
+  late final GeneratedColumn<String> reasonNotes = GeneratedColumn<String>(
+      'reason_notes', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _selectedAtMeta =
+      const VerificationMeta('selectedAt');
+  @override
+  late final GeneratedColumn<int> selectedAt = GeneratedColumn<int>(
+      'selected_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _selectedByMeta =
+      const VerificationMeta('selectedBy');
+  @override
+  late final GeneratedColumn<String> selectedBy = GeneratedColumn<String>(
+      'selected_by', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _matchScoreMeta =
+      const VerificationMeta('matchScore');
+  @override
+  late final GeneratedColumn<double> matchScore = GeneratedColumn<double>(
+      'match_score', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _matchExplanationJsonMeta =
+      const VerificationMeta('matchExplanationJson');
+  @override
+  late final GeneratedColumn<String> matchExplanationJson =
+      GeneratedColumn<String>('match_explanation_json', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _warningAcknowledgedMeta =
+      const VerificationMeta('warningAcknowledged');
+  @override
+  late final GeneratedColumn<bool> warningAcknowledged = GeneratedColumn<bool>(
+      'warning_acknowledged', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("warning_acknowledged" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        workoutDayId,
+        planDayId,
+        prescribedExerciseCanonical,
+        substituteExerciseCanonical,
+        reasonCode,
+        reasonNotes,
+        selectedAt,
+        selectedBy,
+        matchScore,
+        matchExplanationJson,
+        warningAcknowledged,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'exercise_substitutions';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<ExerciseSubstitution> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workout_day_id')) {
+      context.handle(
+          _workoutDayIdMeta,
+          workoutDayId.isAcceptableOrUnknown(
+              data['workout_day_id']!, _workoutDayIdMeta));
+    } else if (isInserting) {
+      context.missing(_workoutDayIdMeta);
+    }
+    if (data.containsKey('plan_day_id')) {
+      context.handle(
+          _planDayIdMeta,
+          planDayId.isAcceptableOrUnknown(
+              data['plan_day_id']!, _planDayIdMeta));
+    }
+    if (data.containsKey('prescribed_exercise_canonical')) {
+      context.handle(
+          _prescribedExerciseCanonicalMeta,
+          prescribedExerciseCanonical.isAcceptableOrUnknown(
+              data['prescribed_exercise_canonical']!,
+              _prescribedExerciseCanonicalMeta));
+    } else if (isInserting) {
+      context.missing(_prescribedExerciseCanonicalMeta);
+    }
+    if (data.containsKey('substitute_exercise_canonical')) {
+      context.handle(
+          _substituteExerciseCanonicalMeta,
+          substituteExerciseCanonical.isAcceptableOrUnknown(
+              data['substitute_exercise_canonical']!,
+              _substituteExerciseCanonicalMeta));
+    } else if (isInserting) {
+      context.missing(_substituteExerciseCanonicalMeta);
+    }
+    if (data.containsKey('reason_code')) {
+      context.handle(
+          _reasonCodeMeta,
+          reasonCode.isAcceptableOrUnknown(
+              data['reason_code']!, _reasonCodeMeta));
+    } else if (isInserting) {
+      context.missing(_reasonCodeMeta);
+    }
+    if (data.containsKey('reason_notes')) {
+      context.handle(
+          _reasonNotesMeta,
+          reasonNotes.isAcceptableOrUnknown(
+              data['reason_notes']!, _reasonNotesMeta));
+    }
+    if (data.containsKey('selected_at')) {
+      context.handle(
+          _selectedAtMeta,
+          selectedAt.isAcceptableOrUnknown(
+              data['selected_at']!, _selectedAtMeta));
+    } else if (isInserting) {
+      context.missing(_selectedAtMeta);
+    }
+    if (data.containsKey('selected_by')) {
+      context.handle(
+          _selectedByMeta,
+          selectedBy.isAcceptableOrUnknown(
+              data['selected_by']!, _selectedByMeta));
+    }
+    if (data.containsKey('match_score')) {
+      context.handle(
+          _matchScoreMeta,
+          matchScore.isAcceptableOrUnknown(
+              data['match_score']!, _matchScoreMeta));
+    }
+    if (data.containsKey('match_explanation_json')) {
+      context.handle(
+          _matchExplanationJsonMeta,
+          matchExplanationJson.isAcceptableOrUnknown(
+              data['match_explanation_json']!, _matchExplanationJsonMeta));
+    }
+    if (data.containsKey('warning_acknowledged')) {
+      context.handle(
+          _warningAcknowledgedMeta,
+          warningAcknowledged.isAcceptableOrUnknown(
+              data['warning_acknowledged']!, _warningAcknowledgedMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ExerciseSubstitution map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ExerciseSubstitution(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      workoutDayId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}workout_day_id'])!,
+      planDayId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}plan_day_id']),
+      prescribedExerciseCanonical: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}prescribed_exercise_canonical'])!,
+      substituteExerciseCanonical: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}substitute_exercise_canonical'])!,
+      reasonCode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}reason_code'])!,
+      reasonNotes: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}reason_notes']),
+      selectedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}selected_at'])!,
+      selectedBy: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}selected_by']),
+      matchScore: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}match_score']),
+      matchExplanationJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}match_explanation_json']),
+      warningAcknowledged: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}warning_acknowledged'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $ExerciseSubstitutionsTable createAlias(String alias) {
+    return $ExerciseSubstitutionsTable(attachedDatabase, alias);
+  }
+}
+
+class ExerciseSubstitution extends DataClass
+    implements Insertable<ExerciseSubstitution> {
+  final String id;
+  final String workoutDayId;
+  final String? planDayId;
+  final String prescribedExerciseCanonical;
+  final String substituteExerciseCanonical;
+  final String reasonCode;
+  final String? reasonNotes;
+  final int selectedAt;
+  final String? selectedBy;
+  final double? matchScore;
+  final String? matchExplanationJson;
+  final bool warningAcknowledged;
+  final int createdAt;
+  const ExerciseSubstitution(
+      {required this.id,
+      required this.workoutDayId,
+      this.planDayId,
+      required this.prescribedExerciseCanonical,
+      required this.substituteExerciseCanonical,
+      required this.reasonCode,
+      this.reasonNotes,
+      required this.selectedAt,
+      this.selectedBy,
+      this.matchScore,
+      this.matchExplanationJson,
+      required this.warningAcknowledged,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workout_day_id'] = Variable<String>(workoutDayId);
+    if (!nullToAbsent || planDayId != null) {
+      map['plan_day_id'] = Variable<String>(planDayId);
+    }
+    map['prescribed_exercise_canonical'] =
+        Variable<String>(prescribedExerciseCanonical);
+    map['substitute_exercise_canonical'] =
+        Variable<String>(substituteExerciseCanonical);
+    map['reason_code'] = Variable<String>(reasonCode);
+    if (!nullToAbsent || reasonNotes != null) {
+      map['reason_notes'] = Variable<String>(reasonNotes);
+    }
+    map['selected_at'] = Variable<int>(selectedAt);
+    if (!nullToAbsent || selectedBy != null) {
+      map['selected_by'] = Variable<String>(selectedBy);
+    }
+    if (!nullToAbsent || matchScore != null) {
+      map['match_score'] = Variable<double>(matchScore);
+    }
+    if (!nullToAbsent || matchExplanationJson != null) {
+      map['match_explanation_json'] = Variable<String>(matchExplanationJson);
+    }
+    map['warning_acknowledged'] = Variable<bool>(warningAcknowledged);
+    map['created_at'] = Variable<int>(createdAt);
+    return map;
+  }
+
+  ExerciseSubstitutionsCompanion toCompanion(bool nullToAbsent) {
+    return ExerciseSubstitutionsCompanion(
+      id: Value(id),
+      workoutDayId: Value(workoutDayId),
+      planDayId: planDayId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(planDayId),
+      prescribedExerciseCanonical: Value(prescribedExerciseCanonical),
+      substituteExerciseCanonical: Value(substituteExerciseCanonical),
+      reasonCode: Value(reasonCode),
+      reasonNotes: reasonNotes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reasonNotes),
+      selectedAt: Value(selectedAt),
+      selectedBy: selectedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(selectedBy),
+      matchScore: matchScore == null && nullToAbsent
+          ? const Value.absent()
+          : Value(matchScore),
+      matchExplanationJson: matchExplanationJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(matchExplanationJson),
+      warningAcknowledged: Value(warningAcknowledged),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory ExerciseSubstitution.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ExerciseSubstitution(
+      id: serializer.fromJson<String>(json['id']),
+      workoutDayId: serializer.fromJson<String>(json['workoutDayId']),
+      planDayId: serializer.fromJson<String?>(json['planDayId']),
+      prescribedExerciseCanonical:
+          serializer.fromJson<String>(json['prescribedExerciseCanonical']),
+      substituteExerciseCanonical:
+          serializer.fromJson<String>(json['substituteExerciseCanonical']),
+      reasonCode: serializer.fromJson<String>(json['reasonCode']),
+      reasonNotes: serializer.fromJson<String?>(json['reasonNotes']),
+      selectedAt: serializer.fromJson<int>(json['selectedAt']),
+      selectedBy: serializer.fromJson<String?>(json['selectedBy']),
+      matchScore: serializer.fromJson<double?>(json['matchScore']),
+      matchExplanationJson:
+          serializer.fromJson<String?>(json['matchExplanationJson']),
+      warningAcknowledged:
+          serializer.fromJson<bool>(json['warningAcknowledged']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workoutDayId': serializer.toJson<String>(workoutDayId),
+      'planDayId': serializer.toJson<String?>(planDayId),
+      'prescribedExerciseCanonical':
+          serializer.toJson<String>(prescribedExerciseCanonical),
+      'substituteExerciseCanonical':
+          serializer.toJson<String>(substituteExerciseCanonical),
+      'reasonCode': serializer.toJson<String>(reasonCode),
+      'reasonNotes': serializer.toJson<String?>(reasonNotes),
+      'selectedAt': serializer.toJson<int>(selectedAt),
+      'selectedBy': serializer.toJson<String?>(selectedBy),
+      'matchScore': serializer.toJson<double?>(matchScore),
+      'matchExplanationJson': serializer.toJson<String?>(matchExplanationJson),
+      'warningAcknowledged': serializer.toJson<bool>(warningAcknowledged),
+      'createdAt': serializer.toJson<int>(createdAt),
+    };
+  }
+
+  ExerciseSubstitution copyWith(
+          {String? id,
+          String? workoutDayId,
+          Value<String?> planDayId = const Value.absent(),
+          String? prescribedExerciseCanonical,
+          String? substituteExerciseCanonical,
+          String? reasonCode,
+          Value<String?> reasonNotes = const Value.absent(),
+          int? selectedAt,
+          Value<String?> selectedBy = const Value.absent(),
+          Value<double?> matchScore = const Value.absent(),
+          Value<String?> matchExplanationJson = const Value.absent(),
+          bool? warningAcknowledged,
+          int? createdAt}) =>
+      ExerciseSubstitution(
+        id: id ?? this.id,
+        workoutDayId: workoutDayId ?? this.workoutDayId,
+        planDayId: planDayId.present ? planDayId.value : this.planDayId,
+        prescribedExerciseCanonical:
+            prescribedExerciseCanonical ?? this.prescribedExerciseCanonical,
+        substituteExerciseCanonical:
+            substituteExerciseCanonical ?? this.substituteExerciseCanonical,
+        reasonCode: reasonCode ?? this.reasonCode,
+        reasonNotes: reasonNotes.present ? reasonNotes.value : this.reasonNotes,
+        selectedAt: selectedAt ?? this.selectedAt,
+        selectedBy: selectedBy.present ? selectedBy.value : this.selectedBy,
+        matchScore: matchScore.present ? matchScore.value : this.matchScore,
+        matchExplanationJson: matchExplanationJson.present
+            ? matchExplanationJson.value
+            : this.matchExplanationJson,
+        warningAcknowledged: warningAcknowledged ?? this.warningAcknowledged,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  ExerciseSubstitution copyWithCompanion(ExerciseSubstitutionsCompanion data) {
+    return ExerciseSubstitution(
+      id: data.id.present ? data.id.value : this.id,
+      workoutDayId: data.workoutDayId.present
+          ? data.workoutDayId.value
+          : this.workoutDayId,
+      planDayId: data.planDayId.present ? data.planDayId.value : this.planDayId,
+      prescribedExerciseCanonical: data.prescribedExerciseCanonical.present
+          ? data.prescribedExerciseCanonical.value
+          : this.prescribedExerciseCanonical,
+      substituteExerciseCanonical: data.substituteExerciseCanonical.present
+          ? data.substituteExerciseCanonical.value
+          : this.substituteExerciseCanonical,
+      reasonCode:
+          data.reasonCode.present ? data.reasonCode.value : this.reasonCode,
+      reasonNotes:
+          data.reasonNotes.present ? data.reasonNotes.value : this.reasonNotes,
+      selectedAt:
+          data.selectedAt.present ? data.selectedAt.value : this.selectedAt,
+      selectedBy:
+          data.selectedBy.present ? data.selectedBy.value : this.selectedBy,
+      matchScore:
+          data.matchScore.present ? data.matchScore.value : this.matchScore,
+      matchExplanationJson: data.matchExplanationJson.present
+          ? data.matchExplanationJson.value
+          : this.matchExplanationJson,
+      warningAcknowledged: data.warningAcknowledged.present
+          ? data.warningAcknowledged.value
+          : this.warningAcknowledged,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ExerciseSubstitution(')
+          ..write('id: $id, ')
+          ..write('workoutDayId: $workoutDayId, ')
+          ..write('planDayId: $planDayId, ')
+          ..write('prescribedExerciseCanonical: $prescribedExerciseCanonical, ')
+          ..write('substituteExerciseCanonical: $substituteExerciseCanonical, ')
+          ..write('reasonCode: $reasonCode, ')
+          ..write('reasonNotes: $reasonNotes, ')
+          ..write('selectedAt: $selectedAt, ')
+          ..write('selectedBy: $selectedBy, ')
+          ..write('matchScore: $matchScore, ')
+          ..write('matchExplanationJson: $matchExplanationJson, ')
+          ..write('warningAcknowledged: $warningAcknowledged, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      workoutDayId,
+      planDayId,
+      prescribedExerciseCanonical,
+      substituteExerciseCanonical,
+      reasonCode,
+      reasonNotes,
+      selectedAt,
+      selectedBy,
+      matchScore,
+      matchExplanationJson,
+      warningAcknowledged,
+      createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ExerciseSubstitution &&
+          other.id == this.id &&
+          other.workoutDayId == this.workoutDayId &&
+          other.planDayId == this.planDayId &&
+          other.prescribedExerciseCanonical ==
+              this.prescribedExerciseCanonical &&
+          other.substituteExerciseCanonical ==
+              this.substituteExerciseCanonical &&
+          other.reasonCode == this.reasonCode &&
+          other.reasonNotes == this.reasonNotes &&
+          other.selectedAt == this.selectedAt &&
+          other.selectedBy == this.selectedBy &&
+          other.matchScore == this.matchScore &&
+          other.matchExplanationJson == this.matchExplanationJson &&
+          other.warningAcknowledged == this.warningAcknowledged &&
+          other.createdAt == this.createdAt);
+}
+
+class ExerciseSubstitutionsCompanion
+    extends UpdateCompanion<ExerciseSubstitution> {
+  final Value<String> id;
+  final Value<String> workoutDayId;
+  final Value<String?> planDayId;
+  final Value<String> prescribedExerciseCanonical;
+  final Value<String> substituteExerciseCanonical;
+  final Value<String> reasonCode;
+  final Value<String?> reasonNotes;
+  final Value<int> selectedAt;
+  final Value<String?> selectedBy;
+  final Value<double?> matchScore;
+  final Value<String?> matchExplanationJson;
+  final Value<bool> warningAcknowledged;
+  final Value<int> createdAt;
+  final Value<int> rowid;
+  const ExerciseSubstitutionsCompanion({
+    this.id = const Value.absent(),
+    this.workoutDayId = const Value.absent(),
+    this.planDayId = const Value.absent(),
+    this.prescribedExerciseCanonical = const Value.absent(),
+    this.substituteExerciseCanonical = const Value.absent(),
+    this.reasonCode = const Value.absent(),
+    this.reasonNotes = const Value.absent(),
+    this.selectedAt = const Value.absent(),
+    this.selectedBy = const Value.absent(),
+    this.matchScore = const Value.absent(),
+    this.matchExplanationJson = const Value.absent(),
+    this.warningAcknowledged = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ExerciseSubstitutionsCompanion.insert({
+    required String id,
+    required String workoutDayId,
+    this.planDayId = const Value.absent(),
+    required String prescribedExerciseCanonical,
+    required String substituteExerciseCanonical,
+    required String reasonCode,
+    this.reasonNotes = const Value.absent(),
+    required int selectedAt,
+    this.selectedBy = const Value.absent(),
+    this.matchScore = const Value.absent(),
+    this.matchExplanationJson = const Value.absent(),
+    this.warningAcknowledged = const Value.absent(),
+    required int createdAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        workoutDayId = Value(workoutDayId),
+        prescribedExerciseCanonical = Value(prescribedExerciseCanonical),
+        substituteExerciseCanonical = Value(substituteExerciseCanonical),
+        reasonCode = Value(reasonCode),
+        selectedAt = Value(selectedAt),
+        createdAt = Value(createdAt);
+  static Insertable<ExerciseSubstitution> custom({
+    Expression<String>? id,
+    Expression<String>? workoutDayId,
+    Expression<String>? planDayId,
+    Expression<String>? prescribedExerciseCanonical,
+    Expression<String>? substituteExerciseCanonical,
+    Expression<String>? reasonCode,
+    Expression<String>? reasonNotes,
+    Expression<int>? selectedAt,
+    Expression<String>? selectedBy,
+    Expression<double>? matchScore,
+    Expression<String>? matchExplanationJson,
+    Expression<bool>? warningAcknowledged,
+    Expression<int>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workoutDayId != null) 'workout_day_id': workoutDayId,
+      if (planDayId != null) 'plan_day_id': planDayId,
+      if (prescribedExerciseCanonical != null)
+        'prescribed_exercise_canonical': prescribedExerciseCanonical,
+      if (substituteExerciseCanonical != null)
+        'substitute_exercise_canonical': substituteExerciseCanonical,
+      if (reasonCode != null) 'reason_code': reasonCode,
+      if (reasonNotes != null) 'reason_notes': reasonNotes,
+      if (selectedAt != null) 'selected_at': selectedAt,
+      if (selectedBy != null) 'selected_by': selectedBy,
+      if (matchScore != null) 'match_score': matchScore,
+      if (matchExplanationJson != null)
+        'match_explanation_json': matchExplanationJson,
+      if (warningAcknowledged != null)
+        'warning_acknowledged': warningAcknowledged,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ExerciseSubstitutionsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? workoutDayId,
+      Value<String?>? planDayId,
+      Value<String>? prescribedExerciseCanonical,
+      Value<String>? substituteExerciseCanonical,
+      Value<String>? reasonCode,
+      Value<String?>? reasonNotes,
+      Value<int>? selectedAt,
+      Value<String?>? selectedBy,
+      Value<double?>? matchScore,
+      Value<String?>? matchExplanationJson,
+      Value<bool>? warningAcknowledged,
+      Value<int>? createdAt,
+      Value<int>? rowid}) {
+    return ExerciseSubstitutionsCompanion(
+      id: id ?? this.id,
+      workoutDayId: workoutDayId ?? this.workoutDayId,
+      planDayId: planDayId ?? this.planDayId,
+      prescribedExerciseCanonical:
+          prescribedExerciseCanonical ?? this.prescribedExerciseCanonical,
+      substituteExerciseCanonical:
+          substituteExerciseCanonical ?? this.substituteExerciseCanonical,
+      reasonCode: reasonCode ?? this.reasonCode,
+      reasonNotes: reasonNotes ?? this.reasonNotes,
+      selectedAt: selectedAt ?? this.selectedAt,
+      selectedBy: selectedBy ?? this.selectedBy,
+      matchScore: matchScore ?? this.matchScore,
+      matchExplanationJson: matchExplanationJson ?? this.matchExplanationJson,
+      warningAcknowledged: warningAcknowledged ?? this.warningAcknowledged,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workoutDayId.present) {
+      map['workout_day_id'] = Variable<String>(workoutDayId.value);
+    }
+    if (planDayId.present) {
+      map['plan_day_id'] = Variable<String>(planDayId.value);
+    }
+    if (prescribedExerciseCanonical.present) {
+      map['prescribed_exercise_canonical'] =
+          Variable<String>(prescribedExerciseCanonical.value);
+    }
+    if (substituteExerciseCanonical.present) {
+      map['substitute_exercise_canonical'] =
+          Variable<String>(substituteExerciseCanonical.value);
+    }
+    if (reasonCode.present) {
+      map['reason_code'] = Variable<String>(reasonCode.value);
+    }
+    if (reasonNotes.present) {
+      map['reason_notes'] = Variable<String>(reasonNotes.value);
+    }
+    if (selectedAt.present) {
+      map['selected_at'] = Variable<int>(selectedAt.value);
+    }
+    if (selectedBy.present) {
+      map['selected_by'] = Variable<String>(selectedBy.value);
+    }
+    if (matchScore.present) {
+      map['match_score'] = Variable<double>(matchScore.value);
+    }
+    if (matchExplanationJson.present) {
+      map['match_explanation_json'] =
+          Variable<String>(matchExplanationJson.value);
+    }
+    if (warningAcknowledged.present) {
+      map['warning_acknowledged'] = Variable<bool>(warningAcknowledged.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ExerciseSubstitutionsCompanion(')
+          ..write('id: $id, ')
+          ..write('workoutDayId: $workoutDayId, ')
+          ..write('planDayId: $planDayId, ')
+          ..write('prescribedExerciseCanonical: $prescribedExerciseCanonical, ')
+          ..write('substituteExerciseCanonical: $substituteExerciseCanonical, ')
+          ..write('reasonCode: $reasonCode, ')
+          ..write('reasonNotes: $reasonNotes, ')
+          ..write('selectedAt: $selectedAt, ')
+          ..write('selectedBy: $selectedBy, ')
+          ..write('matchScore: $matchScore, ')
+          ..write('matchExplanationJson: $matchExplanationJson, ')
+          ..write('warningAcknowledged: $warningAcknowledged, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PlanCyclesTable extends PlanCycles
     with TableInfo<$PlanCyclesTable, PlanCycle> {
   @override
@@ -6193,6 +7324,435 @@ class PlanDaysCompanion extends UpdateCompanion<PlanDay> {
           ..write('sheetName: $sheetName, ')
           ..write('estimatedDate: $estimatedDate, ')
           ..write('sessionType: $sessionType, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PlanExerciseAlternativesTable extends PlanExerciseAlternatives
+    with TableInfo<$PlanExerciseAlternativesTable, PlanExerciseAlternative> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PlanExerciseAlternativesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _planDayIdMeta =
+      const VerificationMeta('planDayId');
+  @override
+  late final GeneratedColumn<String> planDayId = GeneratedColumn<String>(
+      'plan_day_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _prescribedExerciseCanonicalMeta =
+      const VerificationMeta('prescribedExerciseCanonical');
+  @override
+  late final GeneratedColumn<String> prescribedExerciseCanonical =
+      GeneratedColumn<String>(
+          'prescribed_exercise_canonical', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _alternativeExerciseCanonicalMeta =
+      const VerificationMeta('alternativeExerciseCanonical');
+  @override
+  late final GeneratedColumn<String> alternativeExerciseCanonical =
+      GeneratedColumn<String>(
+          'alternative_exercise_canonical', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _priorityMeta =
+      const VerificationMeta('priority');
+  @override
+  late final GeneratedColumn<int> priority = GeneratedColumn<int>(
+      'priority', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+      'notes', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        planDayId,
+        prescribedExerciseCanonical,
+        alternativeExerciseCanonical,
+        priority,
+        notes,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'plan_exercise_alternatives';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<PlanExerciseAlternative> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('plan_day_id')) {
+      context.handle(
+          _planDayIdMeta,
+          planDayId.isAcceptableOrUnknown(
+              data['plan_day_id']!, _planDayIdMeta));
+    }
+    if (data.containsKey('prescribed_exercise_canonical')) {
+      context.handle(
+          _prescribedExerciseCanonicalMeta,
+          prescribedExerciseCanonical.isAcceptableOrUnknown(
+              data['prescribed_exercise_canonical']!,
+              _prescribedExerciseCanonicalMeta));
+    } else if (isInserting) {
+      context.missing(_prescribedExerciseCanonicalMeta);
+    }
+    if (data.containsKey('alternative_exercise_canonical')) {
+      context.handle(
+          _alternativeExerciseCanonicalMeta,
+          alternativeExerciseCanonical.isAcceptableOrUnknown(
+              data['alternative_exercise_canonical']!,
+              _alternativeExerciseCanonicalMeta));
+    } else if (isInserting) {
+      context.missing(_alternativeExerciseCanonicalMeta);
+    }
+    if (data.containsKey('priority')) {
+      context.handle(_priorityMeta,
+          priority.isAcceptableOrUnknown(data['priority']!, _priorityMeta));
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+          _notesMeta, notes.isAcceptableOrUnknown(data['notes']!, _notesMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PlanExerciseAlternative map(Map<String, dynamic> data,
+      {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PlanExerciseAlternative(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      planDayId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}plan_day_id']),
+      prescribedExerciseCanonical: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}prescribed_exercise_canonical'])!,
+      alternativeExerciseCanonical: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}alternative_exercise_canonical'])!,
+      priority: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}priority'])!,
+      notes: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notes']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $PlanExerciseAlternativesTable createAlias(String alias) {
+    return $PlanExerciseAlternativesTable(attachedDatabase, alias);
+  }
+}
+
+class PlanExerciseAlternative extends DataClass
+    implements Insertable<PlanExerciseAlternative> {
+  final String id;
+  final String? planDayId;
+  final String prescribedExerciseCanonical;
+  final String alternativeExerciseCanonical;
+  final int priority;
+  final String? notes;
+  final int createdAt;
+  const PlanExerciseAlternative(
+      {required this.id,
+      this.planDayId,
+      required this.prescribedExerciseCanonical,
+      required this.alternativeExerciseCanonical,
+      required this.priority,
+      this.notes,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || planDayId != null) {
+      map['plan_day_id'] = Variable<String>(planDayId);
+    }
+    map['prescribed_exercise_canonical'] =
+        Variable<String>(prescribedExerciseCanonical);
+    map['alternative_exercise_canonical'] =
+        Variable<String>(alternativeExerciseCanonical);
+    map['priority'] = Variable<int>(priority);
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['created_at'] = Variable<int>(createdAt);
+    return map;
+  }
+
+  PlanExerciseAlternativesCompanion toCompanion(bool nullToAbsent) {
+    return PlanExerciseAlternativesCompanion(
+      id: Value(id),
+      planDayId: planDayId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(planDayId),
+      prescribedExerciseCanonical: Value(prescribedExerciseCanonical),
+      alternativeExerciseCanonical: Value(alternativeExerciseCanonical),
+      priority: Value(priority),
+      notes:
+          notes == null && nullToAbsent ? const Value.absent() : Value(notes),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PlanExerciseAlternative.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PlanExerciseAlternative(
+      id: serializer.fromJson<String>(json['id']),
+      planDayId: serializer.fromJson<String?>(json['planDayId']),
+      prescribedExerciseCanonical:
+          serializer.fromJson<String>(json['prescribedExerciseCanonical']),
+      alternativeExerciseCanonical:
+          serializer.fromJson<String>(json['alternativeExerciseCanonical']),
+      priority: serializer.fromJson<int>(json['priority']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'planDayId': serializer.toJson<String?>(planDayId),
+      'prescribedExerciseCanonical':
+          serializer.toJson<String>(prescribedExerciseCanonical),
+      'alternativeExerciseCanonical':
+          serializer.toJson<String>(alternativeExerciseCanonical),
+      'priority': serializer.toJson<int>(priority),
+      'notes': serializer.toJson<String?>(notes),
+      'createdAt': serializer.toJson<int>(createdAt),
+    };
+  }
+
+  PlanExerciseAlternative copyWith(
+          {String? id,
+          Value<String?> planDayId = const Value.absent(),
+          String? prescribedExerciseCanonical,
+          String? alternativeExerciseCanonical,
+          int? priority,
+          Value<String?> notes = const Value.absent(),
+          int? createdAt}) =>
+      PlanExerciseAlternative(
+        id: id ?? this.id,
+        planDayId: planDayId.present ? planDayId.value : this.planDayId,
+        prescribedExerciseCanonical:
+            prescribedExerciseCanonical ?? this.prescribedExerciseCanonical,
+        alternativeExerciseCanonical:
+            alternativeExerciseCanonical ?? this.alternativeExerciseCanonical,
+        priority: priority ?? this.priority,
+        notes: notes.present ? notes.value : this.notes,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  PlanExerciseAlternative copyWithCompanion(
+      PlanExerciseAlternativesCompanion data) {
+    return PlanExerciseAlternative(
+      id: data.id.present ? data.id.value : this.id,
+      planDayId: data.planDayId.present ? data.planDayId.value : this.planDayId,
+      prescribedExerciseCanonical: data.prescribedExerciseCanonical.present
+          ? data.prescribedExerciseCanonical.value
+          : this.prescribedExerciseCanonical,
+      alternativeExerciseCanonical: data.alternativeExerciseCanonical.present
+          ? data.alternativeExerciseCanonical.value
+          : this.alternativeExerciseCanonical,
+      priority: data.priority.present ? data.priority.value : this.priority,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlanExerciseAlternative(')
+          ..write('id: $id, ')
+          ..write('planDayId: $planDayId, ')
+          ..write('prescribedExerciseCanonical: $prescribedExerciseCanonical, ')
+          ..write(
+              'alternativeExerciseCanonical: $alternativeExerciseCanonical, ')
+          ..write('priority: $priority, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, planDayId, prescribedExerciseCanonical,
+      alternativeExerciseCanonical, priority, notes, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PlanExerciseAlternative &&
+          other.id == this.id &&
+          other.planDayId == this.planDayId &&
+          other.prescribedExerciseCanonical ==
+              this.prescribedExerciseCanonical &&
+          other.alternativeExerciseCanonical ==
+              this.alternativeExerciseCanonical &&
+          other.priority == this.priority &&
+          other.notes == this.notes &&
+          other.createdAt == this.createdAt);
+}
+
+class PlanExerciseAlternativesCompanion
+    extends UpdateCompanion<PlanExerciseAlternative> {
+  final Value<String> id;
+  final Value<String?> planDayId;
+  final Value<String> prescribedExerciseCanonical;
+  final Value<String> alternativeExerciseCanonical;
+  final Value<int> priority;
+  final Value<String?> notes;
+  final Value<int> createdAt;
+  final Value<int> rowid;
+  const PlanExerciseAlternativesCompanion({
+    this.id = const Value.absent(),
+    this.planDayId = const Value.absent(),
+    this.prescribedExerciseCanonical = const Value.absent(),
+    this.alternativeExerciseCanonical = const Value.absent(),
+    this.priority = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PlanExerciseAlternativesCompanion.insert({
+    required String id,
+    this.planDayId = const Value.absent(),
+    required String prescribedExerciseCanonical,
+    required String alternativeExerciseCanonical,
+    this.priority = const Value.absent(),
+    this.notes = const Value.absent(),
+    required int createdAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        prescribedExerciseCanonical = Value(prescribedExerciseCanonical),
+        alternativeExerciseCanonical = Value(alternativeExerciseCanonical),
+        createdAt = Value(createdAt);
+  static Insertable<PlanExerciseAlternative> custom({
+    Expression<String>? id,
+    Expression<String>? planDayId,
+    Expression<String>? prescribedExerciseCanonical,
+    Expression<String>? alternativeExerciseCanonical,
+    Expression<int>? priority,
+    Expression<String>? notes,
+    Expression<int>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (planDayId != null) 'plan_day_id': planDayId,
+      if (prescribedExerciseCanonical != null)
+        'prescribed_exercise_canonical': prescribedExerciseCanonical,
+      if (alternativeExerciseCanonical != null)
+        'alternative_exercise_canonical': alternativeExerciseCanonical,
+      if (priority != null) 'priority': priority,
+      if (notes != null) 'notes': notes,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PlanExerciseAlternativesCompanion copyWith(
+      {Value<String>? id,
+      Value<String?>? planDayId,
+      Value<String>? prescribedExerciseCanonical,
+      Value<String>? alternativeExerciseCanonical,
+      Value<int>? priority,
+      Value<String?>? notes,
+      Value<int>? createdAt,
+      Value<int>? rowid}) {
+    return PlanExerciseAlternativesCompanion(
+      id: id ?? this.id,
+      planDayId: planDayId ?? this.planDayId,
+      prescribedExerciseCanonical:
+          prescribedExerciseCanonical ?? this.prescribedExerciseCanonical,
+      alternativeExerciseCanonical:
+          alternativeExerciseCanonical ?? this.alternativeExerciseCanonical,
+      priority: priority ?? this.priority,
+      notes: notes ?? this.notes,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (planDayId.present) {
+      map['plan_day_id'] = Variable<String>(planDayId.value);
+    }
+    if (prescribedExerciseCanonical.present) {
+      map['prescribed_exercise_canonical'] =
+          Variable<String>(prescribedExerciseCanonical.value);
+    }
+    if (alternativeExerciseCanonical.present) {
+      map['alternative_exercise_canonical'] =
+          Variable<String>(alternativeExerciseCanonical.value);
+    }
+    if (priority.present) {
+      map['priority'] = Variable<int>(priority.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlanExerciseAlternativesCompanion(')
+          ..write('id: $id, ')
+          ..write('planDayId: $planDayId, ')
+          ..write('prescribedExerciseCanonical: $prescribedExerciseCanonical, ')
+          ..write(
+              'alternativeExerciseCanonical: $alternativeExerciseCanonical, ')
+          ..write('priority: $priority, ')
+          ..write('notes: $notes, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -7941,6 +9501,8 @@ abstract class _$AppDb extends GeneratedDatabase {
       $ActualStrengthSetsTable(this);
   late final $PrescribedStrengthSetsTable prescribedStrengthSets =
       $PrescribedStrengthSetsTable(this);
+  late final $AppPromptTemplatesTable appPromptTemplates =
+      $AppPromptTemplatesTable(this);
   late final $SleepNightsTable sleepNights = $SleepNightsTable(this);
   late final $RunSessionsTable runSessions = $RunSessionsTable(this);
   late final $RunSegmentsTable runSegments = $RunSegmentsTable(this);
@@ -7950,8 +9512,12 @@ abstract class _$AppDb extends GeneratedDatabase {
       $RunOverrideAuditTable(this);
   late final $RuleTriggersTable ruleTriggers = $RuleTriggersTable(this);
   late final $AiAuditTable aiAudit = $AiAuditTable(this);
+  late final $ExerciseSubstitutionsTable exerciseSubstitutions =
+      $ExerciseSubstitutionsTable(this);
   late final $PlanCyclesTable planCycles = $PlanCyclesTable(this);
   late final $PlanDaysTable planDays = $PlanDaysTable(this);
+  late final $PlanExerciseAlternativesTable planExerciseAlternatives =
+      $PlanExerciseAlternativesTable(this);
   late final $PlanPrescribedStrengthSetsTable planPrescribedStrengthSets =
       $PlanPrescribedStrengthSetsTable(this);
   late final $PlanPrescribedRunsTable planPrescribedRuns =
@@ -7968,6 +9534,7 @@ abstract class _$AppDb extends GeneratedDatabase {
         workoutDays,
         actualStrengthSets,
         prescribedStrengthSets,
+        appPromptTemplates,
         sleepNights,
         runSessions,
         runSegments,
@@ -7975,8 +9542,10 @@ abstract class _$AppDb extends GeneratedDatabase {
         runOverrideAudit,
         ruleTriggers,
         aiAudit,
+        exerciseSubstitutions,
         planCycles,
         planDays,
+        planExerciseAlternatives,
         planPrescribedStrengthSets,
         planPrescribedRuns,
         planSummarySnapshots,
@@ -8143,6 +9712,8 @@ typedef $$ActualStrengthSetsTableCreateCompanionBuilder
   Value<String?> planDayId,
   Value<int?> performedAt,
   required String exerciseCanonical,
+  Value<String?> prescribedExerciseCanonical,
+  Value<String?> substitutionId,
   required int setIndex,
   Value<double?> weight,
   Value<int?> reps,
@@ -8160,6 +9731,8 @@ typedef $$ActualStrengthSetsTableUpdateCompanionBuilder
   Value<String?> planDayId,
   Value<int?> performedAt,
   Value<String> exerciseCanonical,
+  Value<String?> prescribedExerciseCanonical,
+  Value<String?> substitutionId,
   Value<int> setIndex,
   Value<double?> weight,
   Value<int?> reps,
@@ -8194,6 +9767,14 @@ class $$ActualStrengthSetsTableFilterComposer
 
   ColumnFilters<String> get exerciseCanonical => $composableBuilder(
       column: $table.exerciseCanonical,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get prescribedExerciseCanonical => $composableBuilder(
+      column: $table.prescribedExerciseCanonical,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get substitutionId => $composableBuilder(
+      column: $table.substitutionId,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get setIndex => $composableBuilder(
@@ -8247,6 +9828,14 @@ class $$ActualStrengthSetsTableOrderingComposer
       column: $table.exerciseCanonical,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get prescribedExerciseCanonical => $composableBuilder(
+      column: $table.prescribedExerciseCanonical,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get substitutionId => $composableBuilder(
+      column: $table.substitutionId,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get setIndex => $composableBuilder(
       column: $table.setIndex, builder: (column) => ColumnOrderings(column));
 
@@ -8296,6 +9885,12 @@ class $$ActualStrengthSetsTableAnnotationComposer
 
   GeneratedColumn<String> get exerciseCanonical => $composableBuilder(
       column: $table.exerciseCanonical, builder: (column) => column);
+
+  GeneratedColumn<String> get prescribedExerciseCanonical => $composableBuilder(
+      column: $table.prescribedExerciseCanonical, builder: (column) => column);
+
+  GeneratedColumn<String> get substitutionId => $composableBuilder(
+      column: $table.substitutionId, builder: (column) => column);
 
   GeneratedColumn<int> get setIndex =>
       $composableBuilder(column: $table.setIndex, builder: (column) => column);
@@ -8355,6 +9950,8 @@ class $$ActualStrengthSetsTableTableManager extends RootTableManager<
             Value<String?> planDayId = const Value.absent(),
             Value<int?> performedAt = const Value.absent(),
             Value<String> exerciseCanonical = const Value.absent(),
+            Value<String?> prescribedExerciseCanonical = const Value.absent(),
+            Value<String?> substitutionId = const Value.absent(),
             Value<int> setIndex = const Value.absent(),
             Value<double?> weight = const Value.absent(),
             Value<int?> reps = const Value.absent(),
@@ -8371,6 +9968,8 @@ class $$ActualStrengthSetsTableTableManager extends RootTableManager<
             planDayId: planDayId,
             performedAt: performedAt,
             exerciseCanonical: exerciseCanonical,
+            prescribedExerciseCanonical: prescribedExerciseCanonical,
+            substitutionId: substitutionId,
             setIndex: setIndex,
             weight: weight,
             reps: reps,
@@ -8387,6 +9986,8 @@ class $$ActualStrengthSetsTableTableManager extends RootTableManager<
             Value<String?> planDayId = const Value.absent(),
             Value<int?> performedAt = const Value.absent(),
             required String exerciseCanonical,
+            Value<String?> prescribedExerciseCanonical = const Value.absent(),
+            Value<String?> substitutionId = const Value.absent(),
             required int setIndex,
             Value<double?> weight = const Value.absent(),
             Value<int?> reps = const Value.absent(),
@@ -8403,6 +10004,8 @@ class $$ActualStrengthSetsTableTableManager extends RootTableManager<
             planDayId: planDayId,
             performedAt: performedAt,
             exerciseCanonical: exerciseCanonical,
+            prescribedExerciseCanonical: prescribedExerciseCanonical,
+            substitutionId: substitutionId,
             setIndex: setIndex,
             weight: weight,
             reps: reps,
@@ -8663,6 +10266,182 @@ typedef $$PrescribedStrengthSetsTableProcessedTableManager
         ),
         PrescribedStrengthSet,
         PrefetchHooks Function()>;
+typedef $$AppPromptTemplatesTableCreateCompanionBuilder
+    = AppPromptTemplatesCompanion Function({
+  required String templateKey,
+  required String templateText,
+  Value<String> source,
+  Value<String?> versionTag,
+  required int updatedAt,
+  Value<int> rowid,
+});
+typedef $$AppPromptTemplatesTableUpdateCompanionBuilder
+    = AppPromptTemplatesCompanion Function({
+  Value<String> templateKey,
+  Value<String> templateText,
+  Value<String> source,
+  Value<String?> versionTag,
+  Value<int> updatedAt,
+  Value<int> rowid,
+});
+
+class $$AppPromptTemplatesTableFilterComposer
+    extends Composer<_$AppDb, $AppPromptTemplatesTable> {
+  $$AppPromptTemplatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get templateKey => $composableBuilder(
+      column: $table.templateKey, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get templateText => $composableBuilder(
+      column: $table.templateText, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get source => $composableBuilder(
+      column: $table.source, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get versionTag => $composableBuilder(
+      column: $table.versionTag, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$AppPromptTemplatesTableOrderingComposer
+    extends Composer<_$AppDb, $AppPromptTemplatesTable> {
+  $$AppPromptTemplatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get templateKey => $composableBuilder(
+      column: $table.templateKey, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get templateText => $composableBuilder(
+      column: $table.templateText,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get source => $composableBuilder(
+      column: $table.source, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get versionTag => $composableBuilder(
+      column: $table.versionTag, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$AppPromptTemplatesTableAnnotationComposer
+    extends Composer<_$AppDb, $AppPromptTemplatesTable> {
+  $$AppPromptTemplatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get templateKey => $composableBuilder(
+      column: $table.templateKey, builder: (column) => column);
+
+  GeneratedColumn<String> get templateText => $composableBuilder(
+      column: $table.templateText, builder: (column) => column);
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<String> get versionTag => $composableBuilder(
+      column: $table.versionTag, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$AppPromptTemplatesTableTableManager extends RootTableManager<
+    _$AppDb,
+    $AppPromptTemplatesTable,
+    AppPromptTemplate,
+    $$AppPromptTemplatesTableFilterComposer,
+    $$AppPromptTemplatesTableOrderingComposer,
+    $$AppPromptTemplatesTableAnnotationComposer,
+    $$AppPromptTemplatesTableCreateCompanionBuilder,
+    $$AppPromptTemplatesTableUpdateCompanionBuilder,
+    (
+      AppPromptTemplate,
+      BaseReferences<_$AppDb, $AppPromptTemplatesTable, AppPromptTemplate>
+    ),
+    AppPromptTemplate,
+    PrefetchHooks Function()> {
+  $$AppPromptTemplatesTableTableManager(
+      _$AppDb db, $AppPromptTemplatesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AppPromptTemplatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AppPromptTemplatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AppPromptTemplatesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> templateKey = const Value.absent(),
+            Value<String> templateText = const Value.absent(),
+            Value<String> source = const Value.absent(),
+            Value<String?> versionTag = const Value.absent(),
+            Value<int> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AppPromptTemplatesCompanion(
+            templateKey: templateKey,
+            templateText: templateText,
+            source: source,
+            versionTag: versionTag,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String templateKey,
+            required String templateText,
+            Value<String> source = const Value.absent(),
+            Value<String?> versionTag = const Value.absent(),
+            required int updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AppPromptTemplatesCompanion.insert(
+            templateKey: templateKey,
+            templateText: templateText,
+            source: source,
+            versionTag: versionTag,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$AppPromptTemplatesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDb,
+    $AppPromptTemplatesTable,
+    AppPromptTemplate,
+    $$AppPromptTemplatesTableFilterComposer,
+    $$AppPromptTemplatesTableOrderingComposer,
+    $$AppPromptTemplatesTableAnnotationComposer,
+    $$AppPromptTemplatesTableCreateCompanionBuilder,
+    $$AppPromptTemplatesTableUpdateCompanionBuilder,
+    (
+      AppPromptTemplate,
+      BaseReferences<_$AppDb, $AppPromptTemplatesTable, AppPromptTemplate>
+    ),
+    AppPromptTemplate,
+    PrefetchHooks Function()>;
 typedef $$SleepNightsTableCreateCompanionBuilder = SleepNightsCompanion
     Function({
   required String id,
@@ -10539,6 +12318,314 @@ typedef $$AiAuditTableProcessedTableManager = ProcessedTableManager<
     (AiAuditData, BaseReferences<_$AppDb, $AiAuditTable, AiAuditData>),
     AiAuditData,
     PrefetchHooks Function()>;
+typedef $$ExerciseSubstitutionsTableCreateCompanionBuilder
+    = ExerciseSubstitutionsCompanion Function({
+  required String id,
+  required String workoutDayId,
+  Value<String?> planDayId,
+  required String prescribedExerciseCanonical,
+  required String substituteExerciseCanonical,
+  required String reasonCode,
+  Value<String?> reasonNotes,
+  required int selectedAt,
+  Value<String?> selectedBy,
+  Value<double?> matchScore,
+  Value<String?> matchExplanationJson,
+  Value<bool> warningAcknowledged,
+  required int createdAt,
+  Value<int> rowid,
+});
+typedef $$ExerciseSubstitutionsTableUpdateCompanionBuilder
+    = ExerciseSubstitutionsCompanion Function({
+  Value<String> id,
+  Value<String> workoutDayId,
+  Value<String?> planDayId,
+  Value<String> prescribedExerciseCanonical,
+  Value<String> substituteExerciseCanonical,
+  Value<String> reasonCode,
+  Value<String?> reasonNotes,
+  Value<int> selectedAt,
+  Value<String?> selectedBy,
+  Value<double?> matchScore,
+  Value<String?> matchExplanationJson,
+  Value<bool> warningAcknowledged,
+  Value<int> createdAt,
+  Value<int> rowid,
+});
+
+class $$ExerciseSubstitutionsTableFilterComposer
+    extends Composer<_$AppDb, $ExerciseSubstitutionsTable> {
+  $$ExerciseSubstitutionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get workoutDayId => $composableBuilder(
+      column: $table.workoutDayId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get planDayId => $composableBuilder(
+      column: $table.planDayId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get prescribedExerciseCanonical => $composableBuilder(
+      column: $table.prescribedExerciseCanonical,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get substituteExerciseCanonical => $composableBuilder(
+      column: $table.substituteExerciseCanonical,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get reasonCode => $composableBuilder(
+      column: $table.reasonCode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get reasonNotes => $composableBuilder(
+      column: $table.reasonNotes, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get selectedAt => $composableBuilder(
+      column: $table.selectedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get selectedBy => $composableBuilder(
+      column: $table.selectedBy, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get matchScore => $composableBuilder(
+      column: $table.matchScore, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get matchExplanationJson => $composableBuilder(
+      column: $table.matchExplanationJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get warningAcknowledged => $composableBuilder(
+      column: $table.warningAcknowledged,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$ExerciseSubstitutionsTableOrderingComposer
+    extends Composer<_$AppDb, $ExerciseSubstitutionsTable> {
+  $$ExerciseSubstitutionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get workoutDayId => $composableBuilder(
+      column: $table.workoutDayId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get planDayId => $composableBuilder(
+      column: $table.planDayId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get prescribedExerciseCanonical => $composableBuilder(
+      column: $table.prescribedExerciseCanonical,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get substituteExerciseCanonical => $composableBuilder(
+      column: $table.substituteExerciseCanonical,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get reasonCode => $composableBuilder(
+      column: $table.reasonCode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get reasonNotes => $composableBuilder(
+      column: $table.reasonNotes, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get selectedAt => $composableBuilder(
+      column: $table.selectedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get selectedBy => $composableBuilder(
+      column: $table.selectedBy, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get matchScore => $composableBuilder(
+      column: $table.matchScore, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get matchExplanationJson => $composableBuilder(
+      column: $table.matchExplanationJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get warningAcknowledged => $composableBuilder(
+      column: $table.warningAcknowledged,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ExerciseSubstitutionsTableAnnotationComposer
+    extends Composer<_$AppDb, $ExerciseSubstitutionsTable> {
+  $$ExerciseSubstitutionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get workoutDayId => $composableBuilder(
+      column: $table.workoutDayId, builder: (column) => column);
+
+  GeneratedColumn<String> get planDayId =>
+      $composableBuilder(column: $table.planDayId, builder: (column) => column);
+
+  GeneratedColumn<String> get prescribedExerciseCanonical => $composableBuilder(
+      column: $table.prescribedExerciseCanonical, builder: (column) => column);
+
+  GeneratedColumn<String> get substituteExerciseCanonical => $composableBuilder(
+      column: $table.substituteExerciseCanonical, builder: (column) => column);
+
+  GeneratedColumn<String> get reasonCode => $composableBuilder(
+      column: $table.reasonCode, builder: (column) => column);
+
+  GeneratedColumn<String> get reasonNotes => $composableBuilder(
+      column: $table.reasonNotes, builder: (column) => column);
+
+  GeneratedColumn<int> get selectedAt => $composableBuilder(
+      column: $table.selectedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get selectedBy => $composableBuilder(
+      column: $table.selectedBy, builder: (column) => column);
+
+  GeneratedColumn<double> get matchScore => $composableBuilder(
+      column: $table.matchScore, builder: (column) => column);
+
+  GeneratedColumn<String> get matchExplanationJson => $composableBuilder(
+      column: $table.matchExplanationJson, builder: (column) => column);
+
+  GeneratedColumn<bool> get warningAcknowledged => $composableBuilder(
+      column: $table.warningAcknowledged, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$ExerciseSubstitutionsTableTableManager extends RootTableManager<
+    _$AppDb,
+    $ExerciseSubstitutionsTable,
+    ExerciseSubstitution,
+    $$ExerciseSubstitutionsTableFilterComposer,
+    $$ExerciseSubstitutionsTableOrderingComposer,
+    $$ExerciseSubstitutionsTableAnnotationComposer,
+    $$ExerciseSubstitutionsTableCreateCompanionBuilder,
+    $$ExerciseSubstitutionsTableUpdateCompanionBuilder,
+    (
+      ExerciseSubstitution,
+      BaseReferences<_$AppDb, $ExerciseSubstitutionsTable, ExerciseSubstitution>
+    ),
+    ExerciseSubstitution,
+    PrefetchHooks Function()> {
+  $$ExerciseSubstitutionsTableTableManager(
+      _$AppDb db, $ExerciseSubstitutionsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ExerciseSubstitutionsTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ExerciseSubstitutionsTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ExerciseSubstitutionsTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> workoutDayId = const Value.absent(),
+            Value<String?> planDayId = const Value.absent(),
+            Value<String> prescribedExerciseCanonical = const Value.absent(),
+            Value<String> substituteExerciseCanonical = const Value.absent(),
+            Value<String> reasonCode = const Value.absent(),
+            Value<String?> reasonNotes = const Value.absent(),
+            Value<int> selectedAt = const Value.absent(),
+            Value<String?> selectedBy = const Value.absent(),
+            Value<double?> matchScore = const Value.absent(),
+            Value<String?> matchExplanationJson = const Value.absent(),
+            Value<bool> warningAcknowledged = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ExerciseSubstitutionsCompanion(
+            id: id,
+            workoutDayId: workoutDayId,
+            planDayId: planDayId,
+            prescribedExerciseCanonical: prescribedExerciseCanonical,
+            substituteExerciseCanonical: substituteExerciseCanonical,
+            reasonCode: reasonCode,
+            reasonNotes: reasonNotes,
+            selectedAt: selectedAt,
+            selectedBy: selectedBy,
+            matchScore: matchScore,
+            matchExplanationJson: matchExplanationJson,
+            warningAcknowledged: warningAcknowledged,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String workoutDayId,
+            Value<String?> planDayId = const Value.absent(),
+            required String prescribedExerciseCanonical,
+            required String substituteExerciseCanonical,
+            required String reasonCode,
+            Value<String?> reasonNotes = const Value.absent(),
+            required int selectedAt,
+            Value<String?> selectedBy = const Value.absent(),
+            Value<double?> matchScore = const Value.absent(),
+            Value<String?> matchExplanationJson = const Value.absent(),
+            Value<bool> warningAcknowledged = const Value.absent(),
+            required int createdAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ExerciseSubstitutionsCompanion.insert(
+            id: id,
+            workoutDayId: workoutDayId,
+            planDayId: planDayId,
+            prescribedExerciseCanonical: prescribedExerciseCanonical,
+            substituteExerciseCanonical: substituteExerciseCanonical,
+            reasonCode: reasonCode,
+            reasonNotes: reasonNotes,
+            selectedAt: selectedAt,
+            selectedBy: selectedBy,
+            matchScore: matchScore,
+            matchExplanationJson: matchExplanationJson,
+            warningAcknowledged: warningAcknowledged,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ExerciseSubstitutionsTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDb,
+        $ExerciseSubstitutionsTable,
+        ExerciseSubstitution,
+        $$ExerciseSubstitutionsTableFilterComposer,
+        $$ExerciseSubstitutionsTableOrderingComposer,
+        $$ExerciseSubstitutionsTableAnnotationComposer,
+        $$ExerciseSubstitutionsTableCreateCompanionBuilder,
+        $$ExerciseSubstitutionsTableUpdateCompanionBuilder,
+        (
+          ExerciseSubstitution,
+          BaseReferences<_$AppDb, $ExerciseSubstitutionsTable,
+              ExerciseSubstitution>
+        ),
+        ExerciseSubstitution,
+        PrefetchHooks Function()>;
 typedef $$PlanCyclesTableCreateCompanionBuilder = PlanCyclesCompanion Function({
   required String id,
   required String cycleKey,
@@ -10914,6 +13001,223 @@ typedef $$PlanDaysTableProcessedTableManager = ProcessedTableManager<
     (PlanDay, BaseReferences<_$AppDb, $PlanDaysTable, PlanDay>),
     PlanDay,
     PrefetchHooks Function()>;
+typedef $$PlanExerciseAlternativesTableCreateCompanionBuilder
+    = PlanExerciseAlternativesCompanion Function({
+  required String id,
+  Value<String?> planDayId,
+  required String prescribedExerciseCanonical,
+  required String alternativeExerciseCanonical,
+  Value<int> priority,
+  Value<String?> notes,
+  required int createdAt,
+  Value<int> rowid,
+});
+typedef $$PlanExerciseAlternativesTableUpdateCompanionBuilder
+    = PlanExerciseAlternativesCompanion Function({
+  Value<String> id,
+  Value<String?> planDayId,
+  Value<String> prescribedExerciseCanonical,
+  Value<String> alternativeExerciseCanonical,
+  Value<int> priority,
+  Value<String?> notes,
+  Value<int> createdAt,
+  Value<int> rowid,
+});
+
+class $$PlanExerciseAlternativesTableFilterComposer
+    extends Composer<_$AppDb, $PlanExerciseAlternativesTable> {
+  $$PlanExerciseAlternativesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get planDayId => $composableBuilder(
+      column: $table.planDayId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get prescribedExerciseCanonical => $composableBuilder(
+      column: $table.prescribedExerciseCanonical,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get alternativeExerciseCanonical => $composableBuilder(
+      column: $table.alternativeExerciseCanonical,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get priority => $composableBuilder(
+      column: $table.priority, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notes => $composableBuilder(
+      column: $table.notes, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$PlanExerciseAlternativesTableOrderingComposer
+    extends Composer<_$AppDb, $PlanExerciseAlternativesTable> {
+  $$PlanExerciseAlternativesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get planDayId => $composableBuilder(
+      column: $table.planDayId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get prescribedExerciseCanonical => $composableBuilder(
+      column: $table.prescribedExerciseCanonical,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get alternativeExerciseCanonical =>
+      $composableBuilder(
+          column: $table.alternativeExerciseCanonical,
+          builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get priority => $composableBuilder(
+      column: $table.priority, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+      column: $table.notes, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$PlanExerciseAlternativesTableAnnotationComposer
+    extends Composer<_$AppDb, $PlanExerciseAlternativesTable> {
+  $$PlanExerciseAlternativesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get planDayId =>
+      $composableBuilder(column: $table.planDayId, builder: (column) => column);
+
+  GeneratedColumn<String> get prescribedExerciseCanonical => $composableBuilder(
+      column: $table.prescribedExerciseCanonical, builder: (column) => column);
+
+  GeneratedColumn<String> get alternativeExerciseCanonical =>
+      $composableBuilder(
+          column: $table.alternativeExerciseCanonical,
+          builder: (column) => column);
+
+  GeneratedColumn<int> get priority =>
+      $composableBuilder(column: $table.priority, builder: (column) => column);
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$PlanExerciseAlternativesTableTableManager extends RootTableManager<
+    _$AppDb,
+    $PlanExerciseAlternativesTable,
+    PlanExerciseAlternative,
+    $$PlanExerciseAlternativesTableFilterComposer,
+    $$PlanExerciseAlternativesTableOrderingComposer,
+    $$PlanExerciseAlternativesTableAnnotationComposer,
+    $$PlanExerciseAlternativesTableCreateCompanionBuilder,
+    $$PlanExerciseAlternativesTableUpdateCompanionBuilder,
+    (
+      PlanExerciseAlternative,
+      BaseReferences<_$AppDb, $PlanExerciseAlternativesTable,
+          PlanExerciseAlternative>
+    ),
+    PlanExerciseAlternative,
+    PrefetchHooks Function()> {
+  $$PlanExerciseAlternativesTableTableManager(
+      _$AppDb db, $PlanExerciseAlternativesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PlanExerciseAlternativesTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PlanExerciseAlternativesTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PlanExerciseAlternativesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String?> planDayId = const Value.absent(),
+            Value<String> prescribedExerciseCanonical = const Value.absent(),
+            Value<String> alternativeExerciseCanonical = const Value.absent(),
+            Value<int> priority = const Value.absent(),
+            Value<String?> notes = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              PlanExerciseAlternativesCompanion(
+            id: id,
+            planDayId: planDayId,
+            prescribedExerciseCanonical: prescribedExerciseCanonical,
+            alternativeExerciseCanonical: alternativeExerciseCanonical,
+            priority: priority,
+            notes: notes,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            Value<String?> planDayId = const Value.absent(),
+            required String prescribedExerciseCanonical,
+            required String alternativeExerciseCanonical,
+            Value<int> priority = const Value.absent(),
+            Value<String?> notes = const Value.absent(),
+            required int createdAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              PlanExerciseAlternativesCompanion.insert(
+            id: id,
+            planDayId: planDayId,
+            prescribedExerciseCanonical: prescribedExerciseCanonical,
+            alternativeExerciseCanonical: alternativeExerciseCanonical,
+            priority: priority,
+            notes: notes,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$PlanExerciseAlternativesTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDb,
+        $PlanExerciseAlternativesTable,
+        PlanExerciseAlternative,
+        $$PlanExerciseAlternativesTableFilterComposer,
+        $$PlanExerciseAlternativesTableOrderingComposer,
+        $$PlanExerciseAlternativesTableAnnotationComposer,
+        $$PlanExerciseAlternativesTableCreateCompanionBuilder,
+        $$PlanExerciseAlternativesTableUpdateCompanionBuilder,
+        (
+          PlanExerciseAlternative,
+          BaseReferences<_$AppDb, $PlanExerciseAlternativesTable,
+              PlanExerciseAlternative>
+        ),
+        PlanExerciseAlternative,
+        PrefetchHooks Function()>;
 typedef $$PlanPrescribedStrengthSetsTableCreateCompanionBuilder
     = PlanPrescribedStrengthSetsCompanion Function({
   required String id,
@@ -11805,6 +14109,8 @@ class $AppDbManager {
   $$PrescribedStrengthSetsTableTableManager get prescribedStrengthSets =>
       $$PrescribedStrengthSetsTableTableManager(
           _db, _db.prescribedStrengthSets);
+  $$AppPromptTemplatesTableTableManager get appPromptTemplates =>
+      $$AppPromptTemplatesTableTableManager(_db, _db.appPromptTemplates);
   $$SleepNightsTableTableManager get sleepNights =>
       $$SleepNightsTableTableManager(_db, _db.sleepNights);
   $$RunSessionsTableTableManager get runSessions =>
@@ -11819,10 +14125,15 @@ class $AppDbManager {
       $$RuleTriggersTableTableManager(_db, _db.ruleTriggers);
   $$AiAuditTableTableManager get aiAudit =>
       $$AiAuditTableTableManager(_db, _db.aiAudit);
+  $$ExerciseSubstitutionsTableTableManager get exerciseSubstitutions =>
+      $$ExerciseSubstitutionsTableTableManager(_db, _db.exerciseSubstitutions);
   $$PlanCyclesTableTableManager get planCycles =>
       $$PlanCyclesTableTableManager(_db, _db.planCycles);
   $$PlanDaysTableTableManager get planDays =>
       $$PlanDaysTableTableManager(_db, _db.planDays);
+  $$PlanExerciseAlternativesTableTableManager get planExerciseAlternatives =>
+      $$PlanExerciseAlternativesTableTableManager(
+          _db, _db.planExerciseAlternatives);
   $$PlanPrescribedStrengthSetsTableTableManager
       get planPrescribedStrengthSets =>
           $$PlanPrescribedStrengthSetsTableTableManager(

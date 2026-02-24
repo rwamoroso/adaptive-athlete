@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/app_providers.dart';
 import '../../db/app_db.dart';
+import 'exercise_substitution_service.dart';
 
 Map<int, String> _manualSegmentLabelsByIdx(String? rawMetricsJson) {
   if (rawMetricsJson == null || rawMetricsJson.trim().isEmpty) {
@@ -204,14 +205,16 @@ class _WorkoutDayDetailScreenState
   }
 
   Future<void> _confirmActualSet({
-    required String exerciseCanonical,
+    required String performedExerciseCanonical,
+    required String prescribedExerciseCanonical,
+    String? substitutionId,
     required PlannedStrengthSetView prescribed,
     required bool hadExistingActual,
     required String currentExercise,
     required String? nextExercise,
     required bool advanceCard,
   }) async {
-    final key = _setKey(exerciseCanonical, prescribed.setIndex);
+    final key = _setKey(prescribedExerciseCanonical, prescribed.setIndex);
     final edited = _editedByKey[key];
     if (edited == null) {
       return;
@@ -221,7 +224,9 @@ class _WorkoutDayDetailScreenState
     try {
       await ref.read(appDbProvider).upsertActualStrengthSetForDate(
             dateYmd: widget.date,
-            exerciseCanonical: exerciseCanonical,
+            exerciseCanonical: performedExerciseCanonical,
+            prescribedExerciseCanonical: prescribedExerciseCanonical,
+            substitutionId: substitutionId,
             setIndex: prescribed.setIndex,
             weight: edited.weight,
             reps: edited.reps,
@@ -265,25 +270,29 @@ class _WorkoutDayDetailScreenState
   }
 
   Future<void> _skipExercise({
-    required String exerciseCanonical,
+    required String performedExerciseCanonical,
+    required String prescribedExerciseCanonical,
+    String? substitutionId,
     required List<PlannedStrengthSetView> prescribedSets,
   }) async {
     if (prescribedSets.isEmpty) {
       return;
     }
-    setState(() => _savingExercises.add(exerciseCanonical));
+    setState(() => _savingExercises.add(prescribedExerciseCanonical));
     try {
       for (final set in prescribedSets) {
         await ref.read(appDbProvider).upsertActualStrengthSetForDate(
               dateYmd: widget.date,
-              exerciseCanonical: exerciseCanonical,
+              exerciseCanonical: performedExerciseCanonical,
+              prescribedExerciseCanonical: prescribedExerciseCanonical,
+              substitutionId: substitutionId,
               setIndex: set.setIndex,
               weight: 0,
               reps: 0,
               rir: 0,
               source: 'manual_skip',
             );
-        final key = _setKey(exerciseCanonical, set.setIndex);
+        final key = _setKey(prescribedExerciseCanonical, set.setIndex);
         final existing = _editedByKey[key];
         if (existing != null) {
           _editedByKey[key] = existing.copyWith(weight: 0, reps: 0, rir: 0);
@@ -294,7 +303,9 @@ class _WorkoutDayDetailScreenState
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Skipped $exerciseCanonical. Logged all sets as 0.'),
+          content: Text(
+            'Skipped $prescribedExerciseCanonical. Logged all sets as 0.',
+          ),
         ),
       );
       _refreshDetail();
@@ -307,9 +318,128 @@ class _WorkoutDayDetailScreenState
       );
     } finally {
       if (mounted) {
-        setState(() => _savingExercises.remove(exerciseCanonical));
+        setState(() => _savingExercises.remove(prescribedExerciseCanonical));
       }
     }
+  }
+
+  Future<void> _applyConvertedTargets(
+    String prescribedExerciseCanonical,
+    List<ConvertedSetTarget> converted,
+  ) async {
+    setState(() {
+      for (final target in converted) {
+        final key = _setKey(prescribedExerciseCanonical, target.setIndex);
+        final current = _editedByKey[key];
+        if (current == null) {
+          continue;
+        }
+        _editedByKey[key] = current.copyWith(
+          weight: target.suggestedWeight,
+          setWeightToNull: target.suggestedWeight == null,
+          reps: target.suggestedReps,
+          rir: target.suggestedRir,
+        );
+      }
+    });
+  }
+
+  Future<void> _clearSubstitutionForGroup(ExerciseSetGroup group) async {
+    await ref.read(exerciseSubstitutionServiceProvider).clearSubstitution(
+          dateYmd: widget.date,
+          prescribedExerciseCanonical: group.exercise,
+        );
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Cleared substitution for ${group.exercise}.')),
+    );
+    _refreshDetail();
+  }
+
+  Future<void> _openSubstitutionPicker({
+    required WorkoutDayDetail detail,
+    required ExerciseSetGroup group,
+    required List<PlannedStrengthSetView> prescribedSets,
+  }) async {
+    final service = ref.read(exerciseSubstitutionServiceProvider);
+    final settings = ref.read(settingsProvider);
+    final suggestions = await service.suggestAlternatives(
+      prescribedExerciseCanonical: group.exercise,
+      prescribedSets: prescribedSets,
+      planDayId: detail.planDayId,
+      availableEquipment: settings.availableEquipment,
+      contraindications: settings.movementContraindications,
+    );
+    if (!mounted) {
+      return;
+    }
+
+    final result = await showModalBottomSheet<_SubstitutionSelectionResult>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _SubstitutionPickerSheet(
+        prescribedExercise: group.exercise,
+        currentSubstitute: group.substitution?.substituteExerciseCanonical,
+        suggestions: suggestions,
+      ),
+    );
+    if (result == null) {
+      return;
+    }
+    if (result.clear) {
+      await _clearSubstitutionForGroup(group);
+      return;
+    }
+
+    final validation = await service.validateSelection(
+      prescribedExerciseCanonical: group.exercise,
+      substituteExerciseCanonical: result.substituteExerciseCanonical!,
+      prescribedSets: prescribedSets,
+      availableEquipment: settings.availableEquipment,
+      contraindications: settings.movementContraindications,
+      isCurated: result.isCurated,
+    );
+    final weak = validation.tier == SubstitutionTier.weak;
+    if (weak && !result.warningAcknowledged) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Weak matches require warning acknowledgment.'),
+        ),
+      );
+      return;
+    }
+
+    final converted = await service.convertPrescription(
+      prescribedExerciseCanonical: group.exercise,
+      substituteExerciseCanonical: result.substituteExerciseCanonical!,
+      prescribedSets: prescribedSets,
+    );
+    await service.applySubstitution(
+      dateYmd: widget.date,
+      prescribedExerciseCanonical: group.exercise,
+      substituteExerciseCanonical: result.substituteExerciseCanonical!,
+      reasonCode: result.reasonCode,
+      reasonNotes: result.reasonNotes,
+      validation: validation,
+      warningAcknowledged: result.warningAcknowledged,
+    );
+    await _applyConvertedTargets(group.exercise, converted);
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Applied substitution: ${group.exercise} -> ${result.substituteExerciseCanonical}',
+        ),
+      ),
+    );
+    _refreshDetail();
   }
 
   @override
@@ -432,6 +562,9 @@ class _WorkoutDayDetailScreenState
                     ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
                   final skippingExercise =
                       _savingExercises.contains(group.exercise);
+                  final performedExercise = group.substitution
+                          ?.substituteExerciseCanonical ??
+                      group.exercise;
                   final nextExercise = index < detail.groups.length - 1
                       ? detail.groups[index + 1].exercise
                       : null;
@@ -448,29 +581,91 @@ class _WorkoutDayDetailScreenState
                       onExpansionChanged: (expanded) {
                         _expandedByExercise[group.exercise] = expanded;
                       },
-                      title: Text(group.exercise),
+                      title: Text(group.displayExercise),
                       subtitle: Text(
-                        'Prescribed: ${prescribedSets.length} | Actual: ${actualSets.length}',
+                        group.substitution == null
+                            ? 'Prescribed: ${prescribedSets.length} | Actual: ${actualSets.length}'
+                            : 'Planned: ${group.exercise} | Actual: ${actualSets.length}',
                       ),
                       childrenPadding: const EdgeInsets.all(12),
                       children: [
+                        if (group.substitution != null) ...[
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .tertiaryContainer
+                                  .withOpacity(0.35),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Substitution active: ${group.exercise} -> ${group.substitution!.substituteExerciseCanonical}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Reason: ${group.substitution!.reasonCode}'
+                                  '${group.substitution!.matchScore == null ? '' : ' | Match ${(group.substitution!.matchScore!).round()}/100'}',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         Row(
                           children: [
-                            const Expanded(
+                            Expanded(
                               child: Align(
                                 alignment: Alignment.centerLeft,
                                 child: Text(
-                                  'Adjust Prescribed and Confirm as Actual',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                  group.substitution == null
+                                      ? 'Adjust Prescribed and Confirm as Actual'
+                                      : 'Adjusted for substitute; confirm as actual',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            FilledButton.tonal(
+                              onPressed: prescribedSets.isEmpty
+                                  ? null
+                                  : () => _openSubstitutionPicker(
+                                        detail: detail,
+                                        group: group,
+                                        prescribedSets: prescribedSets,
+                                      ),
+                              child: const Text('Substitute Exercise'),
+                            ),
+                            if (group.substitution != null) ...[
+                              const SizedBox(width: 8),
+                              OutlinedButton(
+                                onPressed: () => _clearSubstitutionForGroup(group),
+                                child: const Text('Clear'),
+                              ),
+                            ],
+                            const SizedBox(width: 8),
                             FilledButton.tonal(
                               onPressed:
                                   skippingExercise || prescribedSets.isEmpty
                                       ? null
                                       : () => _skipExercise(
-                                            exerciseCanonical: group.exercise,
+                                            performedExerciseCanonical:
+                                                performedExercise,
+                                            prescribedExerciseCanonical:
+                                                group.exercise,
+                                            substitutionId:
+                                                group.substitution?.id,
                                             prescribedSets: prescribedSets,
                                           ),
                               child: const Text('Skip Exercise (log 0)'),
@@ -555,8 +750,12 @@ class _WorkoutDayDetailScreenState
                                       onPressed: saving
                                           ? null
                                           : () => _confirmActualSet(
-                                                exerciseCanonical:
+                                                performedExerciseCanonical:
+                                                    performedExercise,
+                                                prescribedExerciseCanonical:
                                                     group.exercise,
+                                                substitutionId:
+                                                    group.substitution?.id,
                                                 prescribed: set,
                                                 hadExistingActual:
                                                     hasExistingActual,
@@ -596,7 +795,8 @@ class _WorkoutDayDetailScreenState
                             (s) => Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                'Set ${s.setIndex}: ${s.weight ?? 'unknown'}x${s.reps ?? 'unknown'}r${s.rir ?? 'unknown'} ${s.unit}',
+                                'Set ${s.setIndex}: ${s.weight ?? 'unknown'}x${s.reps ?? 'unknown'}r${s.rir ?? 'unknown'} ${s.unit}'
+                                '${s.exerciseCanonical != group.exercise ? ' (${s.exerciseCanonical})' : ''}',
                               ),
                             ),
                           ),
@@ -663,6 +863,219 @@ class _WorkoutDayDetailScreenState
         },
       ),
     );
+  }
+}
+
+class _SubstitutionSelectionResult {
+  const _SubstitutionSelectionResult({
+    this.substituteExerciseCanonical,
+    this.reasonCode = 'preference',
+    this.reasonNotes,
+    this.warningAcknowledged = false,
+    this.isCurated = false,
+    this.clear = false,
+  });
+
+  final String? substituteExerciseCanonical;
+  final String reasonCode;
+  final String? reasonNotes;
+  final bool warningAcknowledged;
+  final bool isCurated;
+  final bool clear;
+}
+
+class _SubstitutionPickerSheet extends StatefulWidget {
+  const _SubstitutionPickerSheet({
+    required this.prescribedExercise,
+    required this.currentSubstitute,
+    required this.suggestions,
+  });
+
+  final String prescribedExercise;
+  final String? currentSubstitute;
+  final List<SubstitutionCandidate> suggestions;
+
+  @override
+  State<_SubstitutionPickerSheet> createState() => _SubstitutionPickerSheetState();
+}
+
+class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
+  String _query = '';
+  String? _selectedExercise;
+  String _reasonCode = 'preference';
+  bool _warningAcknowledged = false;
+  final TextEditingController _reasonNotesController = TextEditingController();
+
+  @override
+  void dispose() {
+    _reasonNotesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = widget.suggestions
+        .where((c) => _query.trim().isEmpty
+            ? true
+            : c.exerciseCanonical.toLowerCase().contains(_query.toLowerCase()))
+        .toList();
+    SubstitutionCandidate? selectedCandidate;
+    final selectedKey = _selectedExercise;
+    if (selectedKey != null) {
+      for (final c in widget.suggestions) {
+        if (c.exerciseCanonical == selectedKey) {
+          selectedCandidate = c;
+          break;
+        }
+      }
+    }
+    selectedCandidate ??= filtered.isEmpty ? null : filtered.first;
+    final selectedIsWeak = selectedCandidate?.tier == SubstitutionTier.weak;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Substitute ${widget.prescribedExercise}',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              onChanged: (value) => setState(() => _query = value),
+              decoration: const InputDecoration(
+                labelText: 'Search alternatives',
+                prefixIcon: Icon(Icons.search),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 320,
+              child: filtered.isEmpty
+                  ? const Center(child: Text('No suggestions found.'))
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final c = filtered[index];
+                        return RadioListTile<String>(
+                          value: c.exerciseCanonical,
+                          groupValue: _selectedExercise,
+                          onChanged: (v) => setState(() {
+                            _selectedExercise = v;
+                            _warningAcknowledged = false;
+                          }),
+                          title: Text(c.exerciseCanonical),
+                          subtitle: Text(
+                            '${_tierLabel(c.tier)} • ${c.score.round()}/100'
+                            '${c.isCurated ? ' • curated' : ''}'
+                            '${c.warnings.isEmpty ? '' : '\n${c.warnings.join('; ')}'}',
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _reasonCode,
+              items: const [
+                DropdownMenuItem(
+                    value: 'equipment_unavailable',
+                    child: Text('Equipment unavailable')),
+                DropdownMenuItem(value: 'pain', child: Text('Pain')),
+                DropdownMenuItem(value: 'machine_busy', child: Text('Machine busy')),
+                DropdownMenuItem(value: 'preference', child: Text('Preference')),
+                DropdownMenuItem(value: 'other', child: Text('Other')),
+              ],
+              onChanged: (v) => setState(() => _reasonCode = v ?? 'preference'),
+              decoration: const InputDecoration(labelText: 'Reason'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _reasonNotesController,
+              decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+              ),
+            ),
+            if (selectedCandidate != null) ...[
+              const SizedBox(height: 8),
+              if (selectedCandidate.warnings.isNotEmpty)
+                Text(
+                  'Warnings: ${selectedCandidate.warnings.join(' | ')}',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _warningAcknowledged || !selectedIsWeak,
+                onChanged: selectedIsWeak
+                    ? (v) => setState(() => _warningAcknowledged = v ?? false)
+                    : null,
+                title: const Text('Acknowledge warning (required for weak match)'),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (widget.currentSubstitute != null)
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(
+                      const _SubstitutionSelectionResult(clear: true),
+                    ),
+                    child: const Text('Clear Current'),
+                  ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _selectedExercise == null
+                      ? null
+                      : () {
+                          final selected = widget.suggestions.firstWhere(
+                            (c) => c.exerciseCanonical == _selectedExercise,
+                          );
+                          Navigator.of(context).pop(
+                            _SubstitutionSelectionResult(
+                              substituteExerciseCanonical: _selectedExercise,
+                              reasonCode: _reasonCode,
+                              reasonNotes: _reasonNotesController.text.trim(),
+                              warningAcknowledged:
+                                  _warningAcknowledged || !selectedIsWeak,
+                              isCurated: selected.isCurated,
+                            ),
+                          );
+                        },
+                  child: const Text('Apply'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _tierLabel(SubstitutionTier tier) {
+    switch (tier) {
+      case SubstitutionTier.strong:
+        return 'Strong';
+      case SubstitutionTier.acceptable:
+        return 'Acceptable';
+      case SubstitutionTier.weak:
+        return 'Weak';
+    }
   }
 }
 
