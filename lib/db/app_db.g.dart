@@ -8806,6 +8806,2038 @@ class PlanPrescribedRunsCompanion extends UpdateCompanion<PlanPrescribedRun> {
   }
 }
 
+class $PlanLongRangeWeeksTable extends PlanLongRangeWeeks
+    with TableInfo<$PlanLongRangeWeeksTable, PlanLongRangeWeek> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PlanLongRangeWeeksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _weekLabelMeta =
+      const VerificationMeta('weekLabel');
+  @override
+  late final GeneratedColumn<String> weekLabel = GeneratedColumn<String>(
+      'week_label', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _weekNumberMeta =
+      const VerificationMeta('weekNumber');
+  @override
+  late final GeneratedColumn<int> weekNumber = GeneratedColumn<int>(
+      'week_number', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _weekStartMeta =
+      const VerificationMeta('weekStart');
+  @override
+  late final GeneratedColumn<String> weekStart = GeneratedColumn<String>(
+      'week_start', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _weekEndMeta =
+      const VerificationMeta('weekEnd');
+  @override
+  late final GeneratedColumn<String> weekEnd = GeneratedColumn<String>(
+      'week_end', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _runFocusMeta =
+      const VerificationMeta('runFocus');
+  @override
+  late final GeneratedColumn<String> runFocus = GeneratedColumn<String>(
+      'run_focus', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _strengthFocusMeta =
+      const VerificationMeta('strengthFocus');
+  @override
+  late final GeneratedColumn<String> strengthFocus = GeneratedColumn<String>(
+      'strength_focus', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _strengthProgressionExpectationMeta =
+      const VerificationMeta('strengthProgressionExpectation');
+  @override
+  late final GeneratedColumn<String> strengthProgressionExpectation =
+      GeneratedColumn<String>(
+          'strength_progression_expectation', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _primaryProgressionTargetMeta =
+      const VerificationMeta('primaryProgressionTarget');
+  @override
+  late final GeneratedColumn<String> primaryProgressionTarget =
+      GeneratedColumn<String>('primary_progression_target', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _recoveryEmphasisMeta =
+      const VerificationMeta('recoveryEmphasis');
+  @override
+  late final GeneratedColumn<String> recoveryEmphasis = GeneratedColumn<String>(
+      'recovery_emphasis', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _deloadMeta = const VerificationMeta('deload');
+  @override
+  late final GeneratedColumn<bool> deload = GeneratedColumn<bool>(
+      'deload', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("deload" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+      'notes', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+      'source', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _lastPlanCycleIdMeta =
+      const VerificationMeta('lastPlanCycleId');
+  @override
+  late final GeneratedColumn<String> lastPlanCycleId = GeneratedColumn<String>(
+      'last_plan_cycle_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        weekLabel,
+        weekNumber,
+        weekStart,
+        weekEnd,
+        runFocus,
+        strengthFocus,
+        strengthProgressionExpectation,
+        primaryProgressionTarget,
+        recoveryEmphasis,
+        deload,
+        notes,
+        source,
+        lastPlanCycleId,
+        createdAt,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'plan_long_range_weeks';
+  @override
+  VerificationContext validateIntegrity(Insertable<PlanLongRangeWeek> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('week_label')) {
+      context.handle(_weekLabelMeta,
+          weekLabel.isAcceptableOrUnknown(data['week_label']!, _weekLabelMeta));
+    } else if (isInserting) {
+      context.missing(_weekLabelMeta);
+    }
+    if (data.containsKey('week_number')) {
+      context.handle(
+          _weekNumberMeta,
+          weekNumber.isAcceptableOrUnknown(
+              data['week_number']!, _weekNumberMeta));
+    }
+    if (data.containsKey('week_start')) {
+      context.handle(_weekStartMeta,
+          weekStart.isAcceptableOrUnknown(data['week_start']!, _weekStartMeta));
+    } else if (isInserting) {
+      context.missing(_weekStartMeta);
+    }
+    if (data.containsKey('week_end')) {
+      context.handle(_weekEndMeta,
+          weekEnd.isAcceptableOrUnknown(data['week_end']!, _weekEndMeta));
+    } else if (isInserting) {
+      context.missing(_weekEndMeta);
+    }
+    if (data.containsKey('run_focus')) {
+      context.handle(_runFocusMeta,
+          runFocus.isAcceptableOrUnknown(data['run_focus']!, _runFocusMeta));
+    }
+    if (data.containsKey('strength_focus')) {
+      context.handle(
+          _strengthFocusMeta,
+          strengthFocus.isAcceptableOrUnknown(
+              data['strength_focus']!, _strengthFocusMeta));
+    }
+    if (data.containsKey('strength_progression_expectation')) {
+      context.handle(
+          _strengthProgressionExpectationMeta,
+          strengthProgressionExpectation.isAcceptableOrUnknown(
+              data['strength_progression_expectation']!,
+              _strengthProgressionExpectationMeta));
+    }
+    if (data.containsKey('primary_progression_target')) {
+      context.handle(
+          _primaryProgressionTargetMeta,
+          primaryProgressionTarget.isAcceptableOrUnknown(
+              data['primary_progression_target']!,
+              _primaryProgressionTargetMeta));
+    }
+    if (data.containsKey('recovery_emphasis')) {
+      context.handle(
+          _recoveryEmphasisMeta,
+          recoveryEmphasis.isAcceptableOrUnknown(
+              data['recovery_emphasis']!, _recoveryEmphasisMeta));
+    }
+    if (data.containsKey('deload')) {
+      context.handle(_deloadMeta,
+          deload.isAcceptableOrUnknown(data['deload']!, _deloadMeta));
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+          _notesMeta, notes.isAcceptableOrUnknown(data['notes']!, _notesMeta));
+    }
+    if (data.containsKey('source')) {
+      context.handle(_sourceMeta,
+          source.isAcceptableOrUnknown(data['source']!, _sourceMeta));
+    } else if (isInserting) {
+      context.missing(_sourceMeta);
+    }
+    if (data.containsKey('last_plan_cycle_id')) {
+      context.handle(
+          _lastPlanCycleIdMeta,
+          lastPlanCycleId.isAcceptableOrUnknown(
+              data['last_plan_cycle_id']!, _lastPlanCycleIdMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PlanLongRangeWeek map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PlanLongRangeWeek(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      weekLabel: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}week_label'])!,
+      weekNumber: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}week_number']),
+      weekStart: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}week_start'])!,
+      weekEnd: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}week_end'])!,
+      runFocus: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}run_focus']),
+      strengthFocus: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}strength_focus']),
+      strengthProgressionExpectation: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}strength_progression_expectation']),
+      primaryProgressionTarget: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}primary_progression_target']),
+      recoveryEmphasis: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}recovery_emphasis']),
+      deload: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}deload'])!,
+      notes: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notes']),
+      source: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}source'])!,
+      lastPlanCycleId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}last_plan_cycle_id']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $PlanLongRangeWeeksTable createAlias(String alias) {
+    return $PlanLongRangeWeeksTable(attachedDatabase, alias);
+  }
+}
+
+class PlanLongRangeWeek extends DataClass
+    implements Insertable<PlanLongRangeWeek> {
+  final String id;
+  final String weekLabel;
+  final int? weekNumber;
+  final String weekStart;
+  final String weekEnd;
+  final String? runFocus;
+  final String? strengthFocus;
+  final String? strengthProgressionExpectation;
+  final String? primaryProgressionTarget;
+  final String? recoveryEmphasis;
+  final bool deload;
+  final String? notes;
+  final String source;
+  final String? lastPlanCycleId;
+  final int createdAt;
+  final int updatedAt;
+  const PlanLongRangeWeek(
+      {required this.id,
+      required this.weekLabel,
+      this.weekNumber,
+      required this.weekStart,
+      required this.weekEnd,
+      this.runFocus,
+      this.strengthFocus,
+      this.strengthProgressionExpectation,
+      this.primaryProgressionTarget,
+      this.recoveryEmphasis,
+      required this.deload,
+      this.notes,
+      required this.source,
+      this.lastPlanCycleId,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['week_label'] = Variable<String>(weekLabel);
+    if (!nullToAbsent || weekNumber != null) {
+      map['week_number'] = Variable<int>(weekNumber);
+    }
+    map['week_start'] = Variable<String>(weekStart);
+    map['week_end'] = Variable<String>(weekEnd);
+    if (!nullToAbsent || runFocus != null) {
+      map['run_focus'] = Variable<String>(runFocus);
+    }
+    if (!nullToAbsent || strengthFocus != null) {
+      map['strength_focus'] = Variable<String>(strengthFocus);
+    }
+    if (!nullToAbsent || strengthProgressionExpectation != null) {
+      map['strength_progression_expectation'] =
+          Variable<String>(strengthProgressionExpectation);
+    }
+    if (!nullToAbsent || primaryProgressionTarget != null) {
+      map['primary_progression_target'] =
+          Variable<String>(primaryProgressionTarget);
+    }
+    if (!nullToAbsent || recoveryEmphasis != null) {
+      map['recovery_emphasis'] = Variable<String>(recoveryEmphasis);
+    }
+    map['deload'] = Variable<bool>(deload);
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['source'] = Variable<String>(source);
+    if (!nullToAbsent || lastPlanCycleId != null) {
+      map['last_plan_cycle_id'] = Variable<String>(lastPlanCycleId);
+    }
+    map['created_at'] = Variable<int>(createdAt);
+    map['updated_at'] = Variable<int>(updatedAt);
+    return map;
+  }
+
+  PlanLongRangeWeeksCompanion toCompanion(bool nullToAbsent) {
+    return PlanLongRangeWeeksCompanion(
+      id: Value(id),
+      weekLabel: Value(weekLabel),
+      weekNumber: weekNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weekNumber),
+      weekStart: Value(weekStart),
+      weekEnd: Value(weekEnd),
+      runFocus: runFocus == null && nullToAbsent
+          ? const Value.absent()
+          : Value(runFocus),
+      strengthFocus: strengthFocus == null && nullToAbsent
+          ? const Value.absent()
+          : Value(strengthFocus),
+      strengthProgressionExpectation:
+          strengthProgressionExpectation == null && nullToAbsent
+              ? const Value.absent()
+              : Value(strengthProgressionExpectation),
+      primaryProgressionTarget: primaryProgressionTarget == null && nullToAbsent
+          ? const Value.absent()
+          : Value(primaryProgressionTarget),
+      recoveryEmphasis: recoveryEmphasis == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recoveryEmphasis),
+      deload: Value(deload),
+      notes:
+          notes == null && nullToAbsent ? const Value.absent() : Value(notes),
+      source: Value(source),
+      lastPlanCycleId: lastPlanCycleId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastPlanCycleId),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory PlanLongRangeWeek.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PlanLongRangeWeek(
+      id: serializer.fromJson<String>(json['id']),
+      weekLabel: serializer.fromJson<String>(json['weekLabel']),
+      weekNumber: serializer.fromJson<int?>(json['weekNumber']),
+      weekStart: serializer.fromJson<String>(json['weekStart']),
+      weekEnd: serializer.fromJson<String>(json['weekEnd']),
+      runFocus: serializer.fromJson<String?>(json['runFocus']),
+      strengthFocus: serializer.fromJson<String?>(json['strengthFocus']),
+      strengthProgressionExpectation:
+          serializer.fromJson<String?>(json['strengthProgressionExpectation']),
+      primaryProgressionTarget:
+          serializer.fromJson<String?>(json['primaryProgressionTarget']),
+      recoveryEmphasis: serializer.fromJson<String?>(json['recoveryEmphasis']),
+      deload: serializer.fromJson<bool>(json['deload']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      source: serializer.fromJson<String>(json['source']),
+      lastPlanCycleId: serializer.fromJson<String?>(json['lastPlanCycleId']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'weekLabel': serializer.toJson<String>(weekLabel),
+      'weekNumber': serializer.toJson<int?>(weekNumber),
+      'weekStart': serializer.toJson<String>(weekStart),
+      'weekEnd': serializer.toJson<String>(weekEnd),
+      'runFocus': serializer.toJson<String?>(runFocus),
+      'strengthFocus': serializer.toJson<String?>(strengthFocus),
+      'strengthProgressionExpectation':
+          serializer.toJson<String?>(strengthProgressionExpectation),
+      'primaryProgressionTarget':
+          serializer.toJson<String?>(primaryProgressionTarget),
+      'recoveryEmphasis': serializer.toJson<String?>(recoveryEmphasis),
+      'deload': serializer.toJson<bool>(deload),
+      'notes': serializer.toJson<String?>(notes),
+      'source': serializer.toJson<String>(source),
+      'lastPlanCycleId': serializer.toJson<String?>(lastPlanCycleId),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+    };
+  }
+
+  PlanLongRangeWeek copyWith(
+          {String? id,
+          String? weekLabel,
+          Value<int?> weekNumber = const Value.absent(),
+          String? weekStart,
+          String? weekEnd,
+          Value<String?> runFocus = const Value.absent(),
+          Value<String?> strengthFocus = const Value.absent(),
+          Value<String?> strengthProgressionExpectation = const Value.absent(),
+          Value<String?> primaryProgressionTarget = const Value.absent(),
+          Value<String?> recoveryEmphasis = const Value.absent(),
+          bool? deload,
+          Value<String?> notes = const Value.absent(),
+          String? source,
+          Value<String?> lastPlanCycleId = const Value.absent(),
+          int? createdAt,
+          int? updatedAt}) =>
+      PlanLongRangeWeek(
+        id: id ?? this.id,
+        weekLabel: weekLabel ?? this.weekLabel,
+        weekNumber: weekNumber.present ? weekNumber.value : this.weekNumber,
+        weekStart: weekStart ?? this.weekStart,
+        weekEnd: weekEnd ?? this.weekEnd,
+        runFocus: runFocus.present ? runFocus.value : this.runFocus,
+        strengthFocus:
+            strengthFocus.present ? strengthFocus.value : this.strengthFocus,
+        strengthProgressionExpectation: strengthProgressionExpectation.present
+            ? strengthProgressionExpectation.value
+            : this.strengthProgressionExpectation,
+        primaryProgressionTarget: primaryProgressionTarget.present
+            ? primaryProgressionTarget.value
+            : this.primaryProgressionTarget,
+        recoveryEmphasis: recoveryEmphasis.present
+            ? recoveryEmphasis.value
+            : this.recoveryEmphasis,
+        deload: deload ?? this.deload,
+        notes: notes.present ? notes.value : this.notes,
+        source: source ?? this.source,
+        lastPlanCycleId: lastPlanCycleId.present
+            ? lastPlanCycleId.value
+            : this.lastPlanCycleId,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  PlanLongRangeWeek copyWithCompanion(PlanLongRangeWeeksCompanion data) {
+    return PlanLongRangeWeek(
+      id: data.id.present ? data.id.value : this.id,
+      weekLabel: data.weekLabel.present ? data.weekLabel.value : this.weekLabel,
+      weekNumber:
+          data.weekNumber.present ? data.weekNumber.value : this.weekNumber,
+      weekStart: data.weekStart.present ? data.weekStart.value : this.weekStart,
+      weekEnd: data.weekEnd.present ? data.weekEnd.value : this.weekEnd,
+      runFocus: data.runFocus.present ? data.runFocus.value : this.runFocus,
+      strengthFocus: data.strengthFocus.present
+          ? data.strengthFocus.value
+          : this.strengthFocus,
+      strengthProgressionExpectation:
+          data.strengthProgressionExpectation.present
+              ? data.strengthProgressionExpectation.value
+              : this.strengthProgressionExpectation,
+      primaryProgressionTarget: data.primaryProgressionTarget.present
+          ? data.primaryProgressionTarget.value
+          : this.primaryProgressionTarget,
+      recoveryEmphasis: data.recoveryEmphasis.present
+          ? data.recoveryEmphasis.value
+          : this.recoveryEmphasis,
+      deload: data.deload.present ? data.deload.value : this.deload,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      source: data.source.present ? data.source.value : this.source,
+      lastPlanCycleId: data.lastPlanCycleId.present
+          ? data.lastPlanCycleId.value
+          : this.lastPlanCycleId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlanLongRangeWeek(')
+          ..write('id: $id, ')
+          ..write('weekLabel: $weekLabel, ')
+          ..write('weekNumber: $weekNumber, ')
+          ..write('weekStart: $weekStart, ')
+          ..write('weekEnd: $weekEnd, ')
+          ..write('runFocus: $runFocus, ')
+          ..write('strengthFocus: $strengthFocus, ')
+          ..write(
+              'strengthProgressionExpectation: $strengthProgressionExpectation, ')
+          ..write('primaryProgressionTarget: $primaryProgressionTarget, ')
+          ..write('recoveryEmphasis: $recoveryEmphasis, ')
+          ..write('deload: $deload, ')
+          ..write('notes: $notes, ')
+          ..write('source: $source, ')
+          ..write('lastPlanCycleId: $lastPlanCycleId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      weekLabel,
+      weekNumber,
+      weekStart,
+      weekEnd,
+      runFocus,
+      strengthFocus,
+      strengthProgressionExpectation,
+      primaryProgressionTarget,
+      recoveryEmphasis,
+      deload,
+      notes,
+      source,
+      lastPlanCycleId,
+      createdAt,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PlanLongRangeWeek &&
+          other.id == this.id &&
+          other.weekLabel == this.weekLabel &&
+          other.weekNumber == this.weekNumber &&
+          other.weekStart == this.weekStart &&
+          other.weekEnd == this.weekEnd &&
+          other.runFocus == this.runFocus &&
+          other.strengthFocus == this.strengthFocus &&
+          other.strengthProgressionExpectation ==
+              this.strengthProgressionExpectation &&
+          other.primaryProgressionTarget == this.primaryProgressionTarget &&
+          other.recoveryEmphasis == this.recoveryEmphasis &&
+          other.deload == this.deload &&
+          other.notes == this.notes &&
+          other.source == this.source &&
+          other.lastPlanCycleId == this.lastPlanCycleId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PlanLongRangeWeeksCompanion extends UpdateCompanion<PlanLongRangeWeek> {
+  final Value<String> id;
+  final Value<String> weekLabel;
+  final Value<int?> weekNumber;
+  final Value<String> weekStart;
+  final Value<String> weekEnd;
+  final Value<String?> runFocus;
+  final Value<String?> strengthFocus;
+  final Value<String?> strengthProgressionExpectation;
+  final Value<String?> primaryProgressionTarget;
+  final Value<String?> recoveryEmphasis;
+  final Value<bool> deload;
+  final Value<String?> notes;
+  final Value<String> source;
+  final Value<String?> lastPlanCycleId;
+  final Value<int> createdAt;
+  final Value<int> updatedAt;
+  final Value<int> rowid;
+  const PlanLongRangeWeeksCompanion({
+    this.id = const Value.absent(),
+    this.weekLabel = const Value.absent(),
+    this.weekNumber = const Value.absent(),
+    this.weekStart = const Value.absent(),
+    this.weekEnd = const Value.absent(),
+    this.runFocus = const Value.absent(),
+    this.strengthFocus = const Value.absent(),
+    this.strengthProgressionExpectation = const Value.absent(),
+    this.primaryProgressionTarget = const Value.absent(),
+    this.recoveryEmphasis = const Value.absent(),
+    this.deload = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.source = const Value.absent(),
+    this.lastPlanCycleId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PlanLongRangeWeeksCompanion.insert({
+    required String id,
+    required String weekLabel,
+    this.weekNumber = const Value.absent(),
+    required String weekStart,
+    required String weekEnd,
+    this.runFocus = const Value.absent(),
+    this.strengthFocus = const Value.absent(),
+    this.strengthProgressionExpectation = const Value.absent(),
+    this.primaryProgressionTarget = const Value.absent(),
+    this.recoveryEmphasis = const Value.absent(),
+    this.deload = const Value.absent(),
+    this.notes = const Value.absent(),
+    required String source,
+    this.lastPlanCycleId = const Value.absent(),
+    required int createdAt,
+    required int updatedAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        weekLabel = Value(weekLabel),
+        weekStart = Value(weekStart),
+        weekEnd = Value(weekEnd),
+        source = Value(source),
+        createdAt = Value(createdAt),
+        updatedAt = Value(updatedAt);
+  static Insertable<PlanLongRangeWeek> custom({
+    Expression<String>? id,
+    Expression<String>? weekLabel,
+    Expression<int>? weekNumber,
+    Expression<String>? weekStart,
+    Expression<String>? weekEnd,
+    Expression<String>? runFocus,
+    Expression<String>? strengthFocus,
+    Expression<String>? strengthProgressionExpectation,
+    Expression<String>? primaryProgressionTarget,
+    Expression<String>? recoveryEmphasis,
+    Expression<bool>? deload,
+    Expression<String>? notes,
+    Expression<String>? source,
+    Expression<String>? lastPlanCycleId,
+    Expression<int>? createdAt,
+    Expression<int>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (weekLabel != null) 'week_label': weekLabel,
+      if (weekNumber != null) 'week_number': weekNumber,
+      if (weekStart != null) 'week_start': weekStart,
+      if (weekEnd != null) 'week_end': weekEnd,
+      if (runFocus != null) 'run_focus': runFocus,
+      if (strengthFocus != null) 'strength_focus': strengthFocus,
+      if (strengthProgressionExpectation != null)
+        'strength_progression_expectation': strengthProgressionExpectation,
+      if (primaryProgressionTarget != null)
+        'primary_progression_target': primaryProgressionTarget,
+      if (recoveryEmphasis != null) 'recovery_emphasis': recoveryEmphasis,
+      if (deload != null) 'deload': deload,
+      if (notes != null) 'notes': notes,
+      if (source != null) 'source': source,
+      if (lastPlanCycleId != null) 'last_plan_cycle_id': lastPlanCycleId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PlanLongRangeWeeksCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? weekLabel,
+      Value<int?>? weekNumber,
+      Value<String>? weekStart,
+      Value<String>? weekEnd,
+      Value<String?>? runFocus,
+      Value<String?>? strengthFocus,
+      Value<String?>? strengthProgressionExpectation,
+      Value<String?>? primaryProgressionTarget,
+      Value<String?>? recoveryEmphasis,
+      Value<bool>? deload,
+      Value<String?>? notes,
+      Value<String>? source,
+      Value<String?>? lastPlanCycleId,
+      Value<int>? createdAt,
+      Value<int>? updatedAt,
+      Value<int>? rowid}) {
+    return PlanLongRangeWeeksCompanion(
+      id: id ?? this.id,
+      weekLabel: weekLabel ?? this.weekLabel,
+      weekNumber: weekNumber ?? this.weekNumber,
+      weekStart: weekStart ?? this.weekStart,
+      weekEnd: weekEnd ?? this.weekEnd,
+      runFocus: runFocus ?? this.runFocus,
+      strengthFocus: strengthFocus ?? this.strengthFocus,
+      strengthProgressionExpectation:
+          strengthProgressionExpectation ?? this.strengthProgressionExpectation,
+      primaryProgressionTarget:
+          primaryProgressionTarget ?? this.primaryProgressionTarget,
+      recoveryEmphasis: recoveryEmphasis ?? this.recoveryEmphasis,
+      deload: deload ?? this.deload,
+      notes: notes ?? this.notes,
+      source: source ?? this.source,
+      lastPlanCycleId: lastPlanCycleId ?? this.lastPlanCycleId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (weekLabel.present) {
+      map['week_label'] = Variable<String>(weekLabel.value);
+    }
+    if (weekNumber.present) {
+      map['week_number'] = Variable<int>(weekNumber.value);
+    }
+    if (weekStart.present) {
+      map['week_start'] = Variable<String>(weekStart.value);
+    }
+    if (weekEnd.present) {
+      map['week_end'] = Variable<String>(weekEnd.value);
+    }
+    if (runFocus.present) {
+      map['run_focus'] = Variable<String>(runFocus.value);
+    }
+    if (strengthFocus.present) {
+      map['strength_focus'] = Variable<String>(strengthFocus.value);
+    }
+    if (strengthProgressionExpectation.present) {
+      map['strength_progression_expectation'] =
+          Variable<String>(strengthProgressionExpectation.value);
+    }
+    if (primaryProgressionTarget.present) {
+      map['primary_progression_target'] =
+          Variable<String>(primaryProgressionTarget.value);
+    }
+    if (recoveryEmphasis.present) {
+      map['recovery_emphasis'] = Variable<String>(recoveryEmphasis.value);
+    }
+    if (deload.present) {
+      map['deload'] = Variable<bool>(deload.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (lastPlanCycleId.present) {
+      map['last_plan_cycle_id'] = Variable<String>(lastPlanCycleId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlanLongRangeWeeksCompanion(')
+          ..write('id: $id, ')
+          ..write('weekLabel: $weekLabel, ')
+          ..write('weekNumber: $weekNumber, ')
+          ..write('weekStart: $weekStart, ')
+          ..write('weekEnd: $weekEnd, ')
+          ..write('runFocus: $runFocus, ')
+          ..write('strengthFocus: $strengthFocus, ')
+          ..write(
+              'strengthProgressionExpectation: $strengthProgressionExpectation, ')
+          ..write('primaryProgressionTarget: $primaryProgressionTarget, ')
+          ..write('recoveryEmphasis: $recoveryEmphasis, ')
+          ..write('deload: $deload, ')
+          ..write('notes: $notes, ')
+          ..write('source: $source, ')
+          ..write('lastPlanCycleId: $lastPlanCycleId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PlanLongRangeWeekPerformanceTable extends PlanLongRangeWeekPerformance
+    with
+        TableInfo<$PlanLongRangeWeekPerformanceTable,
+            PlanLongRangeWeekPerformanceData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PlanLongRangeWeekPerformanceTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _planLongRangeWeekIdMeta =
+      const VerificationMeta('planLongRangeWeekId');
+  @override
+  late final GeneratedColumn<String> planLongRangeWeekId =
+      GeneratedColumn<String>('plan_long_range_week_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _weekLabelMeta =
+      const VerificationMeta('weekLabel');
+  @override
+  late final GeneratedColumn<String> weekLabel = GeneratedColumn<String>(
+      'week_label', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _weekNumberMeta =
+      const VerificationMeta('weekNumber');
+  @override
+  late final GeneratedColumn<int> weekNumber = GeneratedColumn<int>(
+      'week_number', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _weekStartMeta =
+      const VerificationMeta('weekStart');
+  @override
+  late final GeneratedColumn<String> weekStart = GeneratedColumn<String>(
+      'week_start', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _weekEndMeta =
+      const VerificationMeta('weekEnd');
+  @override
+  late final GeneratedColumn<String> weekEnd = GeneratedColumn<String>(
+      'week_end', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _evaluatedPlanCycleIdMeta =
+      const VerificationMeta('evaluatedPlanCycleId');
+  @override
+  late final GeneratedColumn<String> evaluatedPlanCycleId =
+      GeneratedColumn<String>('evaluated_plan_cycle_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _evaluationSourceMeta =
+      const VerificationMeta('evaluationSource');
+  @override
+  late final GeneratedColumn<String> evaluationSource = GeneratedColumn<String>(
+      'evaluation_source', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _plannedDayCountMeta =
+      const VerificationMeta('plannedDayCount');
+  @override
+  late final GeneratedColumn<int> plannedDayCount = GeneratedColumn<int>(
+      'planned_day_count', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _completedPlanDaysMeta =
+      const VerificationMeta('completedPlanDays');
+  @override
+  late final GeneratedColumn<int> completedPlanDays = GeneratedColumn<int>(
+      'completed_plan_days', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _plannedRunDaysMeta =
+      const VerificationMeta('plannedRunDays');
+  @override
+  late final GeneratedColumn<int> plannedRunDays = GeneratedColumn<int>(
+      'planned_run_days', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _actualRunDaysMeta =
+      const VerificationMeta('actualRunDays');
+  @override
+  late final GeneratedColumn<int> actualRunDays = GeneratedColumn<int>(
+      'actual_run_days', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _plannedRunSessionsMeta =
+      const VerificationMeta('plannedRunSessions');
+  @override
+  late final GeneratedColumn<int> plannedRunSessions = GeneratedColumn<int>(
+      'planned_run_sessions', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _actualRunSessionsMeta =
+      const VerificationMeta('actualRunSessions');
+  @override
+  late final GeneratedColumn<int> actualRunSessions = GeneratedColumn<int>(
+      'actual_run_sessions', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _plannedStrengthExercisesMeta =
+      const VerificationMeta('plannedStrengthExercises');
+  @override
+  late final GeneratedColumn<int> plannedStrengthExercises =
+      GeneratedColumn<int>('planned_strength_exercises', aliasedName, false,
+          type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _actualStrengthExercisesMeta =
+      const VerificationMeta('actualStrengthExercises');
+  @override
+  late final GeneratedColumn<int> actualStrengthExercises =
+      GeneratedColumn<int>('actual_strength_exercises', aliasedName, false,
+          type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _plannedStrengthSetsMeta =
+      const VerificationMeta('plannedStrengthSets');
+  @override
+  late final GeneratedColumn<int> plannedStrengthSets = GeneratedColumn<int>(
+      'planned_strength_sets', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _actualStrengthSetsMeta =
+      const VerificationMeta('actualStrengthSets');
+  @override
+  late final GeneratedColumn<int> actualStrengthSets = GeneratedColumn<int>(
+      'actual_strength_sets', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _strengthProgressionExpectationMeta =
+      const VerificationMeta('strengthProgressionExpectation');
+  @override
+  late final GeneratedColumn<String> strengthProgressionExpectation =
+      GeneratedColumn<String>(
+          'strength_progression_expectation', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _strengthProgressionEvaluationMeta =
+      const VerificationMeta('strengthProgressionEvaluation');
+  @override
+  late final GeneratedColumn<String> strengthProgressionEvaluation =
+      GeneratedColumn<String>(
+          'strength_progression_evaluation', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _actualRunDistanceMMeta =
+      const VerificationMeta('actualRunDistanceM');
+  @override
+  late final GeneratedColumn<double> actualRunDistanceM =
+      GeneratedColumn<double>('actual_run_distance_m', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _actualRunDurationSMeta =
+      const VerificationMeta('actualRunDurationS');
+  @override
+  late final GeneratedColumn<int> actualRunDurationS = GeneratedColumn<int>(
+      'actual_run_duration_s', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _metricsJsonMeta =
+      const VerificationMeta('metricsJson');
+  @override
+  late final GeneratedColumn<String> metricsJson = GeneratedColumn<String>(
+      'metrics_json', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _capturedAtMeta =
+      const VerificationMeta('capturedAt');
+  @override
+  late final GeneratedColumn<int> capturedAt = GeneratedColumn<int>(
+      'captured_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        planLongRangeWeekId,
+        weekLabel,
+        weekNumber,
+        weekStart,
+        weekEnd,
+        evaluatedPlanCycleId,
+        evaluationSource,
+        plannedDayCount,
+        completedPlanDays,
+        plannedRunDays,
+        actualRunDays,
+        plannedRunSessions,
+        actualRunSessions,
+        plannedStrengthExercises,
+        actualStrengthExercises,
+        plannedStrengthSets,
+        actualStrengthSets,
+        strengthProgressionExpectation,
+        strengthProgressionEvaluation,
+        actualRunDistanceM,
+        actualRunDurationS,
+        metricsJson,
+        capturedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'plan_long_range_week_performance';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<PlanLongRangeWeekPerformanceData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('plan_long_range_week_id')) {
+      context.handle(
+          _planLongRangeWeekIdMeta,
+          planLongRangeWeekId.isAcceptableOrUnknown(
+              data['plan_long_range_week_id']!, _planLongRangeWeekIdMeta));
+    }
+    if (data.containsKey('week_label')) {
+      context.handle(_weekLabelMeta,
+          weekLabel.isAcceptableOrUnknown(data['week_label']!, _weekLabelMeta));
+    }
+    if (data.containsKey('week_number')) {
+      context.handle(
+          _weekNumberMeta,
+          weekNumber.isAcceptableOrUnknown(
+              data['week_number']!, _weekNumberMeta));
+    }
+    if (data.containsKey('week_start')) {
+      context.handle(_weekStartMeta,
+          weekStart.isAcceptableOrUnknown(data['week_start']!, _weekStartMeta));
+    } else if (isInserting) {
+      context.missing(_weekStartMeta);
+    }
+    if (data.containsKey('week_end')) {
+      context.handle(_weekEndMeta,
+          weekEnd.isAcceptableOrUnknown(data['week_end']!, _weekEndMeta));
+    } else if (isInserting) {
+      context.missing(_weekEndMeta);
+    }
+    if (data.containsKey('evaluated_plan_cycle_id')) {
+      context.handle(
+          _evaluatedPlanCycleIdMeta,
+          evaluatedPlanCycleId.isAcceptableOrUnknown(
+              data['evaluated_plan_cycle_id']!, _evaluatedPlanCycleIdMeta));
+    }
+    if (data.containsKey('evaluation_source')) {
+      context.handle(
+          _evaluationSourceMeta,
+          evaluationSource.isAcceptableOrUnknown(
+              data['evaluation_source']!, _evaluationSourceMeta));
+    } else if (isInserting) {
+      context.missing(_evaluationSourceMeta);
+    }
+    if (data.containsKey('planned_day_count')) {
+      context.handle(
+          _plannedDayCountMeta,
+          plannedDayCount.isAcceptableOrUnknown(
+              data['planned_day_count']!, _plannedDayCountMeta));
+    } else if (isInserting) {
+      context.missing(_plannedDayCountMeta);
+    }
+    if (data.containsKey('completed_plan_days')) {
+      context.handle(
+          _completedPlanDaysMeta,
+          completedPlanDays.isAcceptableOrUnknown(
+              data['completed_plan_days']!, _completedPlanDaysMeta));
+    } else if (isInserting) {
+      context.missing(_completedPlanDaysMeta);
+    }
+    if (data.containsKey('planned_run_days')) {
+      context.handle(
+          _plannedRunDaysMeta,
+          plannedRunDays.isAcceptableOrUnknown(
+              data['planned_run_days']!, _plannedRunDaysMeta));
+    } else if (isInserting) {
+      context.missing(_plannedRunDaysMeta);
+    }
+    if (data.containsKey('actual_run_days')) {
+      context.handle(
+          _actualRunDaysMeta,
+          actualRunDays.isAcceptableOrUnknown(
+              data['actual_run_days']!, _actualRunDaysMeta));
+    } else if (isInserting) {
+      context.missing(_actualRunDaysMeta);
+    }
+    if (data.containsKey('planned_run_sessions')) {
+      context.handle(
+          _plannedRunSessionsMeta,
+          plannedRunSessions.isAcceptableOrUnknown(
+              data['planned_run_sessions']!, _plannedRunSessionsMeta));
+    } else if (isInserting) {
+      context.missing(_plannedRunSessionsMeta);
+    }
+    if (data.containsKey('actual_run_sessions')) {
+      context.handle(
+          _actualRunSessionsMeta,
+          actualRunSessions.isAcceptableOrUnknown(
+              data['actual_run_sessions']!, _actualRunSessionsMeta));
+    } else if (isInserting) {
+      context.missing(_actualRunSessionsMeta);
+    }
+    if (data.containsKey('planned_strength_exercises')) {
+      context.handle(
+          _plannedStrengthExercisesMeta,
+          plannedStrengthExercises.isAcceptableOrUnknown(
+              data['planned_strength_exercises']!,
+              _plannedStrengthExercisesMeta));
+    } else if (isInserting) {
+      context.missing(_plannedStrengthExercisesMeta);
+    }
+    if (data.containsKey('actual_strength_exercises')) {
+      context.handle(
+          _actualStrengthExercisesMeta,
+          actualStrengthExercises.isAcceptableOrUnknown(
+              data['actual_strength_exercises']!,
+              _actualStrengthExercisesMeta));
+    } else if (isInserting) {
+      context.missing(_actualStrengthExercisesMeta);
+    }
+    if (data.containsKey('planned_strength_sets')) {
+      context.handle(
+          _plannedStrengthSetsMeta,
+          plannedStrengthSets.isAcceptableOrUnknown(
+              data['planned_strength_sets']!, _plannedStrengthSetsMeta));
+    } else if (isInserting) {
+      context.missing(_plannedStrengthSetsMeta);
+    }
+    if (data.containsKey('actual_strength_sets')) {
+      context.handle(
+          _actualStrengthSetsMeta,
+          actualStrengthSets.isAcceptableOrUnknown(
+              data['actual_strength_sets']!, _actualStrengthSetsMeta));
+    } else if (isInserting) {
+      context.missing(_actualStrengthSetsMeta);
+    }
+    if (data.containsKey('strength_progression_expectation')) {
+      context.handle(
+          _strengthProgressionExpectationMeta,
+          strengthProgressionExpectation.isAcceptableOrUnknown(
+              data['strength_progression_expectation']!,
+              _strengthProgressionExpectationMeta));
+    }
+    if (data.containsKey('strength_progression_evaluation')) {
+      context.handle(
+          _strengthProgressionEvaluationMeta,
+          strengthProgressionEvaluation.isAcceptableOrUnknown(
+              data['strength_progression_evaluation']!,
+              _strengthProgressionEvaluationMeta));
+    }
+    if (data.containsKey('actual_run_distance_m')) {
+      context.handle(
+          _actualRunDistanceMMeta,
+          actualRunDistanceM.isAcceptableOrUnknown(
+              data['actual_run_distance_m']!, _actualRunDistanceMMeta));
+    }
+    if (data.containsKey('actual_run_duration_s')) {
+      context.handle(
+          _actualRunDurationSMeta,
+          actualRunDurationS.isAcceptableOrUnknown(
+              data['actual_run_duration_s']!, _actualRunDurationSMeta));
+    }
+    if (data.containsKey('metrics_json')) {
+      context.handle(
+          _metricsJsonMeta,
+          metricsJson.isAcceptableOrUnknown(
+              data['metrics_json']!, _metricsJsonMeta));
+    }
+    if (data.containsKey('captured_at')) {
+      context.handle(
+          _capturedAtMeta,
+          capturedAt.isAcceptableOrUnknown(
+              data['captured_at']!, _capturedAtMeta));
+    } else if (isInserting) {
+      context.missing(_capturedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PlanLongRangeWeekPerformanceData map(Map<String, dynamic> data,
+      {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PlanLongRangeWeekPerformanceData(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      planLongRangeWeekId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}plan_long_range_week_id']),
+      weekLabel: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}week_label']),
+      weekNumber: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}week_number']),
+      weekStart: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}week_start'])!,
+      weekEnd: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}week_end'])!,
+      evaluatedPlanCycleId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}evaluated_plan_cycle_id']),
+      evaluationSource: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}evaluation_source'])!,
+      plannedDayCount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}planned_day_count'])!,
+      completedPlanDays: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}completed_plan_days'])!,
+      plannedRunDays: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}planned_run_days'])!,
+      actualRunDays: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}actual_run_days'])!,
+      plannedRunSessions: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}planned_run_sessions'])!,
+      actualRunSessions: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}actual_run_sessions'])!,
+      plannedStrengthExercises: attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}planned_strength_exercises'])!,
+      actualStrengthExercises: attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}actual_strength_exercises'])!,
+      plannedStrengthSets: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}planned_strength_sets'])!,
+      actualStrengthSets: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}actual_strength_sets'])!,
+      strengthProgressionExpectation: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}strength_progression_expectation']),
+      strengthProgressionEvaluation: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}strength_progression_evaluation']),
+      actualRunDistanceM: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}actual_run_distance_m']),
+      actualRunDurationS: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}actual_run_duration_s']),
+      metricsJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}metrics_json']),
+      capturedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}captured_at'])!,
+    );
+  }
+
+  @override
+  $PlanLongRangeWeekPerformanceTable createAlias(String alias) {
+    return $PlanLongRangeWeekPerformanceTable(attachedDatabase, alias);
+  }
+}
+
+class PlanLongRangeWeekPerformanceData extends DataClass
+    implements Insertable<PlanLongRangeWeekPerformanceData> {
+  final String id;
+  final String? planLongRangeWeekId;
+  final String? weekLabel;
+  final int? weekNumber;
+  final String weekStart;
+  final String weekEnd;
+  final String? evaluatedPlanCycleId;
+  final String evaluationSource;
+  final int plannedDayCount;
+  final int completedPlanDays;
+  final int plannedRunDays;
+  final int actualRunDays;
+  final int plannedRunSessions;
+  final int actualRunSessions;
+  final int plannedStrengthExercises;
+  final int actualStrengthExercises;
+  final int plannedStrengthSets;
+  final int actualStrengthSets;
+  final String? strengthProgressionExpectation;
+  final String? strengthProgressionEvaluation;
+  final double? actualRunDistanceM;
+  final int? actualRunDurationS;
+  final String? metricsJson;
+  final int capturedAt;
+  const PlanLongRangeWeekPerformanceData(
+      {required this.id,
+      this.planLongRangeWeekId,
+      this.weekLabel,
+      this.weekNumber,
+      required this.weekStart,
+      required this.weekEnd,
+      this.evaluatedPlanCycleId,
+      required this.evaluationSource,
+      required this.plannedDayCount,
+      required this.completedPlanDays,
+      required this.plannedRunDays,
+      required this.actualRunDays,
+      required this.plannedRunSessions,
+      required this.actualRunSessions,
+      required this.plannedStrengthExercises,
+      required this.actualStrengthExercises,
+      required this.plannedStrengthSets,
+      required this.actualStrengthSets,
+      this.strengthProgressionExpectation,
+      this.strengthProgressionEvaluation,
+      this.actualRunDistanceM,
+      this.actualRunDurationS,
+      this.metricsJson,
+      required this.capturedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || planLongRangeWeekId != null) {
+      map['plan_long_range_week_id'] = Variable<String>(planLongRangeWeekId);
+    }
+    if (!nullToAbsent || weekLabel != null) {
+      map['week_label'] = Variable<String>(weekLabel);
+    }
+    if (!nullToAbsent || weekNumber != null) {
+      map['week_number'] = Variable<int>(weekNumber);
+    }
+    map['week_start'] = Variable<String>(weekStart);
+    map['week_end'] = Variable<String>(weekEnd);
+    if (!nullToAbsent || evaluatedPlanCycleId != null) {
+      map['evaluated_plan_cycle_id'] = Variable<String>(evaluatedPlanCycleId);
+    }
+    map['evaluation_source'] = Variable<String>(evaluationSource);
+    map['planned_day_count'] = Variable<int>(plannedDayCount);
+    map['completed_plan_days'] = Variable<int>(completedPlanDays);
+    map['planned_run_days'] = Variable<int>(plannedRunDays);
+    map['actual_run_days'] = Variable<int>(actualRunDays);
+    map['planned_run_sessions'] = Variable<int>(plannedRunSessions);
+    map['actual_run_sessions'] = Variable<int>(actualRunSessions);
+    map['planned_strength_exercises'] = Variable<int>(plannedStrengthExercises);
+    map['actual_strength_exercises'] = Variable<int>(actualStrengthExercises);
+    map['planned_strength_sets'] = Variable<int>(plannedStrengthSets);
+    map['actual_strength_sets'] = Variable<int>(actualStrengthSets);
+    if (!nullToAbsent || strengthProgressionExpectation != null) {
+      map['strength_progression_expectation'] =
+          Variable<String>(strengthProgressionExpectation);
+    }
+    if (!nullToAbsent || strengthProgressionEvaluation != null) {
+      map['strength_progression_evaluation'] =
+          Variable<String>(strengthProgressionEvaluation);
+    }
+    if (!nullToAbsent || actualRunDistanceM != null) {
+      map['actual_run_distance_m'] = Variable<double>(actualRunDistanceM);
+    }
+    if (!nullToAbsent || actualRunDurationS != null) {
+      map['actual_run_duration_s'] = Variable<int>(actualRunDurationS);
+    }
+    if (!nullToAbsent || metricsJson != null) {
+      map['metrics_json'] = Variable<String>(metricsJson);
+    }
+    map['captured_at'] = Variable<int>(capturedAt);
+    return map;
+  }
+
+  PlanLongRangeWeekPerformanceCompanion toCompanion(bool nullToAbsent) {
+    return PlanLongRangeWeekPerformanceCompanion(
+      id: Value(id),
+      planLongRangeWeekId: planLongRangeWeekId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(planLongRangeWeekId),
+      weekLabel: weekLabel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weekLabel),
+      weekNumber: weekNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weekNumber),
+      weekStart: Value(weekStart),
+      weekEnd: Value(weekEnd),
+      evaluatedPlanCycleId: evaluatedPlanCycleId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(evaluatedPlanCycleId),
+      evaluationSource: Value(evaluationSource),
+      plannedDayCount: Value(plannedDayCount),
+      completedPlanDays: Value(completedPlanDays),
+      plannedRunDays: Value(plannedRunDays),
+      actualRunDays: Value(actualRunDays),
+      plannedRunSessions: Value(plannedRunSessions),
+      actualRunSessions: Value(actualRunSessions),
+      plannedStrengthExercises: Value(plannedStrengthExercises),
+      actualStrengthExercises: Value(actualStrengthExercises),
+      plannedStrengthSets: Value(plannedStrengthSets),
+      actualStrengthSets: Value(actualStrengthSets),
+      strengthProgressionExpectation:
+          strengthProgressionExpectation == null && nullToAbsent
+              ? const Value.absent()
+              : Value(strengthProgressionExpectation),
+      strengthProgressionEvaluation:
+          strengthProgressionEvaluation == null && nullToAbsent
+              ? const Value.absent()
+              : Value(strengthProgressionEvaluation),
+      actualRunDistanceM: actualRunDistanceM == null && nullToAbsent
+          ? const Value.absent()
+          : Value(actualRunDistanceM),
+      actualRunDurationS: actualRunDurationS == null && nullToAbsent
+          ? const Value.absent()
+          : Value(actualRunDurationS),
+      metricsJson: metricsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(metricsJson),
+      capturedAt: Value(capturedAt),
+    );
+  }
+
+  factory PlanLongRangeWeekPerformanceData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PlanLongRangeWeekPerformanceData(
+      id: serializer.fromJson<String>(json['id']),
+      planLongRangeWeekId:
+          serializer.fromJson<String?>(json['planLongRangeWeekId']),
+      weekLabel: serializer.fromJson<String?>(json['weekLabel']),
+      weekNumber: serializer.fromJson<int?>(json['weekNumber']),
+      weekStart: serializer.fromJson<String>(json['weekStart']),
+      weekEnd: serializer.fromJson<String>(json['weekEnd']),
+      evaluatedPlanCycleId:
+          serializer.fromJson<String?>(json['evaluatedPlanCycleId']),
+      evaluationSource: serializer.fromJson<String>(json['evaluationSource']),
+      plannedDayCount: serializer.fromJson<int>(json['plannedDayCount']),
+      completedPlanDays: serializer.fromJson<int>(json['completedPlanDays']),
+      plannedRunDays: serializer.fromJson<int>(json['plannedRunDays']),
+      actualRunDays: serializer.fromJson<int>(json['actualRunDays']),
+      plannedRunSessions: serializer.fromJson<int>(json['plannedRunSessions']),
+      actualRunSessions: serializer.fromJson<int>(json['actualRunSessions']),
+      plannedStrengthExercises:
+          serializer.fromJson<int>(json['plannedStrengthExercises']),
+      actualStrengthExercises:
+          serializer.fromJson<int>(json['actualStrengthExercises']),
+      plannedStrengthSets:
+          serializer.fromJson<int>(json['plannedStrengthSets']),
+      actualStrengthSets: serializer.fromJson<int>(json['actualStrengthSets']),
+      strengthProgressionExpectation:
+          serializer.fromJson<String?>(json['strengthProgressionExpectation']),
+      strengthProgressionEvaluation:
+          serializer.fromJson<String?>(json['strengthProgressionEvaluation']),
+      actualRunDistanceM:
+          serializer.fromJson<double?>(json['actualRunDistanceM']),
+      actualRunDurationS: serializer.fromJson<int?>(json['actualRunDurationS']),
+      metricsJson: serializer.fromJson<String?>(json['metricsJson']),
+      capturedAt: serializer.fromJson<int>(json['capturedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'planLongRangeWeekId': serializer.toJson<String?>(planLongRangeWeekId),
+      'weekLabel': serializer.toJson<String?>(weekLabel),
+      'weekNumber': serializer.toJson<int?>(weekNumber),
+      'weekStart': serializer.toJson<String>(weekStart),
+      'weekEnd': serializer.toJson<String>(weekEnd),
+      'evaluatedPlanCycleId': serializer.toJson<String?>(evaluatedPlanCycleId),
+      'evaluationSource': serializer.toJson<String>(evaluationSource),
+      'plannedDayCount': serializer.toJson<int>(plannedDayCount),
+      'completedPlanDays': serializer.toJson<int>(completedPlanDays),
+      'plannedRunDays': serializer.toJson<int>(plannedRunDays),
+      'actualRunDays': serializer.toJson<int>(actualRunDays),
+      'plannedRunSessions': serializer.toJson<int>(plannedRunSessions),
+      'actualRunSessions': serializer.toJson<int>(actualRunSessions),
+      'plannedStrengthExercises':
+          serializer.toJson<int>(plannedStrengthExercises),
+      'actualStrengthExercises':
+          serializer.toJson<int>(actualStrengthExercises),
+      'plannedStrengthSets': serializer.toJson<int>(plannedStrengthSets),
+      'actualStrengthSets': serializer.toJson<int>(actualStrengthSets),
+      'strengthProgressionExpectation':
+          serializer.toJson<String?>(strengthProgressionExpectation),
+      'strengthProgressionEvaluation':
+          serializer.toJson<String?>(strengthProgressionEvaluation),
+      'actualRunDistanceM': serializer.toJson<double?>(actualRunDistanceM),
+      'actualRunDurationS': serializer.toJson<int?>(actualRunDurationS),
+      'metricsJson': serializer.toJson<String?>(metricsJson),
+      'capturedAt': serializer.toJson<int>(capturedAt),
+    };
+  }
+
+  PlanLongRangeWeekPerformanceData copyWith(
+          {String? id,
+          Value<String?> planLongRangeWeekId = const Value.absent(),
+          Value<String?> weekLabel = const Value.absent(),
+          Value<int?> weekNumber = const Value.absent(),
+          String? weekStart,
+          String? weekEnd,
+          Value<String?> evaluatedPlanCycleId = const Value.absent(),
+          String? evaluationSource,
+          int? plannedDayCount,
+          int? completedPlanDays,
+          int? plannedRunDays,
+          int? actualRunDays,
+          int? plannedRunSessions,
+          int? actualRunSessions,
+          int? plannedStrengthExercises,
+          int? actualStrengthExercises,
+          int? plannedStrengthSets,
+          int? actualStrengthSets,
+          Value<String?> strengthProgressionExpectation = const Value.absent(),
+          Value<String?> strengthProgressionEvaluation = const Value.absent(),
+          Value<double?> actualRunDistanceM = const Value.absent(),
+          Value<int?> actualRunDurationS = const Value.absent(),
+          Value<String?> metricsJson = const Value.absent(),
+          int? capturedAt}) =>
+      PlanLongRangeWeekPerformanceData(
+        id: id ?? this.id,
+        planLongRangeWeekId: planLongRangeWeekId.present
+            ? planLongRangeWeekId.value
+            : this.planLongRangeWeekId,
+        weekLabel: weekLabel.present ? weekLabel.value : this.weekLabel,
+        weekNumber: weekNumber.present ? weekNumber.value : this.weekNumber,
+        weekStart: weekStart ?? this.weekStart,
+        weekEnd: weekEnd ?? this.weekEnd,
+        evaluatedPlanCycleId: evaluatedPlanCycleId.present
+            ? evaluatedPlanCycleId.value
+            : this.evaluatedPlanCycleId,
+        evaluationSource: evaluationSource ?? this.evaluationSource,
+        plannedDayCount: plannedDayCount ?? this.plannedDayCount,
+        completedPlanDays: completedPlanDays ?? this.completedPlanDays,
+        plannedRunDays: plannedRunDays ?? this.plannedRunDays,
+        actualRunDays: actualRunDays ?? this.actualRunDays,
+        plannedRunSessions: plannedRunSessions ?? this.plannedRunSessions,
+        actualRunSessions: actualRunSessions ?? this.actualRunSessions,
+        plannedStrengthExercises:
+            plannedStrengthExercises ?? this.plannedStrengthExercises,
+        actualStrengthExercises:
+            actualStrengthExercises ?? this.actualStrengthExercises,
+        plannedStrengthSets: plannedStrengthSets ?? this.plannedStrengthSets,
+        actualStrengthSets: actualStrengthSets ?? this.actualStrengthSets,
+        strengthProgressionExpectation: strengthProgressionExpectation.present
+            ? strengthProgressionExpectation.value
+            : this.strengthProgressionExpectation,
+        strengthProgressionEvaluation: strengthProgressionEvaluation.present
+            ? strengthProgressionEvaluation.value
+            : this.strengthProgressionEvaluation,
+        actualRunDistanceM: actualRunDistanceM.present
+            ? actualRunDistanceM.value
+            : this.actualRunDistanceM,
+        actualRunDurationS: actualRunDurationS.present
+            ? actualRunDurationS.value
+            : this.actualRunDurationS,
+        metricsJson: metricsJson.present ? metricsJson.value : this.metricsJson,
+        capturedAt: capturedAt ?? this.capturedAt,
+      );
+  PlanLongRangeWeekPerformanceData copyWithCompanion(
+      PlanLongRangeWeekPerformanceCompanion data) {
+    return PlanLongRangeWeekPerformanceData(
+      id: data.id.present ? data.id.value : this.id,
+      planLongRangeWeekId: data.planLongRangeWeekId.present
+          ? data.planLongRangeWeekId.value
+          : this.planLongRangeWeekId,
+      weekLabel: data.weekLabel.present ? data.weekLabel.value : this.weekLabel,
+      weekNumber:
+          data.weekNumber.present ? data.weekNumber.value : this.weekNumber,
+      weekStart: data.weekStart.present ? data.weekStart.value : this.weekStart,
+      weekEnd: data.weekEnd.present ? data.weekEnd.value : this.weekEnd,
+      evaluatedPlanCycleId: data.evaluatedPlanCycleId.present
+          ? data.evaluatedPlanCycleId.value
+          : this.evaluatedPlanCycleId,
+      evaluationSource: data.evaluationSource.present
+          ? data.evaluationSource.value
+          : this.evaluationSource,
+      plannedDayCount: data.plannedDayCount.present
+          ? data.plannedDayCount.value
+          : this.plannedDayCount,
+      completedPlanDays: data.completedPlanDays.present
+          ? data.completedPlanDays.value
+          : this.completedPlanDays,
+      plannedRunDays: data.plannedRunDays.present
+          ? data.plannedRunDays.value
+          : this.plannedRunDays,
+      actualRunDays: data.actualRunDays.present
+          ? data.actualRunDays.value
+          : this.actualRunDays,
+      plannedRunSessions: data.plannedRunSessions.present
+          ? data.plannedRunSessions.value
+          : this.plannedRunSessions,
+      actualRunSessions: data.actualRunSessions.present
+          ? data.actualRunSessions.value
+          : this.actualRunSessions,
+      plannedStrengthExercises: data.plannedStrengthExercises.present
+          ? data.plannedStrengthExercises.value
+          : this.plannedStrengthExercises,
+      actualStrengthExercises: data.actualStrengthExercises.present
+          ? data.actualStrengthExercises.value
+          : this.actualStrengthExercises,
+      plannedStrengthSets: data.plannedStrengthSets.present
+          ? data.plannedStrengthSets.value
+          : this.plannedStrengthSets,
+      actualStrengthSets: data.actualStrengthSets.present
+          ? data.actualStrengthSets.value
+          : this.actualStrengthSets,
+      strengthProgressionExpectation:
+          data.strengthProgressionExpectation.present
+              ? data.strengthProgressionExpectation.value
+              : this.strengthProgressionExpectation,
+      strengthProgressionEvaluation: data.strengthProgressionEvaluation.present
+          ? data.strengthProgressionEvaluation.value
+          : this.strengthProgressionEvaluation,
+      actualRunDistanceM: data.actualRunDistanceM.present
+          ? data.actualRunDistanceM.value
+          : this.actualRunDistanceM,
+      actualRunDurationS: data.actualRunDurationS.present
+          ? data.actualRunDurationS.value
+          : this.actualRunDurationS,
+      metricsJson:
+          data.metricsJson.present ? data.metricsJson.value : this.metricsJson,
+      capturedAt:
+          data.capturedAt.present ? data.capturedAt.value : this.capturedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlanLongRangeWeekPerformanceData(')
+          ..write('id: $id, ')
+          ..write('planLongRangeWeekId: $planLongRangeWeekId, ')
+          ..write('weekLabel: $weekLabel, ')
+          ..write('weekNumber: $weekNumber, ')
+          ..write('weekStart: $weekStart, ')
+          ..write('weekEnd: $weekEnd, ')
+          ..write('evaluatedPlanCycleId: $evaluatedPlanCycleId, ')
+          ..write('evaluationSource: $evaluationSource, ')
+          ..write('plannedDayCount: $plannedDayCount, ')
+          ..write('completedPlanDays: $completedPlanDays, ')
+          ..write('plannedRunDays: $plannedRunDays, ')
+          ..write('actualRunDays: $actualRunDays, ')
+          ..write('plannedRunSessions: $plannedRunSessions, ')
+          ..write('actualRunSessions: $actualRunSessions, ')
+          ..write('plannedStrengthExercises: $plannedStrengthExercises, ')
+          ..write('actualStrengthExercises: $actualStrengthExercises, ')
+          ..write('plannedStrengthSets: $plannedStrengthSets, ')
+          ..write('actualStrengthSets: $actualStrengthSets, ')
+          ..write(
+              'strengthProgressionExpectation: $strengthProgressionExpectation, ')
+          ..write(
+              'strengthProgressionEvaluation: $strengthProgressionEvaluation, ')
+          ..write('actualRunDistanceM: $actualRunDistanceM, ')
+          ..write('actualRunDurationS: $actualRunDurationS, ')
+          ..write('metricsJson: $metricsJson, ')
+          ..write('capturedAt: $capturedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+        id,
+        planLongRangeWeekId,
+        weekLabel,
+        weekNumber,
+        weekStart,
+        weekEnd,
+        evaluatedPlanCycleId,
+        evaluationSource,
+        plannedDayCount,
+        completedPlanDays,
+        plannedRunDays,
+        actualRunDays,
+        plannedRunSessions,
+        actualRunSessions,
+        plannedStrengthExercises,
+        actualStrengthExercises,
+        plannedStrengthSets,
+        actualStrengthSets,
+        strengthProgressionExpectation,
+        strengthProgressionEvaluation,
+        actualRunDistanceM,
+        actualRunDurationS,
+        metricsJson,
+        capturedAt
+      ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PlanLongRangeWeekPerformanceData &&
+          other.id == this.id &&
+          other.planLongRangeWeekId == this.planLongRangeWeekId &&
+          other.weekLabel == this.weekLabel &&
+          other.weekNumber == this.weekNumber &&
+          other.weekStart == this.weekStart &&
+          other.weekEnd == this.weekEnd &&
+          other.evaluatedPlanCycleId == this.evaluatedPlanCycleId &&
+          other.evaluationSource == this.evaluationSource &&
+          other.plannedDayCount == this.plannedDayCount &&
+          other.completedPlanDays == this.completedPlanDays &&
+          other.plannedRunDays == this.plannedRunDays &&
+          other.actualRunDays == this.actualRunDays &&
+          other.plannedRunSessions == this.plannedRunSessions &&
+          other.actualRunSessions == this.actualRunSessions &&
+          other.plannedStrengthExercises == this.plannedStrengthExercises &&
+          other.actualStrengthExercises == this.actualStrengthExercises &&
+          other.plannedStrengthSets == this.plannedStrengthSets &&
+          other.actualStrengthSets == this.actualStrengthSets &&
+          other.strengthProgressionExpectation ==
+              this.strengthProgressionExpectation &&
+          other.strengthProgressionEvaluation ==
+              this.strengthProgressionEvaluation &&
+          other.actualRunDistanceM == this.actualRunDistanceM &&
+          other.actualRunDurationS == this.actualRunDurationS &&
+          other.metricsJson == this.metricsJson &&
+          other.capturedAt == this.capturedAt);
+}
+
+class PlanLongRangeWeekPerformanceCompanion
+    extends UpdateCompanion<PlanLongRangeWeekPerformanceData> {
+  final Value<String> id;
+  final Value<String?> planLongRangeWeekId;
+  final Value<String?> weekLabel;
+  final Value<int?> weekNumber;
+  final Value<String> weekStart;
+  final Value<String> weekEnd;
+  final Value<String?> evaluatedPlanCycleId;
+  final Value<String> evaluationSource;
+  final Value<int> plannedDayCount;
+  final Value<int> completedPlanDays;
+  final Value<int> plannedRunDays;
+  final Value<int> actualRunDays;
+  final Value<int> plannedRunSessions;
+  final Value<int> actualRunSessions;
+  final Value<int> plannedStrengthExercises;
+  final Value<int> actualStrengthExercises;
+  final Value<int> plannedStrengthSets;
+  final Value<int> actualStrengthSets;
+  final Value<String?> strengthProgressionExpectation;
+  final Value<String?> strengthProgressionEvaluation;
+  final Value<double?> actualRunDistanceM;
+  final Value<int?> actualRunDurationS;
+  final Value<String?> metricsJson;
+  final Value<int> capturedAt;
+  final Value<int> rowid;
+  const PlanLongRangeWeekPerformanceCompanion({
+    this.id = const Value.absent(),
+    this.planLongRangeWeekId = const Value.absent(),
+    this.weekLabel = const Value.absent(),
+    this.weekNumber = const Value.absent(),
+    this.weekStart = const Value.absent(),
+    this.weekEnd = const Value.absent(),
+    this.evaluatedPlanCycleId = const Value.absent(),
+    this.evaluationSource = const Value.absent(),
+    this.plannedDayCount = const Value.absent(),
+    this.completedPlanDays = const Value.absent(),
+    this.plannedRunDays = const Value.absent(),
+    this.actualRunDays = const Value.absent(),
+    this.plannedRunSessions = const Value.absent(),
+    this.actualRunSessions = const Value.absent(),
+    this.plannedStrengthExercises = const Value.absent(),
+    this.actualStrengthExercises = const Value.absent(),
+    this.plannedStrengthSets = const Value.absent(),
+    this.actualStrengthSets = const Value.absent(),
+    this.strengthProgressionExpectation = const Value.absent(),
+    this.strengthProgressionEvaluation = const Value.absent(),
+    this.actualRunDistanceM = const Value.absent(),
+    this.actualRunDurationS = const Value.absent(),
+    this.metricsJson = const Value.absent(),
+    this.capturedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PlanLongRangeWeekPerformanceCompanion.insert({
+    required String id,
+    this.planLongRangeWeekId = const Value.absent(),
+    this.weekLabel = const Value.absent(),
+    this.weekNumber = const Value.absent(),
+    required String weekStart,
+    required String weekEnd,
+    this.evaluatedPlanCycleId = const Value.absent(),
+    required String evaluationSource,
+    required int plannedDayCount,
+    required int completedPlanDays,
+    required int plannedRunDays,
+    required int actualRunDays,
+    required int plannedRunSessions,
+    required int actualRunSessions,
+    required int plannedStrengthExercises,
+    required int actualStrengthExercises,
+    required int plannedStrengthSets,
+    required int actualStrengthSets,
+    this.strengthProgressionExpectation = const Value.absent(),
+    this.strengthProgressionEvaluation = const Value.absent(),
+    this.actualRunDistanceM = const Value.absent(),
+    this.actualRunDurationS = const Value.absent(),
+    this.metricsJson = const Value.absent(),
+    required int capturedAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        weekStart = Value(weekStart),
+        weekEnd = Value(weekEnd),
+        evaluationSource = Value(evaluationSource),
+        plannedDayCount = Value(plannedDayCount),
+        completedPlanDays = Value(completedPlanDays),
+        plannedRunDays = Value(plannedRunDays),
+        actualRunDays = Value(actualRunDays),
+        plannedRunSessions = Value(plannedRunSessions),
+        actualRunSessions = Value(actualRunSessions),
+        plannedStrengthExercises = Value(plannedStrengthExercises),
+        actualStrengthExercises = Value(actualStrengthExercises),
+        plannedStrengthSets = Value(plannedStrengthSets),
+        actualStrengthSets = Value(actualStrengthSets),
+        capturedAt = Value(capturedAt);
+  static Insertable<PlanLongRangeWeekPerformanceData> custom({
+    Expression<String>? id,
+    Expression<String>? planLongRangeWeekId,
+    Expression<String>? weekLabel,
+    Expression<int>? weekNumber,
+    Expression<String>? weekStart,
+    Expression<String>? weekEnd,
+    Expression<String>? evaluatedPlanCycleId,
+    Expression<String>? evaluationSource,
+    Expression<int>? plannedDayCount,
+    Expression<int>? completedPlanDays,
+    Expression<int>? plannedRunDays,
+    Expression<int>? actualRunDays,
+    Expression<int>? plannedRunSessions,
+    Expression<int>? actualRunSessions,
+    Expression<int>? plannedStrengthExercises,
+    Expression<int>? actualStrengthExercises,
+    Expression<int>? plannedStrengthSets,
+    Expression<int>? actualStrengthSets,
+    Expression<String>? strengthProgressionExpectation,
+    Expression<String>? strengthProgressionEvaluation,
+    Expression<double>? actualRunDistanceM,
+    Expression<int>? actualRunDurationS,
+    Expression<String>? metricsJson,
+    Expression<int>? capturedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (planLongRangeWeekId != null)
+        'plan_long_range_week_id': planLongRangeWeekId,
+      if (weekLabel != null) 'week_label': weekLabel,
+      if (weekNumber != null) 'week_number': weekNumber,
+      if (weekStart != null) 'week_start': weekStart,
+      if (weekEnd != null) 'week_end': weekEnd,
+      if (evaluatedPlanCycleId != null)
+        'evaluated_plan_cycle_id': evaluatedPlanCycleId,
+      if (evaluationSource != null) 'evaluation_source': evaluationSource,
+      if (plannedDayCount != null) 'planned_day_count': plannedDayCount,
+      if (completedPlanDays != null) 'completed_plan_days': completedPlanDays,
+      if (plannedRunDays != null) 'planned_run_days': plannedRunDays,
+      if (actualRunDays != null) 'actual_run_days': actualRunDays,
+      if (plannedRunSessions != null)
+        'planned_run_sessions': plannedRunSessions,
+      if (actualRunSessions != null) 'actual_run_sessions': actualRunSessions,
+      if (plannedStrengthExercises != null)
+        'planned_strength_exercises': plannedStrengthExercises,
+      if (actualStrengthExercises != null)
+        'actual_strength_exercises': actualStrengthExercises,
+      if (plannedStrengthSets != null)
+        'planned_strength_sets': plannedStrengthSets,
+      if (actualStrengthSets != null)
+        'actual_strength_sets': actualStrengthSets,
+      if (strengthProgressionExpectation != null)
+        'strength_progression_expectation': strengthProgressionExpectation,
+      if (strengthProgressionEvaluation != null)
+        'strength_progression_evaluation': strengthProgressionEvaluation,
+      if (actualRunDistanceM != null)
+        'actual_run_distance_m': actualRunDistanceM,
+      if (actualRunDurationS != null)
+        'actual_run_duration_s': actualRunDurationS,
+      if (metricsJson != null) 'metrics_json': metricsJson,
+      if (capturedAt != null) 'captured_at': capturedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PlanLongRangeWeekPerformanceCompanion copyWith(
+      {Value<String>? id,
+      Value<String?>? planLongRangeWeekId,
+      Value<String?>? weekLabel,
+      Value<int?>? weekNumber,
+      Value<String>? weekStart,
+      Value<String>? weekEnd,
+      Value<String?>? evaluatedPlanCycleId,
+      Value<String>? evaluationSource,
+      Value<int>? plannedDayCount,
+      Value<int>? completedPlanDays,
+      Value<int>? plannedRunDays,
+      Value<int>? actualRunDays,
+      Value<int>? plannedRunSessions,
+      Value<int>? actualRunSessions,
+      Value<int>? plannedStrengthExercises,
+      Value<int>? actualStrengthExercises,
+      Value<int>? plannedStrengthSets,
+      Value<int>? actualStrengthSets,
+      Value<String?>? strengthProgressionExpectation,
+      Value<String?>? strengthProgressionEvaluation,
+      Value<double?>? actualRunDistanceM,
+      Value<int?>? actualRunDurationS,
+      Value<String?>? metricsJson,
+      Value<int>? capturedAt,
+      Value<int>? rowid}) {
+    return PlanLongRangeWeekPerformanceCompanion(
+      id: id ?? this.id,
+      planLongRangeWeekId: planLongRangeWeekId ?? this.planLongRangeWeekId,
+      weekLabel: weekLabel ?? this.weekLabel,
+      weekNumber: weekNumber ?? this.weekNumber,
+      weekStart: weekStart ?? this.weekStart,
+      weekEnd: weekEnd ?? this.weekEnd,
+      evaluatedPlanCycleId: evaluatedPlanCycleId ?? this.evaluatedPlanCycleId,
+      evaluationSource: evaluationSource ?? this.evaluationSource,
+      plannedDayCount: plannedDayCount ?? this.plannedDayCount,
+      completedPlanDays: completedPlanDays ?? this.completedPlanDays,
+      plannedRunDays: plannedRunDays ?? this.plannedRunDays,
+      actualRunDays: actualRunDays ?? this.actualRunDays,
+      plannedRunSessions: plannedRunSessions ?? this.plannedRunSessions,
+      actualRunSessions: actualRunSessions ?? this.actualRunSessions,
+      plannedStrengthExercises:
+          plannedStrengthExercises ?? this.plannedStrengthExercises,
+      actualStrengthExercises:
+          actualStrengthExercises ?? this.actualStrengthExercises,
+      plannedStrengthSets: plannedStrengthSets ?? this.plannedStrengthSets,
+      actualStrengthSets: actualStrengthSets ?? this.actualStrengthSets,
+      strengthProgressionExpectation:
+          strengthProgressionExpectation ?? this.strengthProgressionExpectation,
+      strengthProgressionEvaluation:
+          strengthProgressionEvaluation ?? this.strengthProgressionEvaluation,
+      actualRunDistanceM: actualRunDistanceM ?? this.actualRunDistanceM,
+      actualRunDurationS: actualRunDurationS ?? this.actualRunDurationS,
+      metricsJson: metricsJson ?? this.metricsJson,
+      capturedAt: capturedAt ?? this.capturedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (planLongRangeWeekId.present) {
+      map['plan_long_range_week_id'] =
+          Variable<String>(planLongRangeWeekId.value);
+    }
+    if (weekLabel.present) {
+      map['week_label'] = Variable<String>(weekLabel.value);
+    }
+    if (weekNumber.present) {
+      map['week_number'] = Variable<int>(weekNumber.value);
+    }
+    if (weekStart.present) {
+      map['week_start'] = Variable<String>(weekStart.value);
+    }
+    if (weekEnd.present) {
+      map['week_end'] = Variable<String>(weekEnd.value);
+    }
+    if (evaluatedPlanCycleId.present) {
+      map['evaluated_plan_cycle_id'] =
+          Variable<String>(evaluatedPlanCycleId.value);
+    }
+    if (evaluationSource.present) {
+      map['evaluation_source'] = Variable<String>(evaluationSource.value);
+    }
+    if (plannedDayCount.present) {
+      map['planned_day_count'] = Variable<int>(plannedDayCount.value);
+    }
+    if (completedPlanDays.present) {
+      map['completed_plan_days'] = Variable<int>(completedPlanDays.value);
+    }
+    if (plannedRunDays.present) {
+      map['planned_run_days'] = Variable<int>(plannedRunDays.value);
+    }
+    if (actualRunDays.present) {
+      map['actual_run_days'] = Variable<int>(actualRunDays.value);
+    }
+    if (plannedRunSessions.present) {
+      map['planned_run_sessions'] = Variable<int>(plannedRunSessions.value);
+    }
+    if (actualRunSessions.present) {
+      map['actual_run_sessions'] = Variable<int>(actualRunSessions.value);
+    }
+    if (plannedStrengthExercises.present) {
+      map['planned_strength_exercises'] =
+          Variable<int>(plannedStrengthExercises.value);
+    }
+    if (actualStrengthExercises.present) {
+      map['actual_strength_exercises'] =
+          Variable<int>(actualStrengthExercises.value);
+    }
+    if (plannedStrengthSets.present) {
+      map['planned_strength_sets'] = Variable<int>(plannedStrengthSets.value);
+    }
+    if (actualStrengthSets.present) {
+      map['actual_strength_sets'] = Variable<int>(actualStrengthSets.value);
+    }
+    if (strengthProgressionExpectation.present) {
+      map['strength_progression_expectation'] =
+          Variable<String>(strengthProgressionExpectation.value);
+    }
+    if (strengthProgressionEvaluation.present) {
+      map['strength_progression_evaluation'] =
+          Variable<String>(strengthProgressionEvaluation.value);
+    }
+    if (actualRunDistanceM.present) {
+      map['actual_run_distance_m'] = Variable<double>(actualRunDistanceM.value);
+    }
+    if (actualRunDurationS.present) {
+      map['actual_run_duration_s'] = Variable<int>(actualRunDurationS.value);
+    }
+    if (metricsJson.present) {
+      map['metrics_json'] = Variable<String>(metricsJson.value);
+    }
+    if (capturedAt.present) {
+      map['captured_at'] = Variable<int>(capturedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlanLongRangeWeekPerformanceCompanion(')
+          ..write('id: $id, ')
+          ..write('planLongRangeWeekId: $planLongRangeWeekId, ')
+          ..write('weekLabel: $weekLabel, ')
+          ..write('weekNumber: $weekNumber, ')
+          ..write('weekStart: $weekStart, ')
+          ..write('weekEnd: $weekEnd, ')
+          ..write('evaluatedPlanCycleId: $evaluatedPlanCycleId, ')
+          ..write('evaluationSource: $evaluationSource, ')
+          ..write('plannedDayCount: $plannedDayCount, ')
+          ..write('completedPlanDays: $completedPlanDays, ')
+          ..write('plannedRunDays: $plannedRunDays, ')
+          ..write('actualRunDays: $actualRunDays, ')
+          ..write('plannedRunSessions: $plannedRunSessions, ')
+          ..write('actualRunSessions: $actualRunSessions, ')
+          ..write('plannedStrengthExercises: $plannedStrengthExercises, ')
+          ..write('actualStrengthExercises: $actualStrengthExercises, ')
+          ..write('plannedStrengthSets: $plannedStrengthSets, ')
+          ..write('actualStrengthSets: $actualStrengthSets, ')
+          ..write(
+              'strengthProgressionExpectation: $strengthProgressionExpectation, ')
+          ..write(
+              'strengthProgressionEvaluation: $strengthProgressionEvaluation, ')
+          ..write('actualRunDistanceM: $actualRunDistanceM, ')
+          ..write('actualRunDurationS: $actualRunDurationS, ')
+          ..write('metricsJson: $metricsJson, ')
+          ..write('capturedAt: $capturedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PlanSummarySnapshotsTable extends PlanSummarySnapshots
     with TableInfo<$PlanSummarySnapshotsTable, PlanSummarySnapshot> {
   @override
@@ -9522,6 +11554,10 @@ abstract class _$AppDb extends GeneratedDatabase {
       $PlanPrescribedStrengthSetsTable(this);
   late final $PlanPrescribedRunsTable planPrescribedRuns =
       $PlanPrescribedRunsTable(this);
+  late final $PlanLongRangeWeeksTable planLongRangeWeeks =
+      $PlanLongRangeWeeksTable(this);
+  late final $PlanLongRangeWeekPerformanceTable planLongRangeWeekPerformance =
+      $PlanLongRangeWeekPerformanceTable(this);
   late final $PlanSummarySnapshotsTable planSummarySnapshots =
       $PlanSummarySnapshotsTable(this);
   late final $PlanImportAuditTable planImportAudit =
@@ -9548,6 +11584,8 @@ abstract class _$AppDb extends GeneratedDatabase {
         planExerciseAlternatives,
         planPrescribedStrengthSets,
         planPrescribedRuns,
+        planLongRangeWeeks,
+        planLongRangeWeekPerformance,
         planSummarySnapshots,
         planImportAudit
       ];
@@ -13729,6 +15767,868 @@ typedef $$PlanPrescribedRunsTableProcessedTableManager = ProcessedTableManager<
     ),
     PlanPrescribedRun,
     PrefetchHooks Function()>;
+typedef $$PlanLongRangeWeeksTableCreateCompanionBuilder
+    = PlanLongRangeWeeksCompanion Function({
+  required String id,
+  required String weekLabel,
+  Value<int?> weekNumber,
+  required String weekStart,
+  required String weekEnd,
+  Value<String?> runFocus,
+  Value<String?> strengthFocus,
+  Value<String?> strengthProgressionExpectation,
+  Value<String?> primaryProgressionTarget,
+  Value<String?> recoveryEmphasis,
+  Value<bool> deload,
+  Value<String?> notes,
+  required String source,
+  Value<String?> lastPlanCycleId,
+  required int createdAt,
+  required int updatedAt,
+  Value<int> rowid,
+});
+typedef $$PlanLongRangeWeeksTableUpdateCompanionBuilder
+    = PlanLongRangeWeeksCompanion Function({
+  Value<String> id,
+  Value<String> weekLabel,
+  Value<int?> weekNumber,
+  Value<String> weekStart,
+  Value<String> weekEnd,
+  Value<String?> runFocus,
+  Value<String?> strengthFocus,
+  Value<String?> strengthProgressionExpectation,
+  Value<String?> primaryProgressionTarget,
+  Value<String?> recoveryEmphasis,
+  Value<bool> deload,
+  Value<String?> notes,
+  Value<String> source,
+  Value<String?> lastPlanCycleId,
+  Value<int> createdAt,
+  Value<int> updatedAt,
+  Value<int> rowid,
+});
+
+class $$PlanLongRangeWeeksTableFilterComposer
+    extends Composer<_$AppDb, $PlanLongRangeWeeksTable> {
+  $$PlanLongRangeWeeksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get weekLabel => $composableBuilder(
+      column: $table.weekLabel, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get weekStart => $composableBuilder(
+      column: $table.weekStart, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get weekEnd => $composableBuilder(
+      column: $table.weekEnd, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get runFocus => $composableBuilder(
+      column: $table.runFocus, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get strengthFocus => $composableBuilder(
+      column: $table.strengthFocus, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get strengthProgressionExpectation =>
+      $composableBuilder(
+          column: $table.strengthProgressionExpectation,
+          builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get primaryProgressionTarget => $composableBuilder(
+      column: $table.primaryProgressionTarget,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get recoveryEmphasis => $composableBuilder(
+      column: $table.recoveryEmphasis,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get deload => $composableBuilder(
+      column: $table.deload, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notes => $composableBuilder(
+      column: $table.notes, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get source => $composableBuilder(
+      column: $table.source, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get lastPlanCycleId => $composableBuilder(
+      column: $table.lastPlanCycleId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$PlanLongRangeWeeksTableOrderingComposer
+    extends Composer<_$AppDb, $PlanLongRangeWeeksTable> {
+  $$PlanLongRangeWeeksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get weekLabel => $composableBuilder(
+      column: $table.weekLabel, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get weekStart => $composableBuilder(
+      column: $table.weekStart, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get weekEnd => $composableBuilder(
+      column: $table.weekEnd, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get runFocus => $composableBuilder(
+      column: $table.runFocus, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get strengthFocus => $composableBuilder(
+      column: $table.strengthFocus,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get strengthProgressionExpectation =>
+      $composableBuilder(
+          column: $table.strengthProgressionExpectation,
+          builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get primaryProgressionTarget => $composableBuilder(
+      column: $table.primaryProgressionTarget,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get recoveryEmphasis => $composableBuilder(
+      column: $table.recoveryEmphasis,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get deload => $composableBuilder(
+      column: $table.deload, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+      column: $table.notes, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get source => $composableBuilder(
+      column: $table.source, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get lastPlanCycleId => $composableBuilder(
+      column: $table.lastPlanCycleId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$PlanLongRangeWeeksTableAnnotationComposer
+    extends Composer<_$AppDb, $PlanLongRangeWeeksTable> {
+  $$PlanLongRangeWeeksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get weekLabel =>
+      $composableBuilder(column: $table.weekLabel, builder: (column) => column);
+
+  GeneratedColumn<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => column);
+
+  GeneratedColumn<String> get weekStart =>
+      $composableBuilder(column: $table.weekStart, builder: (column) => column);
+
+  GeneratedColumn<String> get weekEnd =>
+      $composableBuilder(column: $table.weekEnd, builder: (column) => column);
+
+  GeneratedColumn<String> get runFocus =>
+      $composableBuilder(column: $table.runFocus, builder: (column) => column);
+
+  GeneratedColumn<String> get strengthFocus => $composableBuilder(
+      column: $table.strengthFocus, builder: (column) => column);
+
+  GeneratedColumn<String> get strengthProgressionExpectation =>
+      $composableBuilder(
+          column: $table.strengthProgressionExpectation,
+          builder: (column) => column);
+
+  GeneratedColumn<String> get primaryProgressionTarget => $composableBuilder(
+      column: $table.primaryProgressionTarget, builder: (column) => column);
+
+  GeneratedColumn<String> get recoveryEmphasis => $composableBuilder(
+      column: $table.recoveryEmphasis, builder: (column) => column);
+
+  GeneratedColumn<bool> get deload =>
+      $composableBuilder(column: $table.deload, builder: (column) => column);
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<String> get lastPlanCycleId => $composableBuilder(
+      column: $table.lastPlanCycleId, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$PlanLongRangeWeeksTableTableManager extends RootTableManager<
+    _$AppDb,
+    $PlanLongRangeWeeksTable,
+    PlanLongRangeWeek,
+    $$PlanLongRangeWeeksTableFilterComposer,
+    $$PlanLongRangeWeeksTableOrderingComposer,
+    $$PlanLongRangeWeeksTableAnnotationComposer,
+    $$PlanLongRangeWeeksTableCreateCompanionBuilder,
+    $$PlanLongRangeWeeksTableUpdateCompanionBuilder,
+    (
+      PlanLongRangeWeek,
+      BaseReferences<_$AppDb, $PlanLongRangeWeeksTable, PlanLongRangeWeek>
+    ),
+    PlanLongRangeWeek,
+    PrefetchHooks Function()> {
+  $$PlanLongRangeWeeksTableTableManager(
+      _$AppDb db, $PlanLongRangeWeeksTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PlanLongRangeWeeksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PlanLongRangeWeeksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PlanLongRangeWeeksTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> weekLabel = const Value.absent(),
+            Value<int?> weekNumber = const Value.absent(),
+            Value<String> weekStart = const Value.absent(),
+            Value<String> weekEnd = const Value.absent(),
+            Value<String?> runFocus = const Value.absent(),
+            Value<String?> strengthFocus = const Value.absent(),
+            Value<String?> strengthProgressionExpectation =
+                const Value.absent(),
+            Value<String?> primaryProgressionTarget = const Value.absent(),
+            Value<String?> recoveryEmphasis = const Value.absent(),
+            Value<bool> deload = const Value.absent(),
+            Value<String?> notes = const Value.absent(),
+            Value<String> source = const Value.absent(),
+            Value<String?> lastPlanCycleId = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<int> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              PlanLongRangeWeeksCompanion(
+            id: id,
+            weekLabel: weekLabel,
+            weekNumber: weekNumber,
+            weekStart: weekStart,
+            weekEnd: weekEnd,
+            runFocus: runFocus,
+            strengthFocus: strengthFocus,
+            strengthProgressionExpectation: strengthProgressionExpectation,
+            primaryProgressionTarget: primaryProgressionTarget,
+            recoveryEmphasis: recoveryEmphasis,
+            deload: deload,
+            notes: notes,
+            source: source,
+            lastPlanCycleId: lastPlanCycleId,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String weekLabel,
+            Value<int?> weekNumber = const Value.absent(),
+            required String weekStart,
+            required String weekEnd,
+            Value<String?> runFocus = const Value.absent(),
+            Value<String?> strengthFocus = const Value.absent(),
+            Value<String?> strengthProgressionExpectation =
+                const Value.absent(),
+            Value<String?> primaryProgressionTarget = const Value.absent(),
+            Value<String?> recoveryEmphasis = const Value.absent(),
+            Value<bool> deload = const Value.absent(),
+            Value<String?> notes = const Value.absent(),
+            required String source,
+            Value<String?> lastPlanCycleId = const Value.absent(),
+            required int createdAt,
+            required int updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              PlanLongRangeWeeksCompanion.insert(
+            id: id,
+            weekLabel: weekLabel,
+            weekNumber: weekNumber,
+            weekStart: weekStart,
+            weekEnd: weekEnd,
+            runFocus: runFocus,
+            strengthFocus: strengthFocus,
+            strengthProgressionExpectation: strengthProgressionExpectation,
+            primaryProgressionTarget: primaryProgressionTarget,
+            recoveryEmphasis: recoveryEmphasis,
+            deload: deload,
+            notes: notes,
+            source: source,
+            lastPlanCycleId: lastPlanCycleId,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$PlanLongRangeWeeksTableProcessedTableManager = ProcessedTableManager<
+    _$AppDb,
+    $PlanLongRangeWeeksTable,
+    PlanLongRangeWeek,
+    $$PlanLongRangeWeeksTableFilterComposer,
+    $$PlanLongRangeWeeksTableOrderingComposer,
+    $$PlanLongRangeWeeksTableAnnotationComposer,
+    $$PlanLongRangeWeeksTableCreateCompanionBuilder,
+    $$PlanLongRangeWeeksTableUpdateCompanionBuilder,
+    (
+      PlanLongRangeWeek,
+      BaseReferences<_$AppDb, $PlanLongRangeWeeksTable, PlanLongRangeWeek>
+    ),
+    PlanLongRangeWeek,
+    PrefetchHooks Function()>;
+typedef $$PlanLongRangeWeekPerformanceTableCreateCompanionBuilder
+    = PlanLongRangeWeekPerformanceCompanion Function({
+  required String id,
+  Value<String?> planLongRangeWeekId,
+  Value<String?> weekLabel,
+  Value<int?> weekNumber,
+  required String weekStart,
+  required String weekEnd,
+  Value<String?> evaluatedPlanCycleId,
+  required String evaluationSource,
+  required int plannedDayCount,
+  required int completedPlanDays,
+  required int plannedRunDays,
+  required int actualRunDays,
+  required int plannedRunSessions,
+  required int actualRunSessions,
+  required int plannedStrengthExercises,
+  required int actualStrengthExercises,
+  required int plannedStrengthSets,
+  required int actualStrengthSets,
+  Value<String?> strengthProgressionExpectation,
+  Value<String?> strengthProgressionEvaluation,
+  Value<double?> actualRunDistanceM,
+  Value<int?> actualRunDurationS,
+  Value<String?> metricsJson,
+  required int capturedAt,
+  Value<int> rowid,
+});
+typedef $$PlanLongRangeWeekPerformanceTableUpdateCompanionBuilder
+    = PlanLongRangeWeekPerformanceCompanion Function({
+  Value<String> id,
+  Value<String?> planLongRangeWeekId,
+  Value<String?> weekLabel,
+  Value<int?> weekNumber,
+  Value<String> weekStart,
+  Value<String> weekEnd,
+  Value<String?> evaluatedPlanCycleId,
+  Value<String> evaluationSource,
+  Value<int> plannedDayCount,
+  Value<int> completedPlanDays,
+  Value<int> plannedRunDays,
+  Value<int> actualRunDays,
+  Value<int> plannedRunSessions,
+  Value<int> actualRunSessions,
+  Value<int> plannedStrengthExercises,
+  Value<int> actualStrengthExercises,
+  Value<int> plannedStrengthSets,
+  Value<int> actualStrengthSets,
+  Value<String?> strengthProgressionExpectation,
+  Value<String?> strengthProgressionEvaluation,
+  Value<double?> actualRunDistanceM,
+  Value<int?> actualRunDurationS,
+  Value<String?> metricsJson,
+  Value<int> capturedAt,
+  Value<int> rowid,
+});
+
+class $$PlanLongRangeWeekPerformanceTableFilterComposer
+    extends Composer<_$AppDb, $PlanLongRangeWeekPerformanceTable> {
+  $$PlanLongRangeWeekPerformanceTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get planLongRangeWeekId => $composableBuilder(
+      column: $table.planLongRangeWeekId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get weekLabel => $composableBuilder(
+      column: $table.weekLabel, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get weekStart => $composableBuilder(
+      column: $table.weekStart, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get weekEnd => $composableBuilder(
+      column: $table.weekEnd, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get evaluatedPlanCycleId => $composableBuilder(
+      column: $table.evaluatedPlanCycleId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get evaluationSource => $composableBuilder(
+      column: $table.evaluationSource,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get plannedDayCount => $composableBuilder(
+      column: $table.plannedDayCount,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get completedPlanDays => $composableBuilder(
+      column: $table.completedPlanDays,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get plannedRunDays => $composableBuilder(
+      column: $table.plannedRunDays,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get actualRunDays => $composableBuilder(
+      column: $table.actualRunDays, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get plannedRunSessions => $composableBuilder(
+      column: $table.plannedRunSessions,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get actualRunSessions => $composableBuilder(
+      column: $table.actualRunSessions,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get plannedStrengthExercises => $composableBuilder(
+      column: $table.plannedStrengthExercises,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get actualStrengthExercises => $composableBuilder(
+      column: $table.actualStrengthExercises,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get plannedStrengthSets => $composableBuilder(
+      column: $table.plannedStrengthSets,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get actualStrengthSets => $composableBuilder(
+      column: $table.actualStrengthSets,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get strengthProgressionExpectation =>
+      $composableBuilder(
+          column: $table.strengthProgressionExpectation,
+          builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get strengthProgressionEvaluation => $composableBuilder(
+      column: $table.strengthProgressionEvaluation,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get actualRunDistanceM => $composableBuilder(
+      column: $table.actualRunDistanceM,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get actualRunDurationS => $composableBuilder(
+      column: $table.actualRunDurationS,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get metricsJson => $composableBuilder(
+      column: $table.metricsJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get capturedAt => $composableBuilder(
+      column: $table.capturedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$PlanLongRangeWeekPerformanceTableOrderingComposer
+    extends Composer<_$AppDb, $PlanLongRangeWeekPerformanceTable> {
+  $$PlanLongRangeWeekPerformanceTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get planLongRangeWeekId => $composableBuilder(
+      column: $table.planLongRangeWeekId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get weekLabel => $composableBuilder(
+      column: $table.weekLabel, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get weekStart => $composableBuilder(
+      column: $table.weekStart, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get weekEnd => $composableBuilder(
+      column: $table.weekEnd, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get evaluatedPlanCycleId => $composableBuilder(
+      column: $table.evaluatedPlanCycleId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get evaluationSource => $composableBuilder(
+      column: $table.evaluationSource,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get plannedDayCount => $composableBuilder(
+      column: $table.plannedDayCount,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get completedPlanDays => $composableBuilder(
+      column: $table.completedPlanDays,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get plannedRunDays => $composableBuilder(
+      column: $table.plannedRunDays,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get actualRunDays => $composableBuilder(
+      column: $table.actualRunDays,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get plannedRunSessions => $composableBuilder(
+      column: $table.plannedRunSessions,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get actualRunSessions => $composableBuilder(
+      column: $table.actualRunSessions,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get plannedStrengthExercises => $composableBuilder(
+      column: $table.plannedStrengthExercises,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get actualStrengthExercises => $composableBuilder(
+      column: $table.actualStrengthExercises,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get plannedStrengthSets => $composableBuilder(
+      column: $table.plannedStrengthSets,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get actualStrengthSets => $composableBuilder(
+      column: $table.actualStrengthSets,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get strengthProgressionExpectation =>
+      $composableBuilder(
+          column: $table.strengthProgressionExpectation,
+          builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get strengthProgressionEvaluation =>
+      $composableBuilder(
+          column: $table.strengthProgressionEvaluation,
+          builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get actualRunDistanceM => $composableBuilder(
+      column: $table.actualRunDistanceM,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get actualRunDurationS => $composableBuilder(
+      column: $table.actualRunDurationS,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get metricsJson => $composableBuilder(
+      column: $table.metricsJson, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get capturedAt => $composableBuilder(
+      column: $table.capturedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$PlanLongRangeWeekPerformanceTableAnnotationComposer
+    extends Composer<_$AppDb, $PlanLongRangeWeekPerformanceTable> {
+  $$PlanLongRangeWeekPerformanceTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get planLongRangeWeekId => $composableBuilder(
+      column: $table.planLongRangeWeekId, builder: (column) => column);
+
+  GeneratedColumn<String> get weekLabel =>
+      $composableBuilder(column: $table.weekLabel, builder: (column) => column);
+
+  GeneratedColumn<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => column);
+
+  GeneratedColumn<String> get weekStart =>
+      $composableBuilder(column: $table.weekStart, builder: (column) => column);
+
+  GeneratedColumn<String> get weekEnd =>
+      $composableBuilder(column: $table.weekEnd, builder: (column) => column);
+
+  GeneratedColumn<String> get evaluatedPlanCycleId => $composableBuilder(
+      column: $table.evaluatedPlanCycleId, builder: (column) => column);
+
+  GeneratedColumn<String> get evaluationSource => $composableBuilder(
+      column: $table.evaluationSource, builder: (column) => column);
+
+  GeneratedColumn<int> get plannedDayCount => $composableBuilder(
+      column: $table.plannedDayCount, builder: (column) => column);
+
+  GeneratedColumn<int> get completedPlanDays => $composableBuilder(
+      column: $table.completedPlanDays, builder: (column) => column);
+
+  GeneratedColumn<int> get plannedRunDays => $composableBuilder(
+      column: $table.plannedRunDays, builder: (column) => column);
+
+  GeneratedColumn<int> get actualRunDays => $composableBuilder(
+      column: $table.actualRunDays, builder: (column) => column);
+
+  GeneratedColumn<int> get plannedRunSessions => $composableBuilder(
+      column: $table.plannedRunSessions, builder: (column) => column);
+
+  GeneratedColumn<int> get actualRunSessions => $composableBuilder(
+      column: $table.actualRunSessions, builder: (column) => column);
+
+  GeneratedColumn<int> get plannedStrengthExercises => $composableBuilder(
+      column: $table.plannedStrengthExercises, builder: (column) => column);
+
+  GeneratedColumn<int> get actualStrengthExercises => $composableBuilder(
+      column: $table.actualStrengthExercises, builder: (column) => column);
+
+  GeneratedColumn<int> get plannedStrengthSets => $composableBuilder(
+      column: $table.plannedStrengthSets, builder: (column) => column);
+
+  GeneratedColumn<int> get actualStrengthSets => $composableBuilder(
+      column: $table.actualStrengthSets, builder: (column) => column);
+
+  GeneratedColumn<String> get strengthProgressionExpectation =>
+      $composableBuilder(
+          column: $table.strengthProgressionExpectation,
+          builder: (column) => column);
+
+  GeneratedColumn<String> get strengthProgressionEvaluation =>
+      $composableBuilder(
+          column: $table.strengthProgressionEvaluation,
+          builder: (column) => column);
+
+  GeneratedColumn<double> get actualRunDistanceM => $composableBuilder(
+      column: $table.actualRunDistanceM, builder: (column) => column);
+
+  GeneratedColumn<int> get actualRunDurationS => $composableBuilder(
+      column: $table.actualRunDurationS, builder: (column) => column);
+
+  GeneratedColumn<String> get metricsJson => $composableBuilder(
+      column: $table.metricsJson, builder: (column) => column);
+
+  GeneratedColumn<int> get capturedAt => $composableBuilder(
+      column: $table.capturedAt, builder: (column) => column);
+}
+
+class $$PlanLongRangeWeekPerformanceTableTableManager extends RootTableManager<
+    _$AppDb,
+    $PlanLongRangeWeekPerformanceTable,
+    PlanLongRangeWeekPerformanceData,
+    $$PlanLongRangeWeekPerformanceTableFilterComposer,
+    $$PlanLongRangeWeekPerformanceTableOrderingComposer,
+    $$PlanLongRangeWeekPerformanceTableAnnotationComposer,
+    $$PlanLongRangeWeekPerformanceTableCreateCompanionBuilder,
+    $$PlanLongRangeWeekPerformanceTableUpdateCompanionBuilder,
+    (
+      PlanLongRangeWeekPerformanceData,
+      BaseReferences<_$AppDb, $PlanLongRangeWeekPerformanceTable,
+          PlanLongRangeWeekPerformanceData>
+    ),
+    PlanLongRangeWeekPerformanceData,
+    PrefetchHooks Function()> {
+  $$PlanLongRangeWeekPerformanceTableTableManager(
+      _$AppDb db, $PlanLongRangeWeekPerformanceTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PlanLongRangeWeekPerformanceTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PlanLongRangeWeekPerformanceTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PlanLongRangeWeekPerformanceTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String?> planLongRangeWeekId = const Value.absent(),
+            Value<String?> weekLabel = const Value.absent(),
+            Value<int?> weekNumber = const Value.absent(),
+            Value<String> weekStart = const Value.absent(),
+            Value<String> weekEnd = const Value.absent(),
+            Value<String?> evaluatedPlanCycleId = const Value.absent(),
+            Value<String> evaluationSource = const Value.absent(),
+            Value<int> plannedDayCount = const Value.absent(),
+            Value<int> completedPlanDays = const Value.absent(),
+            Value<int> plannedRunDays = const Value.absent(),
+            Value<int> actualRunDays = const Value.absent(),
+            Value<int> plannedRunSessions = const Value.absent(),
+            Value<int> actualRunSessions = const Value.absent(),
+            Value<int> plannedStrengthExercises = const Value.absent(),
+            Value<int> actualStrengthExercises = const Value.absent(),
+            Value<int> plannedStrengthSets = const Value.absent(),
+            Value<int> actualStrengthSets = const Value.absent(),
+            Value<String?> strengthProgressionExpectation =
+                const Value.absent(),
+            Value<String?> strengthProgressionEvaluation = const Value.absent(),
+            Value<double?> actualRunDistanceM = const Value.absent(),
+            Value<int?> actualRunDurationS = const Value.absent(),
+            Value<String?> metricsJson = const Value.absent(),
+            Value<int> capturedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              PlanLongRangeWeekPerformanceCompanion(
+            id: id,
+            planLongRangeWeekId: planLongRangeWeekId,
+            weekLabel: weekLabel,
+            weekNumber: weekNumber,
+            weekStart: weekStart,
+            weekEnd: weekEnd,
+            evaluatedPlanCycleId: evaluatedPlanCycleId,
+            evaluationSource: evaluationSource,
+            plannedDayCount: plannedDayCount,
+            completedPlanDays: completedPlanDays,
+            plannedRunDays: plannedRunDays,
+            actualRunDays: actualRunDays,
+            plannedRunSessions: plannedRunSessions,
+            actualRunSessions: actualRunSessions,
+            plannedStrengthExercises: plannedStrengthExercises,
+            actualStrengthExercises: actualStrengthExercises,
+            plannedStrengthSets: plannedStrengthSets,
+            actualStrengthSets: actualStrengthSets,
+            strengthProgressionExpectation: strengthProgressionExpectation,
+            strengthProgressionEvaluation: strengthProgressionEvaluation,
+            actualRunDistanceM: actualRunDistanceM,
+            actualRunDurationS: actualRunDurationS,
+            metricsJson: metricsJson,
+            capturedAt: capturedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            Value<String?> planLongRangeWeekId = const Value.absent(),
+            Value<String?> weekLabel = const Value.absent(),
+            Value<int?> weekNumber = const Value.absent(),
+            required String weekStart,
+            required String weekEnd,
+            Value<String?> evaluatedPlanCycleId = const Value.absent(),
+            required String evaluationSource,
+            required int plannedDayCount,
+            required int completedPlanDays,
+            required int plannedRunDays,
+            required int actualRunDays,
+            required int plannedRunSessions,
+            required int actualRunSessions,
+            required int plannedStrengthExercises,
+            required int actualStrengthExercises,
+            required int plannedStrengthSets,
+            required int actualStrengthSets,
+            Value<String?> strengthProgressionExpectation =
+                const Value.absent(),
+            Value<String?> strengthProgressionEvaluation = const Value.absent(),
+            Value<double?> actualRunDistanceM = const Value.absent(),
+            Value<int?> actualRunDurationS = const Value.absent(),
+            Value<String?> metricsJson = const Value.absent(),
+            required int capturedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              PlanLongRangeWeekPerformanceCompanion.insert(
+            id: id,
+            planLongRangeWeekId: planLongRangeWeekId,
+            weekLabel: weekLabel,
+            weekNumber: weekNumber,
+            weekStart: weekStart,
+            weekEnd: weekEnd,
+            evaluatedPlanCycleId: evaluatedPlanCycleId,
+            evaluationSource: evaluationSource,
+            plannedDayCount: plannedDayCount,
+            completedPlanDays: completedPlanDays,
+            plannedRunDays: plannedRunDays,
+            actualRunDays: actualRunDays,
+            plannedRunSessions: plannedRunSessions,
+            actualRunSessions: actualRunSessions,
+            plannedStrengthExercises: plannedStrengthExercises,
+            actualStrengthExercises: actualStrengthExercises,
+            plannedStrengthSets: plannedStrengthSets,
+            actualStrengthSets: actualStrengthSets,
+            strengthProgressionExpectation: strengthProgressionExpectation,
+            strengthProgressionEvaluation: strengthProgressionEvaluation,
+            actualRunDistanceM: actualRunDistanceM,
+            actualRunDurationS: actualRunDurationS,
+            metricsJson: metricsJson,
+            capturedAt: capturedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$PlanLongRangeWeekPerformanceTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDb,
+        $PlanLongRangeWeekPerformanceTable,
+        PlanLongRangeWeekPerformanceData,
+        $$PlanLongRangeWeekPerformanceTableFilterComposer,
+        $$PlanLongRangeWeekPerformanceTableOrderingComposer,
+        $$PlanLongRangeWeekPerformanceTableAnnotationComposer,
+        $$PlanLongRangeWeekPerformanceTableCreateCompanionBuilder,
+        $$PlanLongRangeWeekPerformanceTableUpdateCompanionBuilder,
+        (
+          PlanLongRangeWeekPerformanceData,
+          BaseReferences<_$AppDb, $PlanLongRangeWeekPerformanceTable,
+              PlanLongRangeWeekPerformanceData>
+        ),
+        PlanLongRangeWeekPerformanceData,
+        PrefetchHooks Function()>;
 typedef $$PlanSummarySnapshotsTableCreateCompanionBuilder
     = PlanSummarySnapshotsCompanion Function({
   required String id,
@@ -14140,6 +17040,12 @@ class $AppDbManager {
               _db, _db.planPrescribedStrengthSets);
   $$PlanPrescribedRunsTableTableManager get planPrescribedRuns =>
       $$PlanPrescribedRunsTableTableManager(_db, _db.planPrescribedRuns);
+  $$PlanLongRangeWeeksTableTableManager get planLongRangeWeeks =>
+      $$PlanLongRangeWeeksTableTableManager(_db, _db.planLongRangeWeeks);
+  $$PlanLongRangeWeekPerformanceTableTableManager
+      get planLongRangeWeekPerformance =>
+          $$PlanLongRangeWeekPerformanceTableTableManager(
+              _db, _db.planLongRangeWeekPerformance);
   $$PlanSummarySnapshotsTableTableManager get planSummarySnapshots =>
       $$PlanSummarySnapshotsTableTableManager(_db, _db.planSummarySnapshots);
   $$PlanImportAuditTableTableManager get planImportAudit =>

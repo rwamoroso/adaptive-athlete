@@ -362,6 +362,25 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     }
   }
 
+  Future<void> _undoRestDayPush(WorkoutDayDetail detail) async {
+    final db = ref.read(appDbProvider);
+    if (!((detail.planSessionType ?? '').toLowerCase().contains('rest'))) {
+      _showSnack('Selected day is not currently marked as rest.');
+      return;
+    }
+    try {
+      await db.undoRestDayAndPullSplit(dateYmd: _selectedDate);
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+          'Split updated. Rest day removed and future training pulled forward.');
+      setState(() => _refresh++);
+    } on StateError catch (e) {
+      _showSnack(e.message.toString());
+    }
+  }
+
   void _showSnack(String message) {
     if (!mounted) {
       return;
@@ -452,8 +471,9 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     }
 
     final unitIsKm = value.contains('/km') || value.contains(' per km');
-    final unitIsMi =
-        value.contains('/mi') || value.contains('/mile') || value.contains(' per mile');
+    final unitIsMi = value.contains('/mi') ||
+        value.contains('/mile') ||
+        value.contains(' per mile');
 
     final firstTimeMatch =
         RegExp(r'(\d{1,2}:\d{2}(?::\d{2})?)').firstMatch(value);
@@ -461,7 +481,8 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
       return null;
     }
 
-    final parts = firstTimeMatch.group(1)!.split(':').map(double.parse).toList();
+    final parts =
+        firstTimeMatch.group(1)!.split(':').map(double.parse).toList();
     double seconds;
     if (parts.length == 3) {
       seconds = (parts[0] * 3600) + (parts[1] * 60) + parts[2];
@@ -822,7 +843,9 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
                 .toDouble()
             : (safeDetail.runSessions.isEmpty
                 ? 0.0
-                : (safeDetail.runSessions.length / 7).clamp(0.0, 1.0).toDouble());
+                : (safeDetail.runSessions.length / 7)
+                    .clamp(0.0, 1.0)
+                    .toDouble());
         final totalRunDistance = safeDetail.runSessions.fold<double>(
           0,
           (sum, run) => sum + (run.session.distanceM ?? 0),
@@ -859,6 +882,9 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
           onMarkRest: safeDetail.planDayNumber == null
               ? null
               : () => _markRestDayAndPush(safeDetail),
+          onUndoRest: safeDetail.planDayNumber == null
+              ? null
+              : () => _undoRestDayPush(safeDetail),
           onRunMockAi: () => _runMockAi(safeDetail, excluded, gate),
           onRefresh: () async => setState(() => _refresh++),
         );
@@ -887,6 +913,7 @@ class _DailyClinicalContent extends StatelessWidget {
     required this.onRunInputs,
     required this.onOpenWorkoutDetail,
     required this.onMarkRest,
+    required this.onUndoRest,
     required this.onRunMockAi,
     required this.onRefresh,
   });
@@ -909,6 +936,7 @@ class _DailyClinicalContent extends StatelessWidget {
   final VoidCallback onRunInputs;
   final VoidCallback onOpenWorkoutDetail;
   final VoidCallback? onMarkRest;
+  final VoidCallback? onUndoRest;
   final VoidCallback onRunMockAi;
   final Future<void> Function() onRefresh;
 
@@ -1023,6 +1051,15 @@ class _DailyClinicalContent extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final textScale = MediaQuery.textScalerOf(context).scale(1);
+        final prescribedRunTypeTitle =
+            (safeDetail.prescribedRun?.runType ?? '').trim();
+        final prescribedLiftFocusTitle =
+            (safeDetail.prescribedRun?.liftFocus ?? '').trim();
+        final runCardTitle =
+            prescribedRunTypeTitle.isEmpty ? 'Run' : prescribedRunTypeTitle;
+        final splitCardTitle = prescribedLiftFocusTitle.isEmpty
+            ? 'Split'
+            : prescribedLiftFocusTitle;
         // Keep top cards stacked on handset/tablet widths; two-up layout is too
         // compressed once trend charts are shown.
         final singleColumn = constraints.maxWidth < 900 || textScale >= 1.25;
@@ -1054,7 +1091,7 @@ class _DailyClinicalContent extends StatelessWidget {
               onTap: () => onOpenSleepEditor(sleepNight),
             ),
             MetricTile(
-              title: 'Run',
+              title: runCardTitle,
               leadingIcon: Icons.directions_run_rounded,
               valueText:
                   '${_formatMiles(runMileageSummary.last7DaysMiles)} last 7 days',
@@ -1072,7 +1109,7 @@ class _DailyClinicalContent extends StatelessWidget {
               onTap: onRunInputs,
             ),
             MetricTile(
-              title: 'Split',
+              title: splitCardTitle,
               leadingIcon: Icons.fitness_center_outlined,
               valueText:
                   '7-day load: ${_formatLoad(strengthLoadSummary.last7DaysTotalLoad)}',
@@ -1188,6 +1225,14 @@ class _DailyClinicalContent extends StatelessWidget {
   Widget _buildSecondaryActionRow(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final isCurrentRest =
+            (safeDetail.planSessionType ?? '').toLowerCase().contains('rest');
+        final splitActionText =
+            isCurrentRest ? 'Undo Rest Day Push' : 'Mark Rest Day + Push Split';
+        final splitActionIcon = isCurrentRest
+            ? Icons.undo_rounded
+            : Icons.playlist_add_check_circle_outlined;
+        final splitActionHandler = isCurrentRest ? onUndoRest : onMarkRest;
         final textScale = MediaQuery.textScalerOf(context).scale(1);
         final compact = constraints.maxWidth < 680 || textScale > 1.15;
         if (compact) {
@@ -1196,10 +1241,10 @@ class _DailyClinicalContent extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: PrimaryPillButton(
-                  text: 'Mark Rest Day + Push Split',
-                  icon: Icons.playlist_add_check_circle_outlined,
+                  text: splitActionText,
+                  icon: splitActionIcon,
                   variant: PillButtonVariant.tonal,
-                  onPressed: onMarkRest,
+                  onPressed: splitActionHandler,
                 ),
               ),
               const SizedBox(height: 10),
@@ -1219,10 +1264,10 @@ class _DailyClinicalContent extends StatelessWidget {
           children: [
             Expanded(
               child: PrimaryPillButton(
-                text: 'Mark Rest Day + Push Split',
-                icon: Icons.playlist_add_check_circle_outlined,
+                text: splitActionText,
+                icon: splitActionIcon,
                 variant: PillButtonVariant.tonal,
-                onPressed: onMarkRest,
+                onPressed: splitActionHandler,
               ),
             ),
             const SizedBox(width: 10),
@@ -1819,8 +1864,8 @@ class _WeeklyMileageMiniChart extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
                     color: Colors.white.withValues(alpha: 0.04),
-                    border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08)),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.08)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(4, 4, 4, 2),

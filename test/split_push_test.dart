@@ -211,4 +211,48 @@ void main() {
     expect(after.length, 1);
     expect(after.first.workoutDayId, workoutDayId);
   });
+
+  test('undo rest day push removes selected rest and appends rest to end',
+      () async {
+    final db = await _seedDbWithSplit([
+      'push',
+      'pull',
+      'rest',
+      'legs',
+      'push',
+      'pull',
+      'legs',
+    ]);
+    addTearDown(db.close);
+
+    await db.markRestDayAndPushSplit(dateYmd: '2026-02-10');
+    await db.undoRestDayAndPullSplit(dateYmd: '2026-02-10');
+
+    final days = await db.select(db.planDays).get()
+      ..sort((a, b) => a.dayNumber.compareTo(b.dayNumber));
+    expect(
+      days.map((d) => d.sessionType).toList(),
+      ['push', 'pull', 'legs', 'push', 'pull', 'legs', 'rest'],
+    );
+  });
+
+  test('workout detail resolves day number and corrected split type after push',
+      () async {
+    final db = await _seedDbWithSplit([
+      'push',
+      'pull',
+      'rest',
+      'legs',
+      'push',
+      'pull',
+      'legs',
+    ]);
+    addTearDown(db.close);
+
+    await db.markRestDayAndPushSplit(dateYmd: '2026-02-10');
+
+    final detail = await db.getWorkoutDayDetail('2026-02-11');
+    expect(detail.planDayNumber, 3);
+    expect(detail.planSessionType, 'pull');
+  });
 }

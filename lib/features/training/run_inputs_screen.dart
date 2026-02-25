@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/utils/app_providers.dart';
 import '../../core/utils/date_utils.dart';
 import '../../db/app_db.dart';
+import '../ui/clinical_theme.dart';
+import '../ui/clinical_widgets.dart';
 import 'garmin_csv_import_service.dart';
 
 enum DistanceUnit { miles, kilometers }
@@ -26,6 +28,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   bool _intervalLoggingEnabled = false;
   bool _intervalModeTouched = false;
   String? _prescribedRunType;
+  String? _prescribedLiftFocus;
   bool _loadingRunType = false;
   int _nextSegmentId = 1;
   final List<_ManualIntervalSegmentDraft> _intervalSegments =
@@ -96,8 +99,10 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         return;
       }
       final runType = detail.prescribedRun?.runType;
+      final liftFocus = detail.prescribedRun?.liftFocus;
       setState(() {
         _prescribedRunType = runType;
+        _prescribedLiftFocus = liftFocus;
         _loadingRunType = false;
         if (!_intervalModeTouched && _isIntervalRunType(runType)) {
           _intervalLoggingEnabled = true;
@@ -437,6 +442,13 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final pageTheme = buildClinicalTheme();
+    final runHeaderTitle = ((_prescribedRunType ?? '').trim().isEmpty)
+        ? 'Run Inputs'
+        : (_prescribedRunType ?? '').trim();
+    final splitContextTitle = ((_prescribedLiftFocus ?? '').trim().isEmpty)
+        ? null
+        : (_prescribedLiftFocus ?? '').trim();
     final preview = _intervalLoggingEnabled
         ? _previewSegments()
         : const _IntervalSegmentPreview(
@@ -445,291 +457,353 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
             hasInvalidInput: false,
           );
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Run Inputs')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Manual Run Entry',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(child: Text('Date: ${toYmd(_selectedDate)}')),
-                      OutlinedButton(
-                          onPressed: _pickDate, child: const Text('Pick Date')),
-                    ],
+    return Theme(
+      data: pageTheme,
+      child: Scaffold(
+        appBar: AppBar(title: Text(runHeaderTitle)),
+        body: Stack(
+          children: [
+            const Positioned.fill(child: _RunInputsPageBackground()),
+            ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+              children: [
+                Text(
+                  splitContextTitle == null
+                      ? 'RUN DATA CAPTURE'
+                      : '${splitContextTitle.toUpperCase()} • RUN DATA CAPTURE',
+                  style: pageTheme.textTheme.headlineSmall?.copyWith(
+                    letterSpacing: 1,
+                    fontWeight: FontWeight.w800,
                   ),
-                  const SizedBox(height: 8),
-                  Row(
+                ),
+                const SizedBox(height: 10),
+                const ClinicalBanner(
+                  text:
+                      'Log manual runs or import Garmin CSV. Interval mode supports work/rest segment tracking.',
+                ),
+                const SizedBox(height: 14),
+                const SectionHeader(text: 'Manual Entry'),
+                const SizedBox(height: 8),
+                GlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                          child:
-                              Text('Start: ${_selectedTime.format(context)}')),
-                      OutlinedButton(
-                          onPressed: _pickTime, child: const Text('Pick Time')),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (_loadingRunType)
-                    const Text('Checking prescribed run type...')
-                  else if (_prescribedRunType != null)
-                    Text('Prescribed run type: $_prescribedRunType'),
-                  const SizedBox(height: 6),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Interval Run Logging'),
-                    subtitle: Text(
-                      _isIntervalRunType(_prescribedRunType)
-                          ? 'Interval day detected. Log each work/rest segment.'
-                          : 'Enable to log each interval and rest segment.',
-                    ),
-                    value: _intervalLoggingEnabled,
-                    onChanged: _setIntervalLoggingEnabled,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Text('Distance unit:'),
-                      const SizedBox(width: 8),
-                      DropdownButton<DistanceUnit>(
-                        value: _distanceUnit,
-                        items: const [
-                          DropdownMenuItem(
-                              value: DistanceUnit.miles, child: Text('mi')),
-                          DropdownMenuItem(
-                              value: DistanceUnit.kilometers,
-                              child: Text('km')),
+                      Text('Manual Run Entry',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                              child: Text('Date: ${toYmd(_selectedDate)}')),
+                          OutlinedButton(
+                              onPressed: _pickDate,
+                              child: const Text('Pick Date')),
                         ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _distanceUnit = value);
-                          }
-                        },
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (_intervalLoggingEnabled) ...[
-                    Row(
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () =>
-                              _addIntervalSegment(IntervalSegmentType.interval),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add Interval'),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                              child: Text(
+                                  'Start: ${_selectedTime.format(context)}')),
+                          OutlinedButton(
+                              onPressed: _pickTime,
+                              child: const Text('Pick Time')),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (_loadingRunType)
+                        const Text('Checking prescribed run type...')
+                      else if (_prescribedRunType != null)
+                        Text('Prescribed run type: $_prescribedRunType'),
+                      const SizedBox(height: 6),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Interval Run Logging'),
+                        subtitle: Text(
+                          _isIntervalRunType(_prescribedRunType)
+                              ? 'Interval day detected. Log each work/rest segment.'
+                              : 'Enable to log each interval and rest segment.',
                         ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: () =>
-                              _addIntervalSegment(IntervalSegmentType.rest),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add Rest'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ..._intervalSegments.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final segment = entry.value;
-                      return Padding(
-                        key: ValueKey('interval-segment-${segment.id}'),
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Theme.of(context).colorScheme.outline,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
+                        value: _intervalLoggingEnabled,
+                        onChanged: _setIntervalLoggingEnabled,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Text('Distance unit:'),
+                          const SizedBox(width: 8),
+                          DropdownButton<DistanceUnit>(
+                            value: _distanceUnit,
+                            items: const [
+                              DropdownMenuItem(
+                                  value: DistanceUnit.miles, child: Text('mi')),
+                              DropdownMenuItem(
+                                  value: DistanceUnit.kilometers,
+                                  child: Text('km')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _distanceUnit = value);
+                              }
+                            },
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (_intervalLoggingEnabled) ...[
+                        Row(
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () => _addIntervalSegment(
+                                  IntervalSegmentType.interval),
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Interval'),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: () =>
+                                  _addIntervalSegment(IntervalSegmentType.rest),
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Rest'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ..._intervalSegments.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final segment = entry.value;
+                          return Padding(
+                            key: ValueKey('interval-segment-${segment.id}'),
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.04),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.14),
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    'Segment ${index + 1}',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleSmall
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                  ),
-                                  const Spacer(),
-                                  DropdownButton<IntervalSegmentType>(
-                                    value: segment.type,
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: IntervalSegmentType.interval,
-                                        child: Text('Interval'),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Segment ${index + 1}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleSmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                       ),
-                                      DropdownMenuItem(
-                                        value: IntervalSegmentType.rest,
-                                        child: Text('Rest'),
+                                      const Spacer(),
+                                      DropdownButton<IntervalSegmentType>(
+                                        value: segment.type,
+                                        items: const [
+                                          DropdownMenuItem(
+                                            value: IntervalSegmentType.interval,
+                                            child: Text('Interval'),
+                                          ),
+                                          DropdownMenuItem(
+                                            value: IntervalSegmentType.rest,
+                                            child: Text('Rest'),
+                                          ),
+                                        ],
+                                        onChanged: (value) {
+                                          if (value == null) {
+                                            return;
+                                          }
+                                          setState(() => segment.type = value);
+                                        },
+                                      ),
+                                      IconButton(
+                                        onPressed: () =>
+                                            _removeIntervalSegment(segment),
+                                        icon: const Icon(Icons.delete_outline),
                                       ),
                                     ],
-                                    onChanged: (value) {
-                                      if (value == null) {
-                                        return;
-                                      }
-                                      setState(() => segment.type = value);
-                                    },
                                   ),
-                                  IconButton(
-                                    onPressed: () =>
-                                        _removeIntervalSegment(segment),
-                                    icon: const Icon(Icons.delete_outline),
+                                  TextField(
+                                    controller: segment.durationController,
+                                    onChanged: (_) => setState(() {}),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Duration',
+                                      hintText: 'HH:MM:SS',
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: segment.distanceController,
+                                    onChanged: (_) => setState(() {}),
+                                    decoration: InputDecoration(
+                                      labelText:
+                                          'Distance (${_distanceUnitLabel()}) optional',
+                                    ),
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                   ),
                                 ],
                               ),
-                              TextField(
-                                controller: segment.durationController,
-                                onChanged: (_) => setState(() {}),
-                                decoration: const InputDecoration(
-                                  labelText: 'Duration',
-                                  hintText: 'HH:MM:SS',
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              TextField(
-                                controller: segment.distanceController,
-                                onChanged: (_) => setState(() {}),
-                                decoration: InputDecoration(
-                                  labelText:
-                                      'Distance (${_distanceUnitLabel()}) optional',
-                                ),
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
-                              ),
-                            ],
+                            ),
+                          );
+                        }),
+                        Text(
+                          'Calculated total: ${_formatSecondsAsHms(preview.totalDurationS)} | '
+                          '${_formatDistanceInSelectedUnit(preview.totalDistanceM)}'
+                          '${preview.hasInvalidInput ? ' (check invalid segment values)' : ''}',
+                        ),
+                      ] else ...[
+                        TextField(
+                          controller: _durationController,
+                          decoration: const InputDecoration(
+                            labelText: 'Duration',
+                            hintText: 'HH:MM:SS',
                           ),
                         ),
-                      );
-                    }),
-                    Text(
-                      'Calculated total: ${_formatSecondsAsHms(preview.totalDurationS)} | '
-                      '${_formatDistanceInSelectedUnit(preview.totalDistanceM)}'
-                      '${preview.hasInvalidInput ? ' (check invalid segment values)' : ''}',
-                    ),
-                  ] else ...[
-                    TextField(
-                      controller: _durationController,
-                      decoration: const InputDecoration(
-                        labelText: 'Duration',
-                        hintText: 'HH:MM:SS',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _distanceController,
-                      decoration: InputDecoration(
-                        labelText: 'Distance (${_distanceUnitLabel()})',
-                      ),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _maxHrController,
-                    decoration:
-                        const InputDecoration(labelText: 'Max HR (optional)'),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _avgHrController,
-                    decoration:
-                        const InputDecoration(labelText: 'Avg HR (optional)'),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: _savingManual ? null : _saveManualRun,
-                    child: const Text('Save Manual Run'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Garmin CSV Import',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _selectedCsvPath ?? 'No CSV selected',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _distanceController,
+                          decoration: InputDecoration(
+                            labelText: 'Distance (${_distanceUnitLabel()})',
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                         ),
+                      ],
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _maxHrController,
+                        decoration: const InputDecoration(
+                            labelText: 'Max HR (optional)'),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                       ),
-                      const SizedBox(width: 8),
-                      OutlinedButton(
-                        onPressed: _pickCsvFile,
-                        child: const Text('Pick CSV'),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _avgHrController,
+                        decoration: const InputDecoration(
+                            labelText: 'Avg HR (optional)'),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        onPressed: _savingManual ? null : _saveManualRun,
+                        child: const Text('Save Manual Run'),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  SegmentedButton<GarminActivityFilter>(
-                    segments: const [
-                      ButtonSegment(
-                        value: GarminActivityFilter.runningOnly,
-                        label: Text('Running Only'),
+                ),
+                const SizedBox(height: 16),
+                const SectionHeader(text: 'Garmin Import'),
+                const SizedBox(height: 8),
+                GlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Garmin CSV Import',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _selectedCsvPath ?? 'No CSV selected',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton(
+                            onPressed: _pickCsvFile,
+                            child: const Text('Pick CSV'),
+                          ),
+                        ],
                       ),
-                      ButtonSegment(
-                        value: GarminActivityFilter.allActivities,
-                        label: Text('All Activities'),
+                      const SizedBox(height: 8),
+                      SegmentedButton<GarminActivityFilter>(
+                        segments: const [
+                          ButtonSegment(
+                            value: GarminActivityFilter.runningOnly,
+                            label: Text('Running Only'),
+                          ),
+                          ButtonSegment(
+                            value: GarminActivityFilter.allActivities,
+                            label: Text('All Activities'),
+                          ),
+                        ],
+                        selected: {_activityFilter},
+                        onSelectionChanged: (selection) {
+                          setState(() => _activityFilter = selection.first);
+                        },
                       ),
+                      const SizedBox(height: 12),
+                      FilledButton.tonal(
+                        onPressed: _importing ? null : _importGarminCsv,
+                        child: const Text('Import Garmin CSV'),
+                      ),
+                      if (_importResult != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.04),
+                            border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.14)),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(_importResult!.pretty()),
+                        ),
+                      ],
                     ],
-                    selected: {_activityFilter},
-                    onSelectionChanged: (selection) {
-                      setState(() => _activityFilter = selection.first);
-                    },
                   ),
-                  const SizedBox(height: 12),
-                  FilledButton.tonal(
-                    onPressed: _importing ? null : _importGarminCsv,
-                    child: const Text('Import Garmin CSV'),
-                  ),
-                  if (_importResult != null) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                            color: Theme.of(context).colorScheme.outline),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(_importResult!.pretty()),
-                    ),
-                  ],
-                ],
-              ),
+                ),
+              ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RunInputsPageBackground extends StatelessWidget {
+  const _RunInputsPageBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            ClinicalPalette.bgTop,
+            ClinicalPalette.bgMid,
+            ClinicalPalette.bgBottom,
+          ],
+        ),
+        backgroundBlendMode: BlendMode.srcOver,
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: const Alignment(-0.15, -0.95),
+            radius: 1.3,
+            colors: [
+              Colors.white.withValues(alpha: 0.05),
+              Colors.transparent,
+              Colors.black.withValues(alpha: 0.22),
+            ],
+            stops: const [0, 0.55, 1],
           ),
-        ],
+        ),
       ),
     );
   }

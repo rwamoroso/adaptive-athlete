@@ -1,6 +1,8 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:drift/drift.dart' show OrderingMode, OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/utils/app_providers.dart';
 import '../../db/app_db.dart';
@@ -21,6 +23,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   GarminImportResult? _importResult;
   StrengthImportResult? _strengthImportResult;
   StandardWorkbookImportResult? _standardImportResult;
+  String? _standardImportFailureMessage;
+  String? _standardImportConflictReportPath;
   String? _weeklyWorkbookPath;
   String? _exportDirectoryPath;
   GarminActivityFilter _activityFilter = GarminActivityFilter.runningOnly;
@@ -132,8 +136,28 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     );
     final path = result?.files.single.path;
     if (path != null) {
-      setState(() => _selectedStandardWorkbookPath = path);
+      setState(() {
+        _selectedStandardWorkbookPath = path;
+        _standardImportFailureMessage = null;
+        _standardImportConflictReportPath = null;
+      });
     }
+  }
+
+  Future<PlanImportAuditData?> _getLatestFailedPlanImportAuditForFile(
+    String filePath,
+  ) async {
+    final db = ref.read(appDbProvider);
+    final fileName = p.basename(filePath);
+    return (db.select(db.planImportAudit)
+          ..where((t) => t.fileName.equals(fileName))
+          ..where((t) => t.success.equals(false))
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.importedAt, mode: OrderingMode.desc),
+          ])
+          ..limit(1))
+        .getSingleOrNull();
   }
 
   Future<void> _pickStandardSplitStartDate() async {
@@ -216,15 +240,34 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       if (!mounted) {
         return;
       }
-      setState(() => _standardImportResult = result);
+      setState(() {
+        _standardImportResult = result;
+        _standardImportFailureMessage = null;
+        _standardImportConflictReportPath = null;
+      });
       _showMessage(
         'Standard import complete: '
         'days=${result.insertedPlanDays}, '
         'strength=${result.insertedStrengthSets}, '
-        'runs=${result.insertedRunPlans}',
+        'runs=${result.insertedRunPlans}, '
+        'alternatives=${result.insertedAlternatives}',
       );
     } catch (e) {
-      _showMessage('Standard workbook import failed: $e');
+      final audit = _selectedStandardWorkbookPath == null
+          ? null
+          : await _getLatestFailedPlanImportAuditForFile(
+              _selectedStandardWorkbookPath!,
+            );
+      final reportPath = audit?.conflictReportPath;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _standardImportFailureMessage = e.toString();
+        _standardImportConflictReportPath = reportPath;
+      });
+      final suffix = reportPath == null ? '' : ' Conflict report: $reportPath';
+      _showMessage('Standard workbook import failed: $e$suffix');
     } finally {
       if (mounted) {
         setState(() => _standardImporting = false);
@@ -449,6 +492,45 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(_standardImportResult!.pretty()),
+                  ),
+                ],
+                if (_standardImportFailureMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .errorContainer
+                          .withValues(alpha: 0.18),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Last standard import failure',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        const SizedBox(height: 6),
+                        SelectableText(_standardImportFailureMessage!),
+                        const SizedBox(height: 8),
+                        if (_standardImportConflictReportPath != null)
+                          SelectableText(
+                            'Conflict report: $_standardImportConflictReportPath',
+                          )
+                        else
+                          const Text(
+                            'No conflict report was generated (import likely failed before conflict detection).',
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               ],

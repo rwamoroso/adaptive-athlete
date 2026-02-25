@@ -20,6 +20,16 @@ Uint8List _buildStandardWorkbookBytes({bool runConflict = false}) {
   final runData = excel['Run Data'];
   runData.cell(CellIndex.indexByString('A1')).value =
       TextCellValue('Workout Date');
+  final tenWeekPlan = excel['10 Week Plan'];
+  tenWeekPlan.cell(CellIndex.indexByString('A1')).value = TextCellValue('Week');
+  tenWeekPlan.cell(CellIndex.indexByString('B1')).value =
+      TextCellValue('Week Start');
+  tenWeekPlan.cell(CellIndex.indexByString('C1')).value = TextCellValue('Week End');
+  tenWeekPlan.cell(CellIndex.indexByString('A2')).value = TextCellValue('Week 1');
+  tenWeekPlan.cell(CellIndex.indexByString('B2')).value =
+      TextCellValue('2026-02-09');
+  tenWeekPlan.cell(CellIndex.indexByString('C2')).value =
+      TextCellValue('2026-02-15');
 
   final strengthSummary = excel['5-Day Push Pull Plan'];
   strengthSummary.cell(CellIndex.indexByString('A1')).value =
@@ -67,6 +77,37 @@ Uint8List _buildStandardWorkbookBytes({bool runConflict = false}) {
           TextCellValue('Bench Press');
       daySheet.cell(CellIndex.indexByString('B6')).value =
           TextCellValue('205x6r2');
+      daySheet.cell(CellIndex.indexByString('A8')).value = TextCellValue(
+        'Exercise Alternatives (Substitute Suggestions)',
+      );
+      daySheet.cell(CellIndex.indexByString('A9')).value =
+          TextCellValue('Prescribed Exercise');
+      daySheet.cell(CellIndex.indexByString('B9')).value = TextCellValue('Rank');
+      daySheet.cell(CellIndex.indexByString('C9')).value =
+          TextCellValue('Alternative Exercise');
+      daySheet.cell(CellIndex.indexByString('D9')).value = TextCellValue('Tier');
+      daySheet.cell(CellIndex.indexByString('E9')).value =
+          TextCellValue('Rationale');
+      daySheet.cell(CellIndex.indexByString('F9')).value = TextCellValue('Notes');
+      daySheet.cell(CellIndex.indexByString('A10')).value =
+          TextCellValue('Bench Press');
+      daySheet.cell(CellIndex.indexByString('B10')).value = IntCellValue(1);
+      daySheet.cell(CellIndex.indexByString('C10')).value =
+          TextCellValue('Dumbbell Bench Press');
+      daySheet.cell(CellIndex.indexByString('D10')).value = TextCellValue('strong');
+      daySheet.cell(CellIndex.indexByString('E10')).value =
+          TextCellValue('Preserves horizontal press pattern');
+      daySheet.cell(CellIndex.indexByString('F10')).value =
+          TextCellValue('dumbbells available');
+      daySheet.cell(CellIndex.indexByString('A11')).value =
+          TextCellValue('Bench Press');
+      daySheet.cell(CellIndex.indexByString('B11')).value = IntCellValue(2);
+      daySheet.cell(CellIndex.indexByString('C11')).value =
+          TextCellValue('Push-Up');
+      daySheet.cell(CellIndex.indexByString('D11')).value =
+          TextCellValue('acceptable');
+      daySheet.cell(CellIndex.indexByString('E11')).value =
+          TextCellValue('Bodyweight fallback');
     }
   }
 
@@ -120,6 +161,16 @@ List<String> _columnValues(Excel workbook, String sheetName, int col) {
   return values;
 }
 
+List<List<String>> _sheetTextRows(Excel workbook, String sheetName) {
+  final sheet = workbook.tables[sheetName];
+  if (sheet == null) {
+    return const <List<String>>[];
+  }
+  return sheet.rows
+      .map((row) => row.map((cell) => _cellText(cell).trim()).toList())
+      .toList();
+}
+
 void main() {
   test('standard workbook import succeeds and populates plan tables', () async {
     final db = AppDb.forTesting(NativeDatabase.memory());
@@ -139,6 +190,7 @@ void main() {
     expect(result.insertedPlanDays, 7);
     expect(result.insertedRunPlans, 7);
     expect(result.insertedStrengthSets, 1);
+    expect(result.insertedAlternatives, 2);
 
     final cycles = await db.select(db.planCycles).get();
     expect(cycles.length, 1);
@@ -151,6 +203,18 @@ void main() {
     final strengthSets = await db.select(db.planPrescribedStrengthSets).get();
     expect(strengthSets.length, 1);
     expect(strengthSets.first.exerciseCanonical, 'Bench Press');
+    final alternatives = await db.select(db.planExerciseAlternatives).get();
+    expect(alternatives.length, 2);
+    expect(
+      alternatives.any((a) =>
+          a.prescribedExerciseCanonical == 'Bench Press' &&
+          a.alternativeExerciseCanonical == 'Dumbbell Bench Press'),
+      true,
+    );
+    final longRangeWeeks = await db.select(db.planLongRangeWeeks).get();
+    expect(longRangeWeeks.length, 1);
+    expect(longRangeWeeks.single.weekLabel, 'Week 1');
+    expect(longRangeWeeks.single.weekStart, '2026-02-09');
   });
 
   test('standard workbook import rejects summary/daily conflicts', () async {
@@ -211,11 +275,27 @@ void main() {
     expect(names.take(4).toList(), [
       'Strength Data',
       'Run Data',
+      '10 Week Plan',
       '5-Day Push Pull Plan',
-      'Run Plan - 5mi @ 8 min',
     ]);
-    expect(names[4].toLowerCase().startsWith('day 1'), true);
-    expect(names[10].toLowerCase().startsWith('day 7'), true);
+    expect(names[4], 'Run Plan - 5mi @ 8 min');
+    expect(names[5].toLowerCase().startsWith('day 1'), true);
+    expect(names[11].toLowerCase().startsWith('day 7'), true);
+
+    final day1SheetName =
+        names.firstWhere((n) => n.toLowerCase().startsWith('day 1'));
+    final day1Rows = _sheetTextRows(exported, day1SheetName);
+    final flattened = day1Rows.expand((r) => r).toList();
+    expect(flattened, contains('Exercise Alternatives (Substitute Suggestions)'));
+    expect(flattened, contains('Prescribed Exercise'));
+    expect(flattened, contains('Alternative Exercise'));
+    expect(flattened, contains('Dumbbell Bench Press'));
+    final tenWeekRows = _sheetTextRows(exported, '10 Week Plan');
+    final tenWeekFlat = tenWeekRows.expand((r) => r).toList();
+    expect(tenWeekFlat, contains('Export Context'));
+    expect(tenWeekFlat, contains('Exported Week Number'));
+    final perfRows = await db.select(db.planLongRangeWeekPerformance).get();
+    expect(perfRows.length, 1);
   });
 
   test('standard workbook export includes history through export date',
@@ -267,6 +347,11 @@ void main() {
       outputDirectoryPath: dir.path,
     );
     final exported = Excel.decodeBytes(await File(exportPath).readAsBytes());
+    final tenWeekRows = _sheetTextRows(exported, '10 Week Plan');
+    expect(
+      tenWeekRows.isNotEmpty ? tenWeekRows.first : const <String>[],
+      contains('Strength Progression Expectation'),
+    );
 
     final strengthDates = _columnValues(exported, 'Strength Data', 0);
     final runDates = _columnValues(exported, 'Run Data', 0);

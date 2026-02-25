@@ -278,7 +278,7 @@ class ExerciseSubstitutionService {
       if (avgRecentWeight != null) {
         suggestedWeight = _roundToIncrement(avgRecentWeight, 2.5);
         confidence = 'high';
-        rationale.add('Based on recent ${substituteExerciseCanonical} history');
+        rationale.add('Based on recent $substituteExerciseCanonical history');
       } else if (sameProgression && set.weight != null && set.weight! > 0) {
         suggestedWeight = _roundToIncrement(set.weight! * 0.9, 2.5);
         confidence = 'medium';

@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/app_providers.dart';
 import '../../db/app_db.dart';
+import '../ui/clinical_theme.dart';
+import '../ui/clinical_widgets.dart';
 import 'exercise_substitution_service.dart';
 
 Map<int, String> _manualSegmentLabelsByIdx(String? rawMetricsJson) {
@@ -444,423 +446,452 @@ class _WorkoutDayDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('Workout Day Detail ${widget.date}')),
-      body: FutureBuilder<WorkoutDayDetail>(
-        future: _detailFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    return Theme(
+      data: buildClinicalTheme(),
+      child: Scaffold(
+        appBar: AppBar(title: Text('Workout Day Detail ${widget.date}')),
+        body: Stack(
+          children: [
+            const Positioned.fill(child: _WorkoutDetailPageBackground()),
+            FutureBuilder<WorkoutDayDetail>(
+              future: _detailFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          final detail = snapshot.data;
-          if (detail == null) {
-            return const Center(child: Text('No detail found.'));
-          }
+                final detail = snapshot.data;
+                if (detail == null) {
+                  return const Center(child: Text('No detail found.'));
+                }
 
-          _ensureEditableRows(detail);
-          final pendingScroll = _pendingScrollExercise;
-          if (pendingScroll != null) {
-            _pendingScrollExercise = null;
-            _scrollCardNearTop(pendingScroll);
-          }
+                _ensureEditableRows(detail);
+                final pendingScroll = _pendingScrollExercise;
+                if (pendingScroll != null) {
+                  _pendingScrollExercise = null;
+                  _scrollCardNearTop(pendingScroll);
+                }
+                final splitHeaderTitle =
+                    (detail.prescribedRun?.liftFocus ?? '').trim().isEmpty
+                        ? 'Split'
+                        : detail.prescribedRun!.liftFocus!.trim();
+                final runHeaderTitle =
+                    (detail.prescribedRun?.runType ?? '').trim().isEmpty
+                        ? 'Runs'
+                        : detail.prescribedRun!.runType!.trim();
 
-          return ListView(
-            controller: _scrollController,
-            padding: const EdgeInsets.all(16),
-            children: [
-              Text('Split', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    detail.planDayNumber == null
-                        ? 'No split day linked.'
-                        : 'Split Day ${detail.planDayNumber} | Session Type: ${_sessionTypeLabel(detail.planSessionType)}',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text('Runs', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    detail.prescribedRun?.runType == null
-                        ? 'No prescribed run linked.'
-                        : 'Prescribed Run: ${detail.prescribedRun?.runType} | '
-                            'Duration: ${detail.prescribedRun?.durationText ?? 'unknown'} | '
-                            'Pace: ${detail.prescribedRun?.targetPace ?? 'unknown'}',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (detail.runSessions.isEmpty)
-                const Card(
-                    child: Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text('No runs for this date.'),
-                ))
-              else
-                ...detail.runSessions.map(
-                  (run) {
-                    final segmentLabels =
-                        _manualSegmentLabelsByIdx(run.session.rawMetricsJson);
-                    return Card(
-                      child: ListTile(
-                        title: Text(run.session.title ??
-                            run.session.activityType ??
-                            'Run'),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'source=${run.session.source} | duration=${run.session.durationS ?? 'unknown'}s | '
-                              'distance=${run.session.distanceM ?? 'unknown'}m | avgHR=${run.session.avgHr ?? 'unknown'} | '
-                              'maxHR=${run.session.maxHr ?? 'unknown'}'
-                              '${run.overrodeManual ? ' | overrode manual' : ''}',
-                            ),
-                            if (run.segments.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Segments',
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                return ListView(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+                  children: [
+                    Text(
+                      'WORKOUT DETAIL',
+                      style:
+                          Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                letterSpacing: 1,
+                                fontWeight: FontWeight.w800,
                               ),
-                              ...run.segments.map(
-                                (segment) => Text(
-                                  '${segmentLabels[segment.idx] ?? 'Segment'} ${segment.idx}: '
-                                  '${segment.durationS ?? 'unknown'}s | '
-                                  '${segment.distanceM ?? 'unknown'}m',
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.date,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    SectionHeader(text: splitHeaderTitle),
+                    const SizedBox(height: 8),
+                    GlassCard(
+                      child: Text(
+                        detail.planDayNumber == null
+                            ? 'No split day linked.'
+                            : 'Split Day ${detail.planDayNumber} | Session Type: ${_sessionTypeLabel(detail.planSessionType)}',
                       ),
-                    );
-                  },
-                ),
-              const SizedBox(height: 16),
-              Text('Exercises', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              if (detail.groups.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('No prescribed or actual sets.'),
-                  ),
-                )
-              else
-                ...detail.groups.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final group = entry.value;
-                  final prescribedSets = [...group.prescribed]
-                    ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
-                  final actualSets = [...group.actual]
-                    ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
-                  final skippingExercise =
-                      _savingExercises.contains(group.exercise);
-                  final performedExercise = group.substitution
-                          ?.substituteExerciseCanonical ??
-                      group.exercise;
-                  final nextExercise = index < detail.groups.length - 1
-                      ? detail.groups[index + 1].exercise
-                      : null;
-
-                  return Card(
-                    key: _cardKeyForExercise(group.exercise),
-                    child: ExpansionTile(
-                      key: ValueKey<String>(
-                        'exercise-${group.exercise}-$_tilesEpoch',
+                    ),
+                    const SizedBox(height: 16),
+                    SectionHeader(text: runHeaderTitle),
+                    const SizedBox(height: 8),
+                    GlassCard(
+                      child: Text(
+                        detail.prescribedRun?.runType == null
+                            ? 'No prescribed run linked.'
+                            : 'Prescribed Run: ${detail.prescribedRun?.runType} | '
+                                'Duration: ${detail.prescribedRun?.durationText ?? 'unknown'} | '
+                                'Pace: ${detail.prescribedRun?.targetPace ?? 'unknown'}',
                       ),
-                      initiallyExpanded:
-                          _expandedByExercise[group.exercise] ?? false,
-                      maintainState: true,
-                      onExpansionChanged: (expanded) {
-                        _expandedByExercise[group.exercise] = expanded;
-                      },
-                      title: Text(group.displayExercise),
-                      subtitle: Text(
-                        group.substitution == null
-                            ? 'Prescribed: ${prescribedSets.length} | Actual: ${actualSets.length}'
-                            : 'Planned: ${group.exercise} | Actual: ${actualSets.length}',
-                      ),
-                      childrenPadding: const EdgeInsets.all(12),
-                      children: [
-                        if (group.substitution != null) ...[
-                          Container(
-                            width: double.infinity,
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .tertiaryContainer
-                                  .withOpacity(0.35),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: Theme.of(context).colorScheme.outline,
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Substitution active: ${group.exercise} -> ${group.substitution!.substituteExerciseCanonical}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Reason: ${group.substitution!.reasonCode}'
-                                  '${group.substitution!.matchScore == null ? '' : ' | Match ${(group.substitution!.matchScore!).round()}/100'}',
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  group.substitution == null
-                                      ? 'Adjust Prescribed and Confirm as Actual'
-                                      : 'Adjusted for substitute; confirm as actual',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton.tonal(
-                              onPressed: prescribedSets.isEmpty
-                                  ? null
-                                  : () => _openSubstitutionPicker(
-                                        detail: detail,
-                                        group: group,
-                                        prescribedSets: prescribedSets,
-                                      ),
-                              child: const Text('Substitute Exercise'),
-                            ),
-                            if (group.substitution != null) ...[
-                              const SizedBox(width: 8),
-                              OutlinedButton(
-                                onPressed: () => _clearSubstitutionForGroup(group),
-                                child: const Text('Clear'),
-                              ),
-                            ],
-                            const SizedBox(width: 8),
-                            FilledButton.tonal(
-                              onPressed:
-                                  skippingExercise || prescribedSets.isEmpty
-                                      ? null
-                                      : () => _skipExercise(
-                                            performedExerciseCanonical:
-                                                performedExercise,
-                                            prescribedExerciseCanonical:
-                                                group.exercise,
-                                            substitutionId:
-                                                group.substitution?.id,
-                                            prescribedSets: prescribedSets,
-                                          ),
-                              child: const Text('Skip Exercise (log 0)'),
-                            ),
-                          ],
-                        ),
-                        if (skippingExercise) ...[
-                          const SizedBox(height: 6),
-                          const Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text('Logging all sets as 0...'),
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        if (prescribedSets.isEmpty)
-                          const Align(
-                            alignment: Alignment.centerLeft,
-                            child:
-                                Text('No prescribed sets for this exercise.'),
-                          )
-                        else
-                          ...prescribedSets.asMap().entries.map((setEntry) {
-                            final set = setEntry.value;
-                            final isLastSet =
-                                setEntry.key == prescribedSets.length - 1;
-                            final key = _setKey(group.exercise, set.setIndex);
-                            final edited = _editedByKey[key]!;
-                            final hasExistingActual = actualSets
-                                .any((a) => a.setIndex == set.setIndex);
-                            final saving = _savingKeys.contains(key);
-
-                            return Container(
-                              width: double.infinity,
-                              margin: const EdgeInsets.only(bottom: 12),
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: Theme.of(context).colorScheme.outline,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Column(
+                    ),
+                    const SizedBox(height: 8),
+                    if (detail.runSessions.isEmpty)
+                      const GlassCard(child: Text('No runs for this date.'))
+                    else
+                      ...detail.runSessions.map(
+                        (run) {
+                          final segmentLabels = _manualSegmentLabelsByIdx(
+                              run.session.rawMetricsJson);
+                          return GlassCard(
+                            child: ListTile(
+                              title: Text(run.session.title ??
+                                  run.session.activityType ??
+                                  'Run'),
+                              subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
+                                  Text(
+                                    'source=${run.session.source} | duration=${run.session.durationS ?? 'unknown'}s | '
+                                    'distance=${run.session.distanceM ?? 'unknown'}m | avgHR=${run.session.avgHr ?? 'unknown'} | '
+                                    'maxHR=${run.session.maxHr ?? 'unknown'}'
+                                    '${run.overrodeManual ? ' | overrode manual' : ''}',
+                                  ),
+                                  if (run.segments.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    const Text(
+                                      'Segments',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                    ...run.segments.map(
+                                      (segment) => Text(
+                                        '${segmentLabels[segment.idx] ?? 'Segment'} ${segment.idx}: '
+                                        '${segment.durationS ?? 'unknown'}s | '
+                                        '${segment.distanceM ?? 'unknown'}m',
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    const SizedBox(height: 16),
+                    const SectionHeader(text: 'Exercises'),
+                    const SizedBox(height: 8),
+                    if (detail.groups.isEmpty)
+                      const GlassCard(
+                          child: Text('No prescribed or actual sets.'))
+                    else
+                      ...detail.groups.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final group = entry.value;
+                        final prescribedSets = [...group.prescribed]
+                          ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
+                        final actualSets = [...group.actual]
+                          ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
+                        final skippingExercise =
+                            _savingExercises.contains(group.exercise);
+                        final performedExercise =
+                            group.substitution?.substituteExerciseCanonical ??
+                                group.exercise;
+                        final nextExercise = index < detail.groups.length - 1
+                            ? detail.groups[index + 1].exercise
+                            : null;
+
+                        return GlassCard(
+                          key: _cardKeyForExercise(group.exercise),
+                          padding: EdgeInsets.zero,
+                          child: ExpansionTile(
+                            key: ValueKey<String>(
+                              'exercise-${group.exercise}-$_tilesEpoch',
+                            ),
+                            initiallyExpanded:
+                                _expandedByExercise[group.exercise] ?? false,
+                            maintainState: true,
+                            onExpansionChanged: (expanded) {
+                              _expandedByExercise[group.exercise] = expanded;
+                            },
+                            title: Text(group.displayExercise),
+                            subtitle: Text(
+                              group.substitution == null
+                                  ? 'Prescribed: ${prescribedSets.length} | Actual: ${actualSets.length}'
+                                  : 'Planned: ${group.exercise} | Actual: ${actualSets.length}',
+                            ),
+                            childrenPadding: const EdgeInsets.all(12),
+                            children: [
+                              if (group.substitution != null) ...[
+                                Container(
+                                  width: double.infinity,
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .tertiaryContainer
+                                        .withValues(alpha: 0.35),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color:
+                                          Theme.of(context).colorScheme.outline,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Set ${set.setIndex}',
+                                        'Substitution active: ${group.exercise} -> ${group.substitution!.substituteExerciseCanonical}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Reason: ${group.substitution!.reasonCode}'
+                                        '${group.substitution!.matchScore == null ? '' : ' | Match ${(group.substitution!.matchScore!).round()}/100'}',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        group.substitution == null
+                                            ? 'Adjust Prescribed and Confirm as Actual'
+                                            : 'Adjusted for substitute; confirm as actual',
                                         style: const TextStyle(
                                             fontWeight: FontWeight.bold),
                                       ),
-                                      const SizedBox(width: 8),
-                                      if (hasExistingActual)
-                                        const Chip(
-                                          label: Text(
-                                              'Will overwrite existing actual'),
-                                        ),
-                                    ],
-                                  ),
-                                  _AdjustRow(
-                                    label: 'Weight (lb)',
-                                    value: _formatWeight(edited.weight),
-                                    onMinus: () => _adjustWeight(key, -2.5),
-                                    onPlus: () => _adjustWeight(key, 2.5),
-                                  ),
-                                  _AdjustRow(
-                                    label: 'Reps',
-                                    value: edited.reps?.toString() ?? 'unset',
-                                    onMinus: () => _adjustReps(key, -1),
-                                    onPlus: () => _adjustReps(key, 1),
-                                  ),
-                                  _AdjustRow(
-                                    label: 'RIR',
-                                    value: edited.rir?.toString() ?? 'unset',
-                                    onMinus: () => _adjustRir(key, -1),
-                                    onPlus: () => _adjustRir(key, 1),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: FilledButton.tonal(
-                                      onPressed: saving
-                                          ? null
-                                          : () => _confirmActualSet(
-                                                performedExerciseCanonical:
-                                                    performedExercise,
-                                                prescribedExerciseCanonical:
-                                                    group.exercise,
-                                                substitutionId:
-                                                    group.substitution?.id,
-                                                prescribed: set,
-                                                hadExistingActual:
-                                                    hasExistingActual,
-                                                currentExercise: group.exercise,
-                                                nextExercise: isLastSet
-                                                    ? nextExercise
-                                                    : null,
-                                                advanceCard: isLastSet,
-                                              ),
-                                      child: Text(
-                                        hasExistingActual
-                                            ? 'Update Actual'
-                                            : 'Confirm as Actual',
-                                      ),
                                     ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  FilledButton.tonal(
+                                    onPressed: prescribedSets.isEmpty
+                                        ? null
+                                        : () => _openSubstitutionPicker(
+                                              detail: detail,
+                                              group: group,
+                                              prescribedSets: prescribedSets,
+                                            ),
+                                    child: const Text('Substitute Exercise'),
+                                  ),
+                                  if (group.substitution != null) ...[
+                                    const SizedBox(width: 8),
+                                    OutlinedButton(
+                                      onPressed: () =>
+                                          _clearSubstitutionForGroup(group),
+                                      child: const Text('Clear'),
+                                    ),
+                                  ],
+                                  const SizedBox(width: 8),
+                                  FilledButton.tonal(
+                                    onPressed: skippingExercise ||
+                                            prescribedSets.isEmpty
+                                        ? null
+                                        : () => _skipExercise(
+                                              performedExerciseCanonical:
+                                                  performedExercise,
+                                              prescribedExerciseCanonical:
+                                                  group.exercise,
+                                              substitutionId:
+                                                  group.substitution?.id,
+                                              prescribedSets: prescribedSets,
+                                            ),
+                                    child: const Text('Skip Exercise (log 0)'),
                                   ),
                                 ],
                               ),
-                            );
-                          }),
-                        const SizedBox(height: 8),
-                        const Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Actual',
+                              if (skippingExercise) ...[
+                                const SizedBox(height: 6),
+                                const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text('Logging all sets as 0...'),
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+                              if (prescribedSets.isEmpty)
+                                const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                      'No prescribed sets for this exercise.'),
+                                )
+                              else
+                                ...prescribedSets
+                                    .asMap()
+                                    .entries
+                                    .map((setEntry) {
+                                  final set = setEntry.value;
+                                  final isLastSet =
+                                      setEntry.key == prescribedSets.length - 1;
+                                  final key =
+                                      _setKey(group.exercise, set.setIndex);
+                                  final edited = _editedByKey[key]!;
+                                  final hasExistingActual = actualSets
+                                      .any((a) => a.setIndex == set.setIndex);
+                                  final saving = _savingKeys.contains(key);
+
+                                  return Container(
+                                    width: double.infinity,
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .outline,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              'Set ${set.setIndex}',
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.bold),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            if (hasExistingActual)
+                                              const Chip(
+                                                label: Text(
+                                                    'Will overwrite existing actual'),
+                                              ),
+                                          ],
+                                        ),
+                                        _AdjustRow(
+                                          label: 'Weight (lb)',
+                                          value: _formatWeight(edited.weight),
+                                          onMinus: () =>
+                                              _adjustWeight(key, -2.5),
+                                          onPlus: () => _adjustWeight(key, 2.5),
+                                        ),
+                                        _AdjustRow(
+                                          label: 'Reps',
+                                          value: edited.reps?.toString() ??
+                                              'unset',
+                                          onMinus: () => _adjustReps(key, -1),
+                                          onPlus: () => _adjustReps(key, 1),
+                                        ),
+                                        _AdjustRow(
+                                          label: 'RIR',
+                                          value:
+                                              edited.rir?.toString() ?? 'unset',
+                                          onMinus: () => _adjustRir(key, -1),
+                                          onPlus: () => _adjustRir(key, 1),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: FilledButton.tonal(
+                                            onPressed: saving
+                                                ? null
+                                                : () => _confirmActualSet(
+                                                      performedExerciseCanonical:
+                                                          performedExercise,
+                                                      prescribedExerciseCanonical:
+                                                          group.exercise,
+                                                      substitutionId: group
+                                                          .substitution?.id,
+                                                      prescribed: set,
+                                                      hadExistingActual:
+                                                          hasExistingActual,
+                                                      currentExercise:
+                                                          group.exercise,
+                                                      nextExercise: isLastSet
+                                                          ? nextExercise
+                                                          : null,
+                                                      advanceCard: isLastSet,
+                                                    ),
+                                            child: Text(
+                                              hasExistingActual
+                                                  ? 'Update Actual'
+                                                  : 'Confirm as Actual',
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                              const SizedBox(height: 8),
+                              const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'Actual',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              if (actualSets.isEmpty)
+                                const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text('none'),
+                                )
+                              else
+                                ...actualSets.map(
+                                  (s) => Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Set ${s.setIndex}: ${s.weight ?? 'unknown'}x${s.reps ?? 'unknown'}r${s.rir ?? 'unknown'} ${s.unit}'
+                                      '${s.exerciseCanonical != group.exercise ? ' (${s.exerciseCanonical})' : ''}',
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      }),
+                    const SizedBox(height: 16),
+                    const SectionHeader(text: 'Audit'),
+                    const SizedBox(height: 8),
+                    GlassCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Rule Triggers',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        if (actualSets.isEmpty)
-                          const Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text('none'),
-                          )
-                        else
-                          ...actualSets.map(
-                            (s) => Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Set ${s.setIndex}: ${s.weight ?? 'unknown'}x${s.reps ?? 'unknown'}r${s.rir ?? 'unknown'} ${s.unit}'
-                                '${s.exerciseCanonical != group.exercise ? ' (${s.exerciseCanonical})' : ''}',
+                          if (detail.ruleTriggers.isEmpty)
+                            const Text('none')
+                          else
+                            ...detail.ruleTriggers.map(
+                              (r) => Text(
+                                '${r.triggerDate} | ${r.ruleCode} | triggered=${r.triggered} | ${r.detailsJson}',
                               ),
                             ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Run Override Audit',
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
-                      ],
-                    ),
-                  );
-                }),
-              const SizedBox(height: 16),
-              Text('Audit', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Rule Triggers',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      if (detail.ruleTriggers.isEmpty)
-                        const Text('none')
-                      else
-                        ...detail.ruleTriggers.map(
-                          (r) => Text(
-                            '${r.triggerDate} | ${r.ruleCode} | triggered=${r.triggered} | ${r.detailsJson}',
-                          ),
-                        ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Run Override Audit',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      if (detail.runOverrideAudits.isEmpty)
-                        const Text('none')
-                      else
-                        ...detail.runOverrideAudits.map(
-                          (a) => Text(
-                            '${a.runKey} | ${a.oldSource} -> ${a.newSource} | ${a.reason}',
-                          ),
-                        ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'AI Audit Entries',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      if (detail.aiAudits.isEmpty)
-                        const Text('none')
-                      else
-                        ...detail.aiAudits.map(
-                          (a) => Text(
-                            const JsonEncoder.withIndent('  ').convert(
-                              jsonDecode(a.responseJson)
-                                  as Map<String, dynamic>,
+                          if (detail.runOverrideAudits.isEmpty)
+                            const Text('none')
+                          else
+                            ...detail.runOverrideAudits.map(
+                              (a) => Text(
+                                '${a.runKey} | ${a.oldSource} -> ${a.newSource} | ${a.reason}',
+                              ),
                             ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'AI Audit Entries',
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+                          if (detail.aiAudits.isEmpty)
+                            const Text('none')
+                          else
+                            ...detail.aiAudits.map(
+                              (a) => Text(
+                                const JsonEncoder.withIndent('  ').convert(
+                                  jsonDecode(a.responseJson)
+                                      as Map<String, dynamic>,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -884,6 +915,41 @@ class _SubstitutionSelectionResult {
   final bool clear;
 }
 
+class _WorkoutDetailPageBackground extends StatelessWidget {
+  const _WorkoutDetailPageBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            ClinicalPalette.bgTop,
+            ClinicalPalette.bgMid,
+            ClinicalPalette.bgBottom,
+          ],
+        ),
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: const Alignment(-0.1, -0.92),
+            radius: 1.35,
+            colors: [
+              Colors.white.withValues(alpha: 0.05),
+              Colors.transparent,
+              Colors.black.withValues(alpha: 0.24),
+            ],
+            stops: const [0, 0.58, 1],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SubstitutionPickerSheet extends StatefulWidget {
   const _SubstitutionPickerSheet({
     required this.prescribedExercise,
@@ -896,7 +962,8 @@ class _SubstitutionPickerSheet extends StatefulWidget {
   final List<SubstitutionCandidate> suggestions;
 
   @override
-  State<_SubstitutionPickerSheet> createState() => _SubstitutionPickerSheetState();
+  State<_SubstitutionPickerSheet> createState() =>
+      _SubstitutionPickerSheetState();
 }
 
 class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
@@ -991,8 +1058,10 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
                     value: 'equipment_unavailable',
                     child: Text('Equipment unavailable')),
                 DropdownMenuItem(value: 'pain', child: Text('Pain')),
-                DropdownMenuItem(value: 'machine_busy', child: Text('Machine busy')),
-                DropdownMenuItem(value: 'preference', child: Text('Preference')),
+                DropdownMenuItem(
+                    value: 'machine_busy', child: Text('Machine busy')),
+                DropdownMenuItem(
+                    value: 'preference', child: Text('Preference')),
                 DropdownMenuItem(value: 'other', child: Text('Other')),
               ],
               onChanged: (v) => setState(() => _reasonCode = v ?? 'preference'),
@@ -1020,7 +1089,8 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
                 onChanged: selectedIsWeak
                     ? (v) => setState(() => _warningAcknowledged = v ?? false)
                     : null,
-                title: const Text('Acknowledge warning (required for weak match)'),
+                title:
+                    const Text('Acknowledge warning (required for weak match)'),
               ),
             ],
             const SizedBox(height: 8),

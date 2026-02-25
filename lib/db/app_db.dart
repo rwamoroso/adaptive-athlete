@@ -23,6 +23,8 @@ import 'tables/plan_cycles.dart';
 import 'tables/plan_days.dart';
 import 'tables/plan_exercise_alternatives.dart';
 import 'tables/plan_import_audit.dart';
+import 'tables/plan_long_range_week_performance.dart';
+import 'tables/plan_long_range_weeks.dart';
 import 'tables/plan_prescribed_runs.dart';
 import 'tables/plan_prescribed_strength_sets.dart';
 import 'tables/plan_summary_snapshots.dart';
@@ -133,6 +135,7 @@ class StandardWorkbookImportResult {
     required this.insertedPlanDays,
     required this.insertedStrengthSets,
     required this.insertedRunPlans,
+    required this.insertedAlternatives,
     required this.warnings,
     required this.conflictReportPath,
   });
@@ -141,6 +144,7 @@ class StandardWorkbookImportResult {
   final int insertedPlanDays;
   final int insertedStrengthSets;
   final int insertedRunPlans;
+  final int insertedAlternatives;
   final List<String> warnings;
   final String? conflictReportPath;
 
@@ -149,6 +153,7 @@ class StandardWorkbookImportResult {
         'inserted_plan_days': insertedPlanDays,
         'inserted_strength_sets': insertedStrengthSets,
         'inserted_run_plans': insertedRunPlans,
+        'inserted_alternatives': insertedAlternatives,
         'warnings': warnings,
         'conflict_report_path': conflictReportPath,
       };
@@ -215,6 +220,7 @@ class _ParsedDailyPlan {
     required this.effortHrGuardrails,
     required this.notes,
     required this.strengthRows,
+    required this.alternatives,
     required this.rawRows,
   });
 
@@ -230,6 +236,7 @@ class _ParsedDailyPlan {
   final String? effortHrGuardrails;
   final String? notes;
   final List<_ParsedPlannedStrengthRow> strengthRows;
+  final List<_AiParsedPlanAlternative> alternatives;
   final List<List<dynamic>> rawRows;
 }
 
@@ -268,6 +275,18 @@ class _AiParsedPlanAlternative {
   final int rank;
   final String tier;
   final String rationale;
+  final String? notes;
+}
+
+class _StoredAlternativeNoteParts {
+  const _StoredAlternativeNoteParts({
+    required this.tier,
+    required this.rationale,
+    required this.notes,
+  });
+
+  final String? tier;
+  final String? rationale;
   final String? notes;
 }
 
@@ -311,6 +330,94 @@ class _AiParsedWeeklyPlan {
   final List<_AiParsedWeeklyPlanDay> days;
 }
 
+class _AiParsedTenWeekPlanRow {
+  const _AiParsedTenWeekPlanRow({
+    required this.weekLabel,
+    required this.weekStart,
+    required this.weekEnd,
+    required this.runFocus,
+    required this.strengthFocus,
+    required this.strengthProgressionExpectation,
+    required this.primaryProgressionTarget,
+    required this.recoveryEmphasis,
+    required this.deload,
+    required this.notes,
+  });
+
+  final String weekLabel;
+  final String weekStart;
+  final String weekEnd;
+  final String runFocus;
+  final String strengthFocus;
+  final String strengthProgressionExpectation;
+  final String primaryProgressionTarget;
+  final String recoveryEmphasis;
+  final bool deload;
+  final String? notes;
+}
+
+class _AiParsedPlanImportBundle {
+  const _AiParsedPlanImportBundle({
+    required this.weeklyPlan,
+    required this.tenWeekRows,
+  });
+
+  final _AiParsedWeeklyPlan weeklyPlan;
+  final List<_AiParsedTenWeekPlanRow> tenWeekRows;
+}
+
+class _LongRangePlanWeekUpsertInput {
+  const _LongRangePlanWeekUpsertInput({
+    required this.weekLabel,
+    required this.weekNumber,
+    required this.weekStart,
+    required this.weekEnd,
+    required this.runFocus,
+    required this.strengthFocus,
+    required this.strengthProgressionExpectation,
+    required this.primaryProgressionTarget,
+    required this.recoveryEmphasis,
+    required this.deload,
+    required this.notes,
+  });
+
+  final String weekLabel;
+  final int? weekNumber;
+  final String weekStart;
+  final String weekEnd;
+  final String? runFocus;
+  final String? strengthFocus;
+  final String? strengthProgressionExpectation;
+  final String? primaryProgressionTarget;
+  final String? recoveryEmphasis;
+  final bool deload;
+  final String? notes;
+}
+
+class _StrengthProgressionEvaluationResult {
+  const _StrengthProgressionEvaluationResult({
+    required this.evaluation,
+    required this.expectation,
+    required this.comparedSetCount,
+    required this.metSetCount,
+    required this.exceededSetCount,
+    required this.underSetCount,
+    required this.averageScore,
+    required this.expectedSetCount,
+    required this.matchedSetCount,
+  });
+
+  final String? evaluation; // under | met | exceeded | insufficient_data
+  final String? expectation;
+  final int comparedSetCount;
+  final int metSetCount;
+  final int exceededSetCount;
+  final int underSetCount;
+  final double? averageScore;
+  final int expectedSetCount;
+  final int matchedSetCount;
+}
+
 class _AiParsedWeeklyPlanDayBuilder {
   _AiParsedWeeklyPlanDayBuilder(this.dayNumber);
 
@@ -323,7 +430,8 @@ class _AiParsedWeeklyPlanDayBuilder {
   String? targetPace;
   String? effortHrGuardrails;
   String? notes;
-  final List<_ParsedPlannedStrengthRow> strengthRows = <_ParsedPlannedStrengthRow>[];
+  final List<_ParsedPlannedStrengthRow> strengthRows =
+      <_ParsedPlannedStrengthRow>[];
   final List<_AiParsedPlanAlternative> alternatives =
       <_AiParsedPlanAlternative>[];
 
@@ -340,8 +448,7 @@ class _AiParsedWeeklyPlanDayBuilder {
       effortHrGuardrails: effortHrGuardrails,
       notes: notes,
       strengthRows: List<_ParsedPlannedStrengthRow>.unmodifiable(strengthRows),
-      alternatives:
-          List<_AiParsedPlanAlternative>.unmodifiable(alternatives),
+      alternatives: List<_AiParsedPlanAlternative>.unmodifiable(alternatives),
     );
   }
 }
@@ -351,12 +458,14 @@ class _PlanDaySnapshot {
     required this.sheetName,
     required this.sessionType,
     required this.strengthSets,
+    required this.alternatives,
     required this.runPlan,
   });
 
   final String sheetName;
   final String sessionType;
   final List<PlanPrescribedStrengthSet> strengthSets;
+  final List<PlanExerciseAlternative> alternatives;
   final PlanPrescribedRun? runPlan;
 }
 
@@ -477,6 +586,8 @@ class ManualRunSegmentInput {
     PlanExerciseAlternatives,
     PlanPrescribedStrengthSets,
     PlanPrescribedRuns,
+    PlanLongRangeWeeks,
+    PlanLongRangeWeekPerformance,
     PlanSummarySnapshots,
     PlanImportAudit,
   ],
@@ -489,7 +600,7 @@ class AppDb extends _$AppDb {
   final Uuid _uuid = const Uuid();
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -545,6 +656,26 @@ class AppDb extends _$AppDb {
           if (from < 6) {
             await m.createTable(appPromptTemplates);
           }
+          if (from < 7) {
+            await m.createTable(planLongRangeWeeks);
+            await m.createTable(planLongRangeWeekPerformance);
+          }
+          if (from >= 7 && from < 8) {
+            await m.addColumn(
+              planLongRangeWeeks,
+              planLongRangeWeeks.strengthProgressionExpectation,
+            );
+          }
+          if (from >= 8 && from < 9) {
+            await m.addColumn(
+              planLongRangeWeekPerformance,
+              planLongRangeWeekPerformance.strengthProgressionExpectation,
+            );
+            await m.addColumn(
+              planLongRangeWeekPerformance,
+              planLongRangeWeekPerformance.strengthProgressionEvaluation,
+            );
+          }
         },
         beforeOpen: (details) async {
           await _ensurePlanDaysSessionTypeColumn();
@@ -552,6 +683,10 @@ class AppDb extends _$AppDb {
           await _ensurePlanExerciseAlternativesTable();
           await _ensureActualStrengthSetSubstitutionColumns();
           await _ensureAppPromptTemplatesTable();
+          await _ensurePlanLongRangeWeeksTable();
+          await _ensurePlanLongRangeWeeksColumns();
+          await _ensurePlanLongRangeWeekPerformanceTable();
+          await _ensurePlanLongRangeWeekPerformanceColumns();
         },
       );
 
@@ -774,8 +909,8 @@ class AppDb extends _$AppDb {
     if (tableExists == null) {
       return;
     }
-    final columns = await customSelect('PRAGMA table_info(actual_strength_sets)')
-        .get();
+    final columns =
+        await customSelect('PRAGMA table_info(actual_strength_sets)').get();
     final hasPrescribed = columns.any(
       (r) =>
           (r.data['name']?.toString().toLowerCase() ?? '') ==
@@ -814,6 +949,117 @@ class AppDb extends _$AppDb {
         updated_at INTEGER NOT NULL
       )
     ''');
+  }
+
+  Future<void> _ensurePlanLongRangeWeeksTable() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plan_long_range_weeks' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists != null) {
+      return;
+    }
+    await customStatement('''
+      CREATE TABLE plan_long_range_weeks (
+        id TEXT NOT NULL PRIMARY KEY,
+        week_label TEXT NOT NULL,
+        week_number INTEGER NULL,
+        week_start TEXT NOT NULL,
+        week_end TEXT NOT NULL,
+        run_focus TEXT NULL,
+        strength_focus TEXT NULL,
+        strength_progression_expectation TEXT NULL,
+        primary_progression_target TEXT NULL,
+        recovery_emphasis TEXT NULL,
+        deload INTEGER NOT NULL DEFAULT 0,
+        notes TEXT NULL,
+        source TEXT NOT NULL,
+        last_plan_cycle_id TEXT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _ensurePlanLongRangeWeeksColumns() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plan_long_range_weeks' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists == null) {
+      return;
+    }
+    final columns =
+        await customSelect('PRAGMA table_info(plan_long_range_weeks)').get();
+    final hasStrengthExpectation = columns.any(
+      (r) =>
+          (r.data['name']?.toString().toLowerCase() ?? '') ==
+          'strength_progression_expectation',
+    );
+    if (!hasStrengthExpectation) {
+      await customStatement(
+        'ALTER TABLE plan_long_range_weeks ADD COLUMN strength_progression_expectation TEXT',
+      );
+    }
+  }
+
+  Future<void> _ensurePlanLongRangeWeekPerformanceTable() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plan_long_range_week_performance' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists != null) {
+      return;
+    }
+    await customStatement('''
+      CREATE TABLE plan_long_range_week_performance (
+        id TEXT NOT NULL PRIMARY KEY,
+        plan_long_range_week_id TEXT NULL,
+        week_label TEXT NULL,
+        week_number INTEGER NULL,
+        week_start TEXT NOT NULL,
+        week_end TEXT NOT NULL,
+        evaluated_plan_cycle_id TEXT NULL,
+        evaluation_source TEXT NOT NULL,
+        planned_day_count INTEGER NOT NULL,
+        completed_plan_days INTEGER NOT NULL,
+        planned_run_days INTEGER NOT NULL,
+        actual_run_days INTEGER NOT NULL,
+        planned_run_sessions INTEGER NOT NULL,
+        actual_run_sessions INTEGER NOT NULL,
+        planned_strength_exercises INTEGER NOT NULL,
+        actual_strength_exercises INTEGER NOT NULL,
+        planned_strength_sets INTEGER NOT NULL,
+        actual_strength_sets INTEGER NOT NULL,
+        strength_progression_expectation TEXT NULL,
+        strength_progression_evaluation TEXT NULL,
+        actual_run_distance_m REAL NULL,
+        actual_run_duration_s INTEGER NULL,
+        metrics_json TEXT NULL,
+        captured_at INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _ensurePlanLongRangeWeekPerformanceColumns() async {
+    final cols = await customSelect(
+      'PRAGMA table_info(plan_long_range_week_performance)',
+    ).get();
+    if (cols.isEmpty) {
+      return;
+    }
+    final names = cols
+        .map((r) => (r.data['name'] ?? '').toString().trim().toLowerCase())
+        .toSet();
+    if (!names.contains('strength_progression_expectation')) {
+      await customStatement(
+        'ALTER TABLE plan_long_range_week_performance '
+        'ADD COLUMN strength_progression_expectation TEXT',
+      );
+    }
+    if (!names.contains('strength_progression_evaluation')) {
+      await customStatement(
+        'ALTER TABLE plan_long_range_week_performance '
+        'ADD COLUMN strength_progression_evaluation TEXT',
+      );
+    }
   }
 
   String _startOfWeekYmd(String ymd) {
@@ -881,6 +1127,83 @@ class AppDb extends _$AppDb {
       default:
         return 'Unknown';
     }
+  }
+
+  String _inferSessionTypeFromPlannedSets(
+    List<PlanPrescribedStrengthSet> plannedSets,
+  ) {
+    if (plannedSets.isEmpty) {
+      return 'unknown';
+    }
+    var push = 0;
+    var pull = 0;
+    var legs = 0;
+    for (final row in plannedSets) {
+      final ex = row.exerciseCanonical.toLowerCase();
+      if (ex.contains('core:') ||
+          ex.contains('plank') ||
+          ex.contains('dead_bug')) {
+        continue;
+      }
+      if (ex.contains('squat') ||
+          ex.contains('rdl') ||
+          ex.contains('deadlift') ||
+          ex.contains('leg_extension') ||
+          ex.contains('leg extension') ||
+          ex.contains('hamstring') ||
+          ex.contains('calf') ||
+          ex.contains('lunge') ||
+          ex.contains('split_squat') ||
+          ex.contains('leg_press') ||
+          ex.contains('leg press')) {
+        legs++;
+      }
+      if (ex.contains('pull') ||
+          ex.contains('row') ||
+          ex.contains('lat') ||
+          ex.contains('curl') ||
+          ex.contains('rear_delt')) {
+        pull++;
+      }
+      if (ex.contains('bench') ||
+          ex.contains('press') ||
+          ex.contains('fly') ||
+          ex.contains('triceps') ||
+          ex.contains('lateral_raise') ||
+          ex.contains('lateral raise')) {
+        push++;
+      }
+    }
+    final maxScore = [push, pull, legs].reduce((a, b) => a > b ? a : b);
+    if (maxScore < 2) {
+      return 'unknown';
+    }
+    final winners = <String>[
+      if (push == maxScore) 'push',
+      if (pull == maxScore) 'pull',
+      if (legs == maxScore) 'legs',
+    ];
+    return winners.length == 1 ? winners.first : 'unknown';
+  }
+
+  String _resolveDisplaySessionType({
+    required String? storedSessionType,
+    required List<PlanPrescribedStrengthSet> plannedSets,
+  }) {
+    final normalizedStored = _normalizeSessionType(storedSessionType);
+    final inferred = _inferSessionTypeFromPlannedSets(plannedSets);
+    if (inferred == 'unknown') {
+      return normalizedStored;
+    }
+    if (normalizedStored == 'unknown' || normalizedStored == 'rest') {
+      return inferred;
+    }
+    // Correct obvious mismatches from imported/mislabeled workbook summaries.
+    if (_skipSessionTypes.contains(normalizedStored) &&
+        normalizedStored != inferred) {
+      return inferred;
+    }
+    return normalizedStored;
   }
 
   String _deriveSessionType({
@@ -1123,6 +1446,9 @@ class AppDb extends _$AppDb {
       final runRows = await (select(planPrescribedRuns)
             ..where((r) => r.planDayId.isIn(dayIds)))
           .get();
+      final alternativeRows = await (select(planExerciseAlternatives)
+            ..where((a) => a.planDayId.isIn(dayIds)))
+          .get();
 
       final setsByDayId = <String, List<PlanPrescribedStrengthSet>>{};
       for (final row in strengthRows) {
@@ -1139,6 +1465,16 @@ class AppDb extends _$AppDb {
       final runByDayId = <String, PlanPrescribedRun>{
         for (final row in runRows) row.planDayId: row,
       };
+      final alternativesByDayId = <String, List<PlanExerciseAlternative>>{};
+      for (final row in alternativeRows) {
+        final planDayId = row.planDayId;
+        if (planDayId == null) {
+          continue;
+        }
+        alternativesByDayId
+            .putIfAbsent(planDayId, () => <PlanExerciseAlternative>[])
+            .add(row);
+      }
 
       final snapshots = days
           .map(
@@ -1147,7 +1483,12 @@ class AppDb extends _$AppDb {
               sessionType:
                   _normalizeSessionType(day.sessionType ?? day.sheetName),
               strengthSets: List<PlanPrescribedStrengthSet>.from(
-                  setsByDayId[day.id] ?? const <PlanPrescribedStrengthSet>[]),
+                setsByDayId[day.id] ?? const <PlanPrescribedStrengthSet>[],
+              ),
+              alternatives: List<PlanExerciseAlternative>.from(
+                alternativesByDayId[day.id] ??
+                    const <PlanExerciseAlternative>[],
+              ),
               runPlan: runByDayId[day.id],
             ),
           )
@@ -1157,6 +1498,7 @@ class AppDb extends _$AppDb {
         sheetName: selected.sheetName,
         sessionType: 'rest',
         strengthSets: const <PlanPrescribedStrengthSet>[],
+        alternatives: const <PlanExerciseAlternative>[],
         runPlan: null,
       );
 
@@ -1240,6 +1582,9 @@ class AppDb extends _$AppDb {
         await (delete(planPrescribedRuns)
               ..where((r) => r.planDayId.equals(targetDay.id)))
             .go();
+        await (delete(planExerciseAlternatives)
+              ..where((a) => a.planDayId.equals(targetDay.id)))
+            .go();
 
         for (final set in source.strengthSets) {
           await into(planPrescribedStrengthSets).insert(
@@ -1271,6 +1616,231 @@ class AppDb extends _$AppDb {
               targetPace: Value(run.targetPace),
               effortHrGuardrails: Value(run.effortHrGuardrails),
               notes: Value(run.notes),
+              createdAt: unixMsNow(),
+            ),
+          );
+        }
+        for (final alt in source.alternatives) {
+          await into(planExerciseAlternatives).insert(
+            PlanExerciseAlternativesCompanion.insert(
+              id: _uuid.v4(),
+              planDayId: Value(targetDay.id),
+              prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
+              alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
+              priority: Value(alt.priority),
+              notes: Value(alt.notes),
+              createdAt: unixMsNow(),
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  Future<void> undoRestDayAndPullSplit({
+    required String dateYmd,
+  }) async {
+    await transaction(() async {
+      final cycle = await getActivePlanCycleForDate(dateYmd);
+      if (cycle == null) {
+        throw StateError('No active split found for $dateYmd.');
+      }
+
+      final days = await (select(planDays)
+            ..where((d) => d.planCycleId.equals(cycle.id))
+            ..orderBy([(d) => OrderingTerm.asc(d.dayNumber)]))
+          .get();
+      if (days.isEmpty) {
+        throw StateError('Active split has no planned days.');
+      }
+
+      var selectedIndex = days.indexWhere((d) => d.estimatedDate == dateYmd);
+      if (selectedIndex == -1) {
+        final byOffset =
+            parseYmd(dateYmd).difference(parseYmd(cycle.weekStart)).inDays;
+        if (byOffset < 0 || byOffset >= days.length) {
+          throw StateError('$dateYmd is not part of the active split.');
+        }
+        selectedIndex = byOffset;
+      }
+
+      final selected = days[selectedIndex];
+      final selectedType =
+          _normalizeSessionType(selected.sessionType ?? selected.sheetName);
+      if (selectedType != 'rest') {
+        throw StateError('Selected day is not currently a rest day.');
+      }
+      if (selectedIndex >= days.length - 1) {
+        throw StateError(
+          'Cannot undo rest-day push from the final day because no future training day remains to pull forward.',
+        );
+      }
+
+      final dayIds = days.map((d) => d.id).toList();
+      final strengthRows = await (select(planPrescribedStrengthSets)
+            ..where((s) => s.planDayId.isIn(dayIds)))
+          .get();
+      final runRows = await (select(planPrescribedRuns)
+            ..where((r) => r.planDayId.isIn(dayIds)))
+          .get();
+      final alternativeRows = await (select(planExerciseAlternatives)
+            ..where((a) => a.planDayId.isIn(dayIds)))
+          .get();
+
+      final setsByDayId = <String, List<PlanPrescribedStrengthSet>>{};
+      for (final row in strengthRows) {
+        final bucket = setsByDayId.putIfAbsent(
+          row.planDayId,
+          () => <PlanPrescribedStrengthSet>[],
+        );
+        bucket.add(row);
+      }
+      for (final bucket in setsByDayId.values) {
+        bucket.sort((a, b) => a.setIndex.compareTo(b.setIndex));
+      }
+
+      final runByDayId = <String, PlanPrescribedRun>{
+        for (final row in runRows) row.planDayId: row,
+      };
+      final alternativesByDayId = <String, List<PlanExerciseAlternative>>{};
+      for (final row in alternativeRows) {
+        final planDayId = row.planDayId;
+        if (planDayId == null) {
+          continue;
+        }
+        alternativesByDayId
+            .putIfAbsent(planDayId, () => <PlanExerciseAlternative>[])
+            .add(row);
+      }
+
+      final snapshots = days
+          .map(
+            (day) => _PlanDaySnapshot(
+              sheetName: day.sheetName,
+              sessionType:
+                  _normalizeSessionType(day.sessionType ?? day.sheetName),
+              strengthSets: List<PlanPrescribedStrengthSet>.from(
+                setsByDayId[day.id] ?? const <PlanPrescribedStrengthSet>[],
+              ),
+              alternatives: List<PlanExerciseAlternative>.from(
+                alternativesByDayId[day.id] ??
+                    const <PlanExerciseAlternative>[],
+              ),
+              runPlan: runByDayId[day.id],
+            ),
+          )
+          .toList();
+
+      final tail = <_PlanDaySnapshot>[...snapshots.skip(selectedIndex)];
+      var pullIndex = -1;
+      for (var i = 1; i < tail.length; i++) {
+        if (_normalizeSessionType(tail[i].sessionType) != 'rest') {
+          pullIndex = i;
+          break;
+        }
+      }
+      if (pullIndex == -1) {
+        throw StateError(
+          'No future training day exists to pull forward into this rest day.',
+        );
+      }
+
+      final pulled = tail.removeAt(pullIndex);
+      // Remove the currently selected rest placeholder at the start of the tail.
+      tail.removeAt(0);
+      final endRestPlaceholder = _PlanDaySnapshot(
+        sheetName: selected.sheetName,
+        sessionType: 'rest',
+        strengthSets: const <PlanPrescribedStrengthSet>[],
+        alternatives: const <PlanExerciseAlternative>[],
+        runPlan: null,
+      );
+
+      final rebuilt = <_PlanDaySnapshot>[
+        ...snapshots.take(selectedIndex),
+        pulled,
+        ...tail,
+        endRestPlaceholder,
+      ];
+      if (rebuilt.length != days.length) {
+        throw StateError(
+            'Undo rest-day push failed due to an internal mapping error.');
+      }
+
+      final splitStart = parseYmd(cycle.weekStart);
+      for (var i = 0; i < days.length; i++) {
+        final targetDay = days[i];
+        final source = rebuilt[i];
+        final sessionType = _normalizeSessionType(source.sessionType);
+
+        await (update(planDays)..where((d) => d.id.equals(targetDay.id))).write(
+          PlanDaysCompanion(
+            dayNumber: Value(i + 1),
+            estimatedDate: Value(toYmd(splitStart.add(Duration(days: i)))),
+            sessionType: Value(sessionType),
+            sheetName: Value(
+              _sheetNameForDay(
+                dayNumber: i + 1,
+                sessionType: sessionType,
+                fallbackSheetName: source.sheetName,
+              ),
+            ),
+          ),
+        );
+
+        await (delete(planPrescribedStrengthSets)
+              ..where((s) => s.planDayId.equals(targetDay.id)))
+            .go();
+        await (delete(planPrescribedRuns)
+              ..where((r) => r.planDayId.equals(targetDay.id)))
+            .go();
+        await (delete(planExerciseAlternatives)
+              ..where((a) => a.planDayId.equals(targetDay.id)))
+            .go();
+
+        for (final set in source.strengthSets) {
+          await into(planPrescribedStrengthSets).insert(
+            PlanPrescribedStrengthSetsCompanion.insert(
+              id: _uuid.v4(),
+              planDayId: targetDay.id,
+              exerciseCanonical: set.exerciseCanonical,
+              setIndex: set.setIndex,
+              unit: set.unit,
+              weight: Value(set.weight),
+              reps: Value(set.reps),
+              rir: Value(set.rir),
+              rawSetString: Value(set.rawSetString),
+              createdAt: unixMsNow(),
+            ),
+          );
+        }
+
+        final run = source.runPlan;
+        if (run != null) {
+          await into(planPrescribedRuns).insert(
+            PlanPrescribedRunsCompanion.insert(
+              id: _uuid.v4(),
+              planDayId: targetDay.id,
+              dayLabel: Value(run.dayLabel),
+              liftFocus: Value(run.liftFocus),
+              runType: Value(run.runType),
+              durationText: Value(run.durationText),
+              targetPace: Value(run.targetPace),
+              effortHrGuardrails: Value(run.effortHrGuardrails),
+              notes: Value(run.notes),
+              createdAt: unixMsNow(),
+            ),
+          );
+        }
+        for (final alt in source.alternatives) {
+          await into(planExerciseAlternatives).insert(
+            PlanExerciseAlternativesCompanion.insert(
+              id: _uuid.v4(),
+              planDayId: Value(targetDay.id),
+              prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
+              alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
+              priority: Value(alt.priority),
+              notes: Value(alt.notes),
               createdAt: unixMsNow(),
             ),
           );
@@ -1388,7 +1958,8 @@ class AppDb extends _$AppDb {
     final existing = await (select(actualStrengthSets)
           ..where((a) => a.workoutDayId.equals(workoutDayId))
           ..where((a) => a.setIndex.equals(setIndex))
-          ..where((a) => a.prescribedExerciseCanonical.equals(canonicalPrescribed))
+          ..where(
+              (a) => a.prescribedExerciseCanonical.equals(canonicalPrescribed))
           ..orderBy([
             (a) =>
                 OrderingTerm(expression: a.createdAt, mode: OrderingMode.desc)
@@ -1461,8 +2032,10 @@ class AppDb extends _$AppDb {
   }) async {
     final workoutDayId = await createOrGetWorkoutDayByDate(dateYmd);
     final planDayId = await _resolvePlanDayIdForDate(dateYmd);
-    final prescribed = ExerciseNormalizer.normalize(prescribedExerciseCanonical);
-    final substitute = ExerciseNormalizer.normalize(substituteExerciseCanonical);
+    final prescribed =
+        ExerciseNormalizer.normalize(prescribedExerciseCanonical);
+    final substitute =
+        ExerciseNormalizer.normalize(substituteExerciseCanonical);
     final existing = await (select(exerciseSubstitutions)
           ..where((t) => t.workoutDayId.equals(workoutDayId))
           ..where((t) => t.prescribedExerciseCanonical.equals(prescribed))
@@ -1478,9 +2051,8 @@ class AppDb extends _$AppDb {
           prescribedExerciseCanonical: prescribed,
           substituteExerciseCanonical: substitute,
           reasonCode: reasonCode,
-          reasonNotes: Value(reasonNotes?.trim().isEmpty ?? true
-              ? null
-              : reasonNotes!.trim()),
+          reasonNotes: Value(
+              reasonNotes?.trim().isEmpty ?? true ? null : reasonNotes!.trim()),
           selectedAt: now,
           selectedBy: const Value.absent(),
           matchScore: Value(matchScore),
@@ -1491,15 +2063,15 @@ class AppDb extends _$AppDb {
       );
       return;
     }
-    await (update(exerciseSubstitutions)..where((t) => t.id.equals(existing.id)))
+    await (update(exerciseSubstitutions)
+          ..where((t) => t.id.equals(existing.id)))
         .write(
       ExerciseSubstitutionsCompanion(
         planDayId: Value(planDayId),
         substituteExerciseCanonical: Value(substitute),
         reasonCode: Value(reasonCode),
-        reasonNotes: Value(reasonNotes?.trim().isEmpty ?? true
-            ? null
-            : reasonNotes!.trim()),
+        reasonNotes: Value(
+            reasonNotes?.trim().isEmpty ?? true ? null : reasonNotes!.trim()),
         selectedAt: Value(now),
         matchScore: Value(matchScore),
         matchExplanationJson: Value(matchExplanationJson),
@@ -1518,18 +2090,21 @@ class AppDb extends _$AppDb {
     if (day == null) {
       return;
     }
-    final prescribed = ExerciseNormalizer.normalize(prescribedExerciseCanonical);
+    final prescribed =
+        ExerciseNormalizer.normalize(prescribedExerciseCanonical);
     await (delete(exerciseSubstitutions)
           ..where((t) => t.workoutDayId.equals(day.id))
           ..where((t) => t.prescribedExerciseCanonical.equals(prescribed)))
         .go();
   }
 
-  Future<List<ExerciseAlternativeChoice>> getPlanExerciseAlternativesForPlanDay({
+  Future<List<ExerciseAlternativeChoice>>
+      getPlanExerciseAlternativesForPlanDay({
     required String? planDayId,
     required String prescribedExerciseCanonical,
   }) async {
-    final prescribed = ExerciseNormalizer.normalize(prescribedExerciseCanonical);
+    final prescribed =
+        ExerciseNormalizer.normalize(prescribedExerciseCanonical);
     final query = select(planExerciseAlternatives)
       ..where((t) => t.prescribedExerciseCanonical.equals(prescribed))
       ..orderBy([
@@ -1560,8 +2135,10 @@ class AppDb extends _$AppDb {
     int priority = 0,
     String? notes,
   }) async {
-    final prescribed = ExerciseNormalizer.normalize(prescribedExerciseCanonical);
-    final alternative = ExerciseNormalizer.normalize(alternativeExerciseCanonical);
+    final prescribed =
+        ExerciseNormalizer.normalize(prescribedExerciseCanonical);
+    final alternative =
+        ExerciseNormalizer.normalize(alternativeExerciseCanonical);
     final existingQuery = select(planExerciseAlternatives)
       ..where((t) => t.prescribedExerciseCanonical.equals(prescribed))
       ..where((t) => t.alternativeExerciseCanonical.equals(alternative))
@@ -1573,7 +2150,8 @@ class AppDb extends _$AppDb {
     }
     final existing = await existingQuery.getSingleOrNull();
     if (existing != null) {
-      await (update(planExerciseAlternatives)..where((t) => t.id.equals(existing.id)))
+      await (update(planExerciseAlternatives)
+            ..where((t) => t.id.equals(existing.id)))
           .write(
         PlanExerciseAlternativesCompanion(
           priority: Value(priority),
@@ -1592,7 +2170,7 @@ class AppDb extends _$AppDb {
         notes: Value(notes),
         createdAt: unixMsNow(),
       ),
-      );
+    );
   }
 
   Future<AppPromptTemplate?> getAppPromptTemplateByKey(String templateKey) {
@@ -2197,23 +2775,46 @@ class AppDb extends _$AppDb {
     required DateTime splitStartDate,
   }) async {
     final bytes = await File(filePath).readAsBytes();
-    SpreadsheetDecoder decoder;
+    SpreadsheetDecoder? decoder;
+    Object? spreadsheetDecoderError;
     try {
       decoder = SpreadsheetDecoder.decodeBytes(bytes, update: false);
     } catch (e) {
-      throw StateError('Workbook parse failed: $e');
+      spreadsheetDecoderError = e;
+    }
+    final decoderSheetNames = decoder?.tables.keys.toList() ?? const <String>[];
+    final useExcelFallback = decoderSheetNames.isEmpty;
+    Excel? excelWorkbook;
+    if (useExcelFallback) {
+      try {
+        excelWorkbook = Excel.decodeBytes(bytes);
+      } catch (e) {
+        final spreadsheetMsg = spreadsheetDecoderError == null
+            ? 'SpreadsheetDecoder returned 0 sheets'
+            : 'SpreadsheetDecoder failed: $spreadsheetDecoderError';
+        throw StateError(
+          'Workbook parse failed. $spreadsheetMsg. '
+          'Excel fallback failed: $e. '
+          'This usually means the workbook has unsupported/damaged XLSX styles metadata. '
+          'Open it in Excel and use Save As to create a repaired copy, then retry.',
+        );
+      }
+    }
+    final sheetNames = useExcelFallback
+        ? excelWorkbook!.tables.keys.toList()
+        : decoderSheetNames;
+    List<List<dynamic>> rowsForSheet(String sheetName) {
+      if (useExcelFallback) {
+        return _decodeExcelRows(excelWorkbook!.tables[sheetName]);
+      }
+      return _decodeRows(decoder!.tables[sheetName]?.rows);
     }
 
-    final sheetNames = decoder.tables.keys.toList();
     if (sheetNames.length < 11) {
       throw StateError(
           'Expected at least 11 sheets, found ${sheetNames.length}.');
     }
-    const requiredPrefix = <String>[
-      'Strength Data',
-      'Run Data',
-      '5-Day Push Pull Plan',
-    ];
+    const requiredPrefix = <String>['Strength Data', 'Run Data'];
     for (var i = 0; i < requiredPrefix.length; i++) {
       if (sheetNames[i].trim() != requiredPrefix[i]) {
         throw StateError(
@@ -2222,15 +2823,37 @@ class AppDb extends _$AppDb {
       }
     }
 
-    final runPlanSheetName = sheetNames[3].trim();
+    var summaryStartIndex = 2;
+    String? tenWeekPlanSheetName;
+    if (sheetNames.length > summaryStartIndex &&
+        sheetNames[summaryStartIndex].trim().toLowerCase() == '10 week plan') {
+      tenWeekPlanSheetName = sheetNames[summaryStartIndex].trim();
+      summaryStartIndex++;
+    }
+
+    final strengthSummarySheetName = sheetNames[summaryStartIndex].trim();
+    const allowedStrengthSummaryNames = <String>{
+      '5-Day Push Pull Plan',
+      '7-Day Push Pull Plan',
+    };
+    if (!allowedStrengthSummaryNames.contains(strengthSummarySheetName)) {
+      throw StateError(
+        'Sheet ${summaryStartIndex + 1} must be one of '
+        '"5-Day Push Pull Plan" or "7-Day Push Pull Plan". '
+        'Found "${sheetNames[summaryStartIndex]}".',
+      );
+    }
+
+    final runPlanSheetName = sheetNames[summaryStartIndex + 1].trim();
     if (runPlanSheetName != 'Run Plan - 5mi @ 8 min' &&
         runPlanSheetName != 'Run Plan - 5mi @ 8') {
       throw StateError(
-          'Sheet 4 must be "Run Plan - 5mi @ 8 min" (or legacy "Run Plan - 5mi @ 8").');
+          'Sheet ${summaryStartIndex + 2} must be "Run Plan - 5mi @ 8 min" (or legacy "Run Plan - 5mi @ 8").');
     }
 
+    final firstDaySheetIndex = summaryStartIndex + 2;
     for (var dayNumber = 1; dayNumber <= 7; dayNumber++) {
-      final idx = dayNumber + 3;
+      final idx = firstDaySheetIndex + (dayNumber - 1);
       final expectedPrefix = 'day $dayNumber';
       if (idx >= sheetNames.length ||
           !sheetNames[idx].trim().toLowerCase().startsWith(expectedPrefix)) {
@@ -2240,16 +2863,20 @@ class AppDb extends _$AppDb {
       }
     }
 
-    final strengthSummaryRows =
-        _decodeRows(decoder.tables['5-Day Push Pull Plan']?.rows);
-    final runSummaryRows = _decodeRows(decoder.tables[runPlanSheetName]?.rows);
+    final strengthSummaryRows = rowsForSheet(strengthSummarySheetName);
+    final runSummaryRows = rowsForSheet(runPlanSheetName);
+    final tenWeekPlanRows = tenWeekPlanSheetName == null
+        ? const <List<dynamic>>[]
+        : rowsForSheet(tenWeekPlanSheetName);
+    final parsedLongRangeWeeks =
+        _parseLongRangePlanRowsFromTenWeekSnapshotRows(tenWeekPlanRows);
     final summarySessionByDay =
         _extractSummarySessionByDay(strengthSummaryRows);
 
     final parsedDays = <_ParsedDailyPlan>[];
     for (var dayNumber = 1; dayNumber <= 7; dayNumber++) {
-      final sheetName = sheetNames[dayNumber + 3];
-      final rows = _decodeRows(decoder.tables[sheetName]?.rows);
+      final sheetName = sheetNames[firstDaySheetIndex + (dayNumber - 1)];
+      final rows = rowsForSheet(sheetName);
       parsedDays.add(_parseDailyPlanSheet(
         dayNumber: dayNumber,
         sheetName: sheetName,
@@ -2296,6 +2923,7 @@ class AppDb extends _$AppDb {
     late int insertedDayCount;
     late int insertedStrengthCount;
     late int insertedRunCount;
+    late int insertedAlternativeCount;
     late bool replacedCycle;
 
     await transaction(() async {
@@ -2317,9 +2945,14 @@ class AppDb extends _$AppDb {
       );
 
       final snapshots = <String, List<List<dynamic>>>{
-        '5-Day Push Pull Plan': strengthSummaryRows,
-        'Run Plan - 5mi @ 8 min': runSummaryRows,
+        strengthSummarySheetName: strengthSummaryRows,
+        runPlanSheetName == 'Run Plan - 5mi @ 8'
+            ? 'Run Plan - 5mi @ 8'
+            : 'Run Plan - 5mi @ 8 min': runSummaryRows,
       };
+      if (tenWeekPlanSheetName != null) {
+        snapshots[tenWeekPlanSheetName] = tenWeekPlanRows;
+      }
       for (final entry in snapshots.entries) {
         await into(planSummarySnapshots).insert(
           PlanSummarySnapshotsCompanion.insert(
@@ -2329,6 +2962,13 @@ class AppDb extends _$AppDb {
             snapshotJson: jsonEncode({'rows': entry.value}),
             createdAt: unixMsNow(),
           ),
+        );
+      }
+      if (parsedLongRangeWeeks.isNotEmpty) {
+        await _upsertPlanLongRangeWeeks(
+          rows: parsedLongRangeWeeks,
+          source: 'standard_workbook_import',
+          planCycleId: cycleId,
         );
       }
 
@@ -2359,6 +2999,7 @@ class AppDb extends _$AppDb {
       insertedDayCount = parsedDays.length;
       insertedStrengthCount = 0;
       insertedRunCount = 0;
+      insertedAlternativeCount = 0;
 
       for (final day in parsedDays) {
         final planDayId = planDayIdByNumber[day.dayNumber]!;
@@ -2395,6 +3036,25 @@ class AppDb extends _$AppDb {
           );
           insertedStrengthCount++;
         }
+
+        for (final alt in day.alternatives) {
+          await into(planExerciseAlternatives).insert(
+            PlanExerciseAlternativesCompanion.insert(
+              id: _uuid.v4(),
+              planDayId: Value(planDayId),
+              prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
+              alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
+              priority: Value(1000 - alt.rank),
+              notes: Value(_composeAlternativeNotes(
+                tier: alt.tier,
+                rationale: alt.rationale,
+                notes: alt.notes,
+              )),
+              createdAt: unixMsNow(),
+            ),
+          );
+          insertedAlternativeCount++;
+        }
       }
     });
 
@@ -2410,6 +3070,7 @@ class AppDb extends _$AppDb {
           'inserted_plan_days': insertedDayCount,
           'inserted_strength_sets': insertedStrengthCount,
           'inserted_run_plans': insertedRunCount,
+          'inserted_alternatives': insertedAlternativeCount,
         }),
       ),
     );
@@ -2419,6 +3080,7 @@ class AppDb extends _$AppDb {
       insertedPlanDays: insertedDayCount,
       insertedStrengthSets: insertedStrengthCount,
       insertedRunPlans: insertedRunCount,
+      insertedAlternatives: insertedAlternativeCount,
       warnings: const <String>[],
       conflictReportPath: null,
     );
@@ -2428,7 +3090,8 @@ class AppDb extends _$AppDb {
     required String text,
     required DateTime splitStartDate,
   }) async {
-    final parsed = _parseAiWeeklyPlanText(text);
+    final bundle = _parseAiPlanImportBundleText(text);
+    final parsed = bundle.weeklyPlan;
 
     final normalizedSplitStart = DateTime(
       splitStartDate.year,
@@ -2436,7 +3099,8 @@ class AppDb extends _$AppDb {
       splitStartDate.day,
     );
     final expectedWeekStart = toYmd(normalizedSplitStart);
-    final expectedWeekEnd = toYmd(normalizedSplitStart.add(const Duration(days: 6)));
+    final expectedWeekEnd =
+        toYmd(normalizedSplitStart.add(const Duration(days: 6)));
 
     if (parsed.weekStart != expectedWeekStart) {
       throw StateError(
@@ -2448,6 +3112,10 @@ class AppDb extends _$AppDb {
         'WEEK_END (${parsed.weekEnd}) does not match selected split end ($expectedWeekEnd).',
       );
     }
+
+    final tenWeekSnapshotRows = bundle.tenWeekRows.isNotEmpty
+        ? _aiTenWeekRowsToSnapshotRows(bundle.tenWeekRows)
+        : await _getLatestSummarySnapshotRowsByTabName('10 Week Plan');
 
     late int insertedDayCount;
     late int insertedStrengthCount;
@@ -2472,6 +3140,25 @@ class AppDb extends _$AppDb {
           createdAt: unixMsNow(),
         ),
       );
+
+      if (tenWeekSnapshotRows != null && tenWeekSnapshotRows.isNotEmpty) {
+        await into(planSummarySnapshots).insert(
+          PlanSummarySnapshotsCompanion.insert(
+            id: _uuid.v4(),
+            planCycleId: cycleId,
+            tabName: '10 Week Plan',
+            snapshotJson: jsonEncode({'rows': tenWeekSnapshotRows}),
+            createdAt: unixMsNow(),
+          ),
+        );
+      }
+      if (bundle.tenWeekRows.isNotEmpty) {
+        await _upsertPlanLongRangeWeeks(
+          rows: _longRangeInputsFromAiTenWeekRows(bundle.tenWeekRows),
+          source: 'ai_weekly_plan_text',
+          planCycleId: cycleId,
+        );
+      }
 
       final planDayIdByNumber = <int, String>{};
       insertedDayCount = 0;
@@ -2543,13 +3230,6 @@ class AppDb extends _$AppDb {
         }
 
         for (final alt in day.alternatives) {
-          final noteParts = <String>[
-            'tier=${alt.tier}',
-            'rationale=${alt.rationale}',
-          ];
-          if (alt.notes != null && alt.notes!.trim().isNotEmpty) {
-            noteParts.add('notes=${alt.notes!.trim()}');
-          }
           await into(planExerciseAlternatives).insert(
             PlanExerciseAlternativesCompanion.insert(
               id: _uuid.v4(),
@@ -2557,7 +3237,11 @@ class AppDb extends _$AppDb {
               prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
               alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
               priority: Value(1000 - alt.rank),
-              notes: Value(noteParts.join(' | ')),
+              notes: Value(_composeAlternativeNotes(
+                tier: alt.tier,
+                rationale: alt.rationale,
+                notes: alt.notes,
+              )),
               createdAt: unixMsNow(),
             ),
           );
@@ -2580,6 +3264,7 @@ class AppDb extends _$AppDb {
           'inserted_strength_sets': insertedStrengthCount,
           'inserted_run_plans': insertedRunCount,
           'inserted_alternatives': insertedAlternativeCount,
+          'ten_week_rows_persisted': tenWeekSnapshotRows?.length ?? 0,
         }),
       ),
     );
@@ -2592,6 +3277,460 @@ class AppDb extends _$AppDb {
       insertedAlternatives: insertedAlternativeCount,
       warnings: const <String>[],
     );
+  }
+
+  Future<List<List<dynamic>>?> _getLatestSummarySnapshotRowsByTabName(
+    String tabName,
+  ) async {
+    final row = await (select(planSummarySnapshots)
+          ..where((s) => s.tabName.equals(tabName))
+          ..orderBy([
+            (s) =>
+                OrderingTerm(expression: s.createdAt, mode: OrderingMode.desc),
+          ])
+          ..limit(1))
+        .getSingleOrNull();
+    if (row == null) {
+      return null;
+    }
+    final rows = _rowsFromSnapshotJson(row.snapshotJson);
+    return rows.isEmpty ? null : rows;
+  }
+
+  List<List<dynamic>> _aiTenWeekRowsToSnapshotRows(
+    List<_AiParsedTenWeekPlanRow> rows,
+  ) {
+    return <List<dynamic>>[
+      <dynamic>[
+        'Week',
+        'Week Start',
+        'Week End',
+        'Run Focus',
+        'Strength Focus',
+        'Strength Progression Expectation',
+        'Primary Progression Target',
+        'Recovery Emphasis',
+        'Deload?',
+        'Notes',
+      ],
+      ...rows.map(
+        (r) => <dynamic>[
+          r.weekLabel,
+          r.weekStart,
+          r.weekEnd,
+          r.runFocus,
+          r.strengthFocus,
+          r.strengthProgressionExpectation,
+          r.primaryProgressionTarget,
+          r.recoveryEmphasis,
+          r.deload ? 'Yes' : 'No',
+          r.notes ?? '',
+        ],
+      ),
+    ];
+  }
+
+  List<_LongRangePlanWeekUpsertInput> _longRangeInputsFromAiTenWeekRows(
+    List<_AiParsedTenWeekPlanRow> rows,
+  ) {
+    return rows
+        .map(
+          (r) => _LongRangePlanWeekUpsertInput(
+            weekLabel: r.weekLabel,
+            weekNumber: _weekNumberFromLabel(r.weekLabel),
+            weekStart: r.weekStart,
+            weekEnd: r.weekEnd,
+            runFocus: r.runFocus,
+            strengthFocus: r.strengthFocus,
+            strengthProgressionExpectation: r.strengthProgressionExpectation,
+            primaryProgressionTarget: r.primaryProgressionTarget,
+            recoveryEmphasis: r.recoveryEmphasis,
+            deload: r.deload,
+            notes: r.notes,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  List<_LongRangePlanWeekUpsertInput>
+      _parseLongRangePlanRowsFromTenWeekSnapshotRows(
+    List<List<dynamic>> rows,
+  ) {
+    if (rows.isEmpty) {
+      return const <_LongRangePlanWeekUpsertInput>[];
+    }
+    final headerRow = rows.first;
+    final colByKey = <String, int>{};
+    for (var i = 0; i < headerRow.length; i++) {
+      final header = _cleanString(headerRow[i]);
+      if (header == null) {
+        continue;
+      }
+      colByKey[_normalizeTenWeekHeader(header)] = i;
+    }
+
+    int? idxFor(List<String> candidates) {
+      for (final c in candidates) {
+        final idx = colByKey[c];
+        if (idx != null) {
+          return idx;
+        }
+      }
+      return null;
+    }
+
+    final weekIdx = idxFor(const ['week']);
+    final weekStartIdx = idxFor(const ['week_start']);
+    final weekEndIdx = idxFor(const ['week_end']);
+    if (weekIdx == null || weekStartIdx == null || weekEndIdx == null) {
+      return const <_LongRangePlanWeekUpsertInput>[];
+    }
+
+    final runFocusIdx = idxFor(const ['run_focus']);
+    final strengthFocusIdx = idxFor(const ['strength_focus']);
+    final strengthExpectationIdx =
+        idxFor(const ['strength_progression_expectation']);
+    final primaryTargetIdx = idxFor(const ['primary_progression_target']);
+    final recoveryIdx = idxFor(const ['recovery_emphasis']);
+    final deloadIdx = idxFor(const ['deload']);
+    final notesIdx = idxFor(const ['notes']);
+
+    final result = <_LongRangePlanWeekUpsertInput>[];
+    for (var r = 1; r < rows.length; r++) {
+      final row = rows[r];
+      final weekLabel = _cleanString(_cellValue([row], 0, weekIdx));
+      final weekStart = _parseYmdLike(_cellValue([row], 0, weekStartIdx));
+      final weekEnd = _parseYmdLike(_cellValue([row], 0, weekEndIdx));
+      final anyPrimaryValue =
+          weekLabel != null || weekStart != null || weekEnd != null;
+      if (!anyPrimaryValue) {
+        continue;
+      }
+      if (weekLabel == null || weekStart == null || weekEnd == null) {
+        continue;
+      }
+      result.add(
+        _LongRangePlanWeekUpsertInput(
+          weekLabel: weekLabel,
+          weekNumber: _weekNumberFromLabel(weekLabel),
+          weekStart: weekStart,
+          weekEnd: weekEnd,
+          runFocus: runFocusIdx == null
+              ? null
+              : _cleanString(_cellValue([row], 0, runFocusIdx)),
+          strengthFocus: strengthFocusIdx == null
+              ? null
+              : _cleanString(_cellValue([row], 0, strengthFocusIdx)),
+          strengthProgressionExpectation: strengthExpectationIdx == null
+              ? null
+              : _cleanString(_cellValue([row], 0, strengthExpectationIdx)),
+          primaryProgressionTarget: primaryTargetIdx == null
+              ? null
+              : _cleanString(_cellValue([row], 0, primaryTargetIdx)),
+          recoveryEmphasis: recoveryIdx == null
+              ? null
+              : _cleanString(_cellValue([row], 0, recoveryIdx)),
+          deload: _parseTenWeekDeloadValue(
+            deloadIdx == null ? null : _cellValue([row], 0, deloadIdx),
+          ),
+          notes: notesIdx == null
+              ? null
+              : _cleanString(_cellValue([row], 0, notesIdx)),
+        ),
+      );
+    }
+    return result;
+  }
+
+  String _normalizeTenWeekHeader(String value) {
+    final normalized = value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    if (normalized == 'deload') {
+      return 'deload';
+    }
+    if (normalized == 'deload_') {
+      return 'deload';
+    }
+    return normalized;
+  }
+
+  bool _parseTenWeekDeloadValue(dynamic raw) {
+    final text = (_cleanString(raw) ?? '').trim().toLowerCase();
+    if (text.isEmpty) {
+      return false;
+    }
+    return text == 'yes' || text == 'true' || text == '1' || text == 'y';
+  }
+
+  int? _weekNumberFromLabel(String? weekLabel) {
+    final text = (weekLabel ?? '').trim();
+    if (text.isEmpty) {
+      return null;
+    }
+    return int.tryParse(RegExp(r'(\d+)').firstMatch(text)?.group(1) ?? '');
+  }
+
+  Future<void> _upsertPlanLongRangeWeeks({
+    required List<_LongRangePlanWeekUpsertInput> rows,
+    required String source,
+    String? planCycleId,
+  }) async {
+    if (rows.isEmpty) {
+      return;
+    }
+    final now = unixMsNow();
+    for (final row in rows) {
+      final existing = await (select(planLongRangeWeeks)
+            ..where((t) => t.weekStart.equals(row.weekStart))
+            ..where((t) => t.weekEnd.equals(row.weekEnd))
+            ..orderBy([
+              (t) => OrderingTerm(
+                  expression: t.updatedAt, mode: OrderingMode.desc),
+            ])
+            ..limit(1))
+          .getSingleOrNull();
+      if (existing != null) {
+        await (update(planLongRangeWeeks)
+              ..where((t) => t.id.equals(existing.id)))
+            .write(
+          PlanLongRangeWeeksCompanion(
+            weekLabel: Value(row.weekLabel),
+            weekNumber: Value(row.weekNumber),
+            runFocus: Value(row.runFocus),
+            strengthFocus: Value(row.strengthFocus),
+            strengthProgressionExpectation:
+                Value(row.strengthProgressionExpectation),
+            primaryProgressionTarget: Value(row.primaryProgressionTarget),
+            recoveryEmphasis: Value(row.recoveryEmphasis),
+            deload: Value(row.deload),
+            notes: Value(row.notes),
+            source: Value(source),
+            lastPlanCycleId: Value(planCycleId),
+            updatedAt: Value(now),
+          ),
+        );
+        continue;
+      }
+      await into(planLongRangeWeeks).insert(
+        PlanLongRangeWeeksCompanion.insert(
+          id: _uuid.v4(),
+          weekLabel: row.weekLabel,
+          weekNumber: Value(row.weekNumber),
+          weekStart: row.weekStart,
+          weekEnd: row.weekEnd,
+          runFocus: Value(row.runFocus),
+          strengthFocus: Value(row.strengthFocus),
+          strengthProgressionExpectation:
+              Value(row.strengthProgressionExpectation),
+          primaryProgressionTarget: Value(row.primaryProgressionTarget),
+          recoveryEmphasis: Value(row.recoveryEmphasis),
+          deload: Value(row.deload),
+          notes: Value(row.notes),
+          source: source,
+          lastPlanCycleId: Value(planCycleId),
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+    }
+  }
+
+  _AiParsedPlanImportBundle _parseAiPlanImportBundleText(String text) {
+    final lines = const LineSplitter().convert(text);
+    final weeklyLines = <String>[];
+    final tenWeekRows = <_AiParsedTenWeekPlanRow>[];
+    var inTenWeekSection = false;
+    var sawWeekHeader = false;
+    var sawTenWeekHeader = false;
+    var sawTenWeekEnd = false;
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (i == 0 && line.startsWith('\ufeff')) {
+        line = line.substring(1);
+      }
+      final trimmed = line.trim();
+      final lineNo = i + 1;
+
+      if (sawWeekHeader) {
+        weeklyLines.add(line);
+        continue;
+      }
+
+      if (inTenWeekSection) {
+        if (trimmed.isEmpty) {
+          continue;
+        }
+        if (trimmed == 'END_TEN_WEEK_PLAN_UPDATE_V1') {
+          inTenWeekSection = false;
+          sawTenWeekEnd = true;
+          continue;
+        }
+        final colonIndex = trimmed.indexOf(':');
+        if (colonIndex <= 0) {
+          throw StateError(
+            'Line $lineNo: expected TEN_WEEK_ROW: ... or END_TEN_WEEK_PLAN_UPDATE_V1.',
+          );
+        }
+        final key = trimmed.substring(0, colonIndex).trim().toUpperCase();
+        final payload = trimmed.substring(colonIndex + 1).trim();
+        if (key != 'TEN_WEEK_ROW') {
+          throw StateError(
+              'Line $lineNo: unexpected field "$key" in ten-week section.');
+        }
+        tenWeekRows.add(_parseAiTenWeekPlanRow(payload, lineNo: lineNo));
+        continue;
+      }
+
+      if (trimmed.isEmpty) {
+        continue;
+      }
+
+      if (trimmed == 'TEN_WEEK_PLAN_UPDATE_V1') {
+        if (sawTenWeekHeader) {
+          throw StateError(
+              'Line $lineNo: duplicate TEN_WEEK_PLAN_UPDATE_V1 section.');
+        }
+        if (sawWeekHeader) {
+          throw StateError(
+            'Line $lineNo: TEN_WEEK_PLAN_UPDATE_V1 must appear before WEEK_PLAN_V1.',
+          );
+        }
+        inTenWeekSection = true;
+        sawTenWeekHeader = true;
+        continue;
+      }
+
+      if (trimmed == 'WEEK_PLAN_V1') {
+        sawWeekHeader = true;
+        weeklyLines.add('WEEK_PLAN_V1');
+        continue;
+      }
+
+      throw StateError(
+        'Line $lineNo: expected TEN_WEEK_PLAN_UPDATE_V1 or WEEK_PLAN_V1.',
+      );
+    }
+
+    if (inTenWeekSection) {
+      throw StateError(
+          'TEN_WEEK_PLAN_UPDATE_V1 is missing END_TEN_WEEK_PLAN_UPDATE_V1.');
+    }
+    if (sawTenWeekHeader && !sawTenWeekEnd) {
+      throw StateError(
+          'TEN_WEEK_PLAN_UPDATE_V1 is missing END_TEN_WEEK_PLAN_UPDATE_V1.');
+    }
+    if (!sawWeekHeader || weeklyLines.isEmpty) {
+      throw StateError('Missing WEEK_PLAN_V1 section.');
+    }
+    if (tenWeekRows.isNotEmpty) {
+      _validateAiTenWeekPlanRows(tenWeekRows);
+    }
+
+    final weeklyPlan = _parseAiWeeklyPlanText(weeklyLines.join('\n'));
+    return _AiParsedPlanImportBundle(
+      weeklyPlan: weeklyPlan,
+      tenWeekRows: List<_AiParsedTenWeekPlanRow>.unmodifiable(tenWeekRows),
+    );
+  }
+
+  _AiParsedTenWeekPlanRow _parseAiTenWeekPlanRow(
+    String payload, {
+    required int lineNo,
+  }) {
+    final parts = payload
+        .split('|')
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) {
+      throw StateError('Line $lineNo: TEN_WEEK_ROW is empty.');
+    }
+    final kv = _parseAiWeeklyKeyValueParts(
+      parts,
+      lineNo: lineNo,
+      context: 'TEN_WEEK_ROW',
+    );
+    final weekLabel = (kv['week'] ?? '').trim();
+    if (weekLabel.isEmpty) {
+      throw StateError('Line $lineNo: TEN_WEEK_ROW.week is required.');
+    }
+    final weekStart = _parseAiWeeklyPlanYmd(
+      (kv['week_start'] ?? '').trim(),
+      lineNo: lineNo,
+      field: 'TEN_WEEK_ROW.week_start',
+    );
+    final weekEnd = _parseAiWeeklyPlanYmd(
+      (kv['week_end'] ?? '').trim(),
+      lineNo: lineNo,
+      field: 'TEN_WEEK_ROW.week_end',
+    );
+    final runFocus = (kv['run_focus'] ?? '').trim();
+    final strengthFocus = (kv['strength_focus'] ?? '').trim();
+    final strengthProgressionExpectation =
+        (kv['strength_progression_expectation'] ?? '').trim();
+    final primaryProgressionTarget =
+        (kv['primary_progression_target'] ?? '').trim();
+    final recoveryEmphasis = (kv['recovery_emphasis'] ?? '').trim();
+    if (runFocus.isEmpty ||
+        strengthFocus.isEmpty ||
+        strengthProgressionExpectation.isEmpty ||
+        primaryProgressionTarget.isEmpty ||
+        recoveryEmphasis.isEmpty) {
+      throw StateError(
+        'Line $lineNo: TEN_WEEK_ROW requires run_focus, strength_focus, '
+        'strength_progression_expectation, primary_progression_target, '
+        'and recovery_emphasis.',
+      );
+    }
+    final deloadRaw = (kv['deload'] ?? '').trim().toLowerCase();
+    if (deloadRaw != 'yes' && deloadRaw != 'no') {
+      throw StateError('Line $lineNo: TEN_WEEK_ROW.deload must be yes or no.');
+    }
+    final notes = _parseAiWeeklyNullableText(kv['notes'] ?? '');
+    return _AiParsedTenWeekPlanRow(
+      weekLabel: weekLabel,
+      weekStart: weekStart,
+      weekEnd: weekEnd,
+      runFocus: runFocus,
+      strengthFocus: strengthFocus,
+      strengthProgressionExpectation: strengthProgressionExpectation,
+      primaryProgressionTarget: primaryProgressionTarget,
+      recoveryEmphasis: recoveryEmphasis,
+      deload: deloadRaw == 'yes',
+      notes: notes,
+    );
+  }
+
+  void _validateAiTenWeekPlanRows(List<_AiParsedTenWeekPlanRow> rows) {
+    final seenWeekLabels = <String>{};
+    final seenDateRanges = <String>{};
+    for (final row in rows) {
+      final weekLabelKey = row.weekLabel.trim().toLowerCase();
+      if (!seenWeekLabels.add(weekLabelKey)) {
+        throw StateError('Duplicate TEN_WEEK_ROW.week "${row.weekLabel}".');
+      }
+      final rangeKey = '${row.weekStart}|${row.weekEnd}';
+      if (!seenDateRanges.add(rangeKey)) {
+        throw StateError(
+          'Duplicate TEN_WEEK_ROW date range ${row.weekStart}..${row.weekEnd}.',
+        );
+      }
+      final start = DateTime.tryParse('${row.weekStart}T00:00:00');
+      final end = DateTime.tryParse('${row.weekEnd}T00:00:00');
+      if (start == null || end == null) {
+        throw StateError('Invalid TEN_WEEK_ROW dates for "${row.weekLabel}".');
+      }
+      if (toYmd(start.add(const Duration(days: 6))) != row.weekEnd) {
+        throw StateError(
+          'TEN_WEEK_ROW ${row.weekLabel}: week_end must be exactly 6 days after week_start.',
+        );
+      }
+    }
   }
 
   _AiParsedWeeklyPlan _parseAiWeeklyPlanText(String text) {
@@ -2635,7 +3774,8 @@ class AppDb extends _$AppDb {
           continue;
         }
         if (dayEndMatch != null) {
-          throw StateError('Line $lineNo: END DAY found before DAY block start.');
+          throw StateError(
+              'Line $lineNo: END DAY found before DAY block start.');
         }
         final colonIndex = trimmed.indexOf(':');
         if (colonIndex <= 0) {
@@ -2645,7 +3785,8 @@ class AppDb extends _$AppDb {
         final value = trimmed.substring(colonIndex + 1).trim();
         switch (key) {
           case 'WEEK_START':
-            weekStart = _parseAiWeeklyPlanYmd(value, lineNo: lineNo, field: key);
+            weekStart =
+                _parseAiWeeklyPlanYmd(value, lineNo: lineNo, field: key);
             break;
           case 'WEEK_END':
             weekEnd = _parseAiWeeklyPlanYmd(value, lineNo: lineNo, field: key);
@@ -2728,7 +3869,8 @@ class AppDb extends _$AppDb {
           );
           break;
         default:
-          throw StateError('Line $lineNo: unexpected field "$key" in day block.');
+          throw StateError(
+              'Line $lineNo: unexpected field "$key" in day block.');
       }
     }
 
@@ -2736,7 +3878,8 @@ class AppDb extends _$AppDb {
       throw StateError('Missing WEEK_PLAN_V1 header.');
     }
     if (currentDay != null) {
-      throw StateError('DAY ${currentDay.dayNumber} is missing END DAY ${currentDay.dayNumber}.');
+      throw StateError(
+          'DAY ${currentDay.dayNumber} is missing END DAY ${currentDay.dayNumber}.');
     }
     if (weekStart == null || weekEnd == null) {
       throw StateError('WEEK_START and WEEK_END are required.');
@@ -2751,10 +3894,12 @@ class AppDb extends _$AppDb {
       throw StateError('WEEK_END must be exactly 6 days after WEEK_START.');
     }
 
-    final missingDays =
-        List<int>.generate(7, (i) => i + 1).where((d) => !dayBuilders.containsKey(d)).toList();
+    final missingDays = List<int>.generate(7, (i) => i + 1)
+        .where((d) => !dayBuilders.containsKey(d))
+        .toList();
     if (missingDays.isNotEmpty) {
-      throw StateError('Missing required day blocks: ${missingDays.join(', ')}.');
+      throw StateError(
+          'Missing required day blocks: ${missingDays.join(', ')}.');
     }
 
     final builtDays = <_AiParsedWeeklyPlanDay>[];
@@ -2922,7 +4067,8 @@ class AppDb extends _$AppDb {
     if (parts.isEmpty) {
       throw StateError('Line $lineNo: ALT row is empty.');
     }
-    final prescribedExerciseCanonical = ExerciseNormalizer.normalize(parts.first);
+    final prescribedExerciseCanonical =
+        ExerciseNormalizer.normalize(parts.first);
     if (prescribedExerciseCanonical.isEmpty) {
       throw StateError('Line $lineNo: ALT missing prescribed exercise.');
     }
@@ -3055,6 +4201,40 @@ class AppDb extends _$AppDb {
     return rows.map((row) => List<dynamic>.from(row)).toList();
   }
 
+  List<List<dynamic>> _decodeExcelRows(Sheet? sheet) {
+    if (sheet == null) {
+      return const <List<dynamic>>[];
+    }
+    return sheet.rows.map((row) {
+      return row.map<dynamic>((cell) {
+        final value = cell?.value;
+        if (value == null) {
+          return null;
+        }
+        if (value is TextCellValue) {
+          return value.value;
+        }
+        if (value is IntCellValue) {
+          return value.value;
+        }
+        if (value is DoubleCellValue) {
+          return value.value;
+        }
+        if (value is BoolCellValue) {
+          return value.value;
+        }
+        if (value is DateCellValue) {
+          return DateTime(
+            value.year,
+            value.month,
+            value.day,
+          );
+        }
+        return value.toString();
+      }).toList(growable: false);
+    }).toList(growable: false);
+  }
+
   _ParsedDailyPlan _parseDailyPlanSheet({
     required int dayNumber,
     required String sheetName,
@@ -3118,7 +4298,9 @@ class AppDb extends _$AppDb {
         continue;
       }
       final lower = exerciseRaw.toLowerCase();
-      if (lower.contains('run results') || lower.contains('strength results')) {
+      if (lower.contains('run results') ||
+          lower.contains('strength results') ||
+          lower.contains('exercise alternatives')) {
         break;
       }
       if (lower.contains('auto-progression')) {
@@ -3146,6 +4328,12 @@ class AppDb extends _$AppDb {
       }
     }
 
+    final alternatives = _parseDailyPlanAlternativesSection(
+      sheetName: sheetName,
+      rows: rows,
+      prescribedExercises: strengthRows.map((e) => e.exerciseCanonical).toSet(),
+    );
+
     return _ParsedDailyPlan(
       dayNumber: dayNumber,
       sheetName: sheetName,
@@ -3159,7 +4347,287 @@ class AppDb extends _$AppDb {
       effortHrGuardrails: effort,
       notes: notes,
       strengthRows: strengthRows,
+      alternatives: alternatives,
       rawRows: rows,
+    );
+  }
+
+  List<_AiParsedPlanAlternative> _parseDailyPlanAlternativesSection({
+    required String sheetName,
+    required List<List<dynamic>> rows,
+    required Set<String> prescribedExercises,
+  }) {
+    var headerRowIndex = -1;
+    var prescribedCol = -1;
+    var altExerciseCol = -1;
+    var rankCol = -1;
+    var priorityCol = -1;
+    var tierCol = -1;
+    var rationaleCol = -1;
+    var notesCol = -1;
+    var sawAlternativesTitle = false;
+
+    for (var r = 0; r < rows.length; r++) {
+      final firstCell =
+          (_cleanString(_cellValue(rows, r, 0)) ?? '').toLowerCase();
+      if (firstCell.contains('exercise alternatives') ||
+          firstCell.contains('substitute suggestions')) {
+        sawAlternativesTitle = true;
+      }
+
+      final row = rows[r];
+      var rowPrescribedCol = -1;
+      var rowAltCol = -1;
+      var rowRankCol = -1;
+      var rowPriorityCol = -1;
+      var rowTierCol = -1;
+      var rowRationaleCol = -1;
+      var rowNotesCol = -1;
+      for (var c = 0; c < row.length; c++) {
+        final header =
+            (_cleanString(_cellValue(rows, r, c)) ?? '').toLowerCase();
+        if (header.isEmpty) {
+          continue;
+        }
+        if (header.contains('prescribed') && header.contains('exercise')) {
+          rowPrescribedCol = c;
+        } else if (header.contains('alternative') &&
+            header.contains('exercise')) {
+          rowAltCol = c;
+        } else if (header == 'rank' ||
+            header.endsWith(' rank') ||
+            header.contains('alt rank')) {
+          rowRankCol = c;
+        } else if (header.contains('priority')) {
+          rowPriorityCol = c;
+        } else if (header == 'tier' || header.contains(' tier')) {
+          rowTierCol = c;
+        } else if (header.contains('rationale')) {
+          rowRationaleCol = c;
+        } else if (header.contains('note')) {
+          rowNotesCol = c;
+        }
+      }
+
+      if (rowPrescribedCol != -1 && rowAltCol != -1) {
+        headerRowIndex = r;
+        prescribedCol = rowPrescribedCol;
+        altExerciseCol = rowAltCol;
+        rankCol = rowRankCol;
+        priorityCol = rowPriorityCol;
+        tierCol = rowTierCol;
+        rationaleCol = rowRationaleCol;
+        notesCol = rowNotesCol;
+        break;
+      }
+    }
+
+    if (headerRowIndex == -1) {
+      return const <_AiParsedPlanAlternative>[];
+    }
+
+    if (sawAlternativesTitle == false) {
+      // Allow header-only sections for manually edited workbooks.
+    }
+
+    final result = <_AiParsedPlanAlternative>[];
+    final altKeySet = <String>{};
+    final ranksByPrescribed = <String, Set<int>>{};
+    final nextRankByPrescribed = <String, int>{};
+
+    for (var r = headerRowIndex + 1; r < rows.length; r++) {
+      final firstCell =
+          (_cleanString(_cellValue(rows, r, 0)) ?? '').toLowerCase();
+      if (firstCell.contains('run results') ||
+          firstCell.contains('strength results')) {
+        break;
+      }
+      if (firstCell.contains('exercise alternatives') ||
+          firstCell.contains('substitute suggestions')) {
+        break;
+      }
+
+      final prescribedRaw = _cleanString(_cellValue(rows, r, prescribedCol));
+      final altRaw = _cleanString(_cellValue(rows, r, altExerciseCol));
+      final rankRaw = rankCol == -1 ? null : _cellValue(rows, r, rankCol);
+      final priorityRaw =
+          priorityCol == -1 ? null : _cellValue(rows, r, priorityCol);
+      final tierRaw =
+          tierCol == -1 ? null : _cleanString(_cellValue(rows, r, tierCol));
+      final rationaleRaw = rationaleCol == -1
+          ? null
+          : _cleanString(_cellValue(rows, r, rationaleCol));
+      final notesRaw =
+          notesCol == -1 ? null : _cleanString(_cellValue(rows, r, notesCol));
+
+      final hasAnyValue = prescribedRaw != null ||
+          altRaw != null ||
+          _cleanString(rankRaw) != null ||
+          _cleanString(priorityRaw) != null ||
+          tierRaw != null ||
+          rationaleRaw != null ||
+          notesRaw != null;
+      if (!hasAnyValue) {
+        continue;
+      }
+
+      if (prescribedRaw == null || altRaw == null) {
+        throw StateError(
+          '[$sheetName] alternatives row ${r + 1} must include Prescribed Exercise and Alternative Exercise.',
+        );
+      }
+
+      final prescribed = ExerciseNormalizer.normalize(prescribedRaw);
+      final alternative = ExerciseNormalizer.normalize(altRaw);
+      if (!prescribedExercises.contains(prescribed)) {
+        throw StateError(
+          '[$sheetName] alternatives row ${r + 1} references unknown prescribed exercise "$prescribedRaw".',
+        );
+      }
+
+      final parsedRank = _parseWorkbookOptionalInt(rankRaw);
+      final parsedPriority = _parseWorkbookOptionalInt(priorityRaw);
+      final nextRank = (nextRankByPrescribed[prescribed] ?? 0) + 1;
+      final rank = (parsedRank != null && parsedRank > 0)
+          ? parsedRank
+          : (parsedPriority != null ? nextRank : nextRank);
+      nextRankByPrescribed[prescribed] =
+          rank > (nextRankByPrescribed[prescribed] ?? 0)
+              ? rank
+              : (nextRankByPrescribed[prescribed] ?? 0);
+
+      final tierLower = (tierRaw ?? '').trim().toLowerCase();
+      final tier = switch (tierLower) {
+        'strong' => 'strong',
+        'acceptable' => 'acceptable',
+        'weak' => 'weak',
+        _ => 'acceptable',
+      };
+      final rationale = rationaleRaw ?? 'Imported from standard workbook';
+      final notes = notesRaw;
+
+      final altKey = '$prescribed|$alternative';
+      if (!altKeySet.add(altKey)) {
+        throw StateError(
+          '[$sheetName] duplicate alternative "$prescribedRaw -> $altRaw".',
+        );
+      }
+      final rankSet = ranksByPrescribed.putIfAbsent(prescribed, () => <int>{});
+      if (!rankSet.add(rank)) {
+        throw StateError(
+          '[$sheetName] duplicate alternative rank=$rank for "$prescribedRaw".',
+        );
+      }
+
+      result.add(
+        _AiParsedPlanAlternative(
+          prescribedExerciseCanonical: prescribed,
+          alternativeExerciseCanonical: alternative,
+          rank: rank,
+          tier: tier,
+          rationale: rationale,
+          notes: notes,
+        ),
+      );
+    }
+
+    return result;
+  }
+
+  int? _parseWorkbookOptionalInt(dynamic raw) {
+    if (raw == null) {
+      return null;
+    }
+    if (raw is int) {
+      return raw;
+    }
+    if (raw is double) {
+      final rounded = raw.round();
+      if ((raw - rounded).abs() < 0.0000001) {
+        return rounded;
+      }
+    }
+    final text = _cleanString(raw);
+    if (text == null) {
+      return null;
+    }
+    return int.tryParse(text);
+  }
+
+  String _composeAlternativeNotes({
+    required String tier,
+    required String rationale,
+    String? notes,
+  }) {
+    final noteParts = <String>[
+      'tier=$tier',
+      'rationale=$rationale',
+    ];
+    if (notes != null && notes.trim().isNotEmpty) {
+      noteParts.add('notes=${notes.trim()}');
+    }
+    return noteParts.join(' | ');
+  }
+
+  _StoredAlternativeNoteParts _parseStoredAlternativeNotes(String? rawNotes) {
+    final raw = rawNotes?.trim();
+    if (raw == null || raw.isEmpty) {
+      return const _StoredAlternativeNoteParts(
+        tier: null,
+        rationale: null,
+        notes: null,
+      );
+    }
+
+    String? tier;
+    String? rationale;
+    String? notes;
+    final leftovers = <String>[];
+    for (final token in raw.split('|')) {
+      final piece = token.trim();
+      if (piece.isEmpty) {
+        continue;
+      }
+      final idx = piece.indexOf('=');
+      if (idx <= 0) {
+        leftovers.add(piece);
+        continue;
+      }
+      final key = piece.substring(0, idx).trim().toLowerCase();
+      final value = piece.substring(idx + 1).trim();
+      switch (key) {
+        case 'tier':
+          if (tier == null || tier.isEmpty) {
+            tier = value;
+          } else {
+            leftovers.add(piece);
+          }
+          break;
+        case 'rationale':
+          if (rationale == null || rationale.isEmpty) {
+            rationale = value;
+          } else {
+            leftovers.add(piece);
+          }
+          break;
+        case 'notes':
+          if (notes == null || notes.isEmpty) {
+            notes = value;
+          } else {
+            leftovers.add(piece);
+          }
+          break;
+        default:
+          leftovers.add(piece);
+      }
+    }
+    if ((notes == null || notes.isEmpty) && leftovers.isNotEmpty) {
+      notes = leftovers.join(' | ');
+    }
+    return _StoredAlternativeNoteParts(
+      tier: tier,
+      rationale: rationale,
+      notes: notes,
     );
   }
 
@@ -3671,29 +5139,25 @@ class AppDb extends _$AppDb {
     final day = await (select(workoutDays)
           ..where((d) => d.workoutDate.equals(dateString)))
         .getSingleOrNull();
-    PlanDay? matchedPlanDay =
-        await _getLatestPlanDayByEstimatedDate(dateString);
-    PlanCycle? activeCycle;
-    if (matchedPlanDay != null) {
-      final cycleId = matchedPlanDay.planCycleId;
-      activeCycle = await (select(planCycles)
-            ..where((c) => c.id.equals(cycleId)))
-          .getSingleOrNull();
-    } else {
-      activeCycle = await getActivePlanCycleForDate(dateString);
-      if (activeCycle != null) {
-        final cycleId = activeCycle.id;
-        final cycleWeekStart = activeCycle.weekStart;
-        final dayNumber =
-            parseYmd(dateString).difference(parseYmd(cycleWeekStart)).inDays +
-                1;
-        if (dayNumber >= 1 && dayNumber <= 7) {
-          matchedPlanDay = await (select(planDays)
-                ..where((d) => d.planCycleId.equals(cycleId))
-                ..where((d) => d.dayNumber.equals(dayNumber)))
-              .getSingleOrNull();
-        }
+    PlanCycle? activeCycle = await getActivePlanCycleForDate(dateString);
+    PlanDay? matchedPlanDay;
+    if (activeCycle != null) {
+      final cycleId = activeCycle.id;
+      final cycleWeekStart = activeCycle.weekStart;
+      final dayNumber =
+          parseYmd(dateString).difference(parseYmd(cycleWeekStart)).inDays + 1;
+      if (dayNumber >= 1 && dayNumber <= 7) {
+        matchedPlanDay = await (select(planDays)
+              ..where((d) => d.planCycleId.equals(cycleId))
+              ..where((d) => d.dayNumber.equals(dayNumber)))
+            .getSingleOrNull();
       }
+    }
+    matchedPlanDay ??= await _getLatestPlanDayByEstimatedDate(dateString);
+    if (activeCycle == null && matchedPlanDay != null) {
+      activeCycle = await (select(planCycles)
+            ..where((c) => c.id.equals(matchedPlanDay!.planCycleId)))
+          .getSingleOrNull();
     }
 
     final matchedPlanDayId = matchedPlanDay?.id;
@@ -3713,6 +5177,10 @@ class AppDb extends _$AppDb {
         : await (select(planPrescribedRuns)
               ..where((r) => r.planDayId.equals(matchedPlanDayId)))
             .getSingleOrNull();
+    final resolvedPlanSessionType = _resolveDisplaySessionType(
+      storedSessionType: matchedPlanDay?.sessionType,
+      plannedSets: plannedSets,
+    );
     final prescribedRunView = plannedRun == null
         ? null
         : PrescribedRunPlan(
@@ -3754,7 +5222,7 @@ class AppDb extends _$AppDb {
         planCycleId: activeCycle?.id,
         planDayId: matchedPlanDayId,
         planDayNumber: matchedPlanDay?.dayNumber,
-        planSessionType: matchedPlanDay?.sessionType,
+        planSessionType: resolvedPlanSessionType,
         prescribedRun: prescribedRunView,
         sleepNights: sleeps,
         runSessions: const <RunSessionWithSegments>[],
@@ -3831,7 +5299,7 @@ class AppDb extends _$AppDb {
       planCycleId: activeCycle?.id,
       planDayId: matchedPlanDayId,
       planDayNumber: matchedPlanDay?.dayNumber,
-      planSessionType: matchedPlanDay?.sessionType,
+      planSessionType: resolvedPlanSessionType,
       prescribedRun: prescribedRunView,
       sleepNights: sleeps,
       runSessions: runWithSegments,
@@ -4287,6 +5755,8 @@ class AppDb extends _$AppDb {
     if (defaultSheetName != null && defaultSheetName != 'Strength Data') {
       excel.rename(defaultSheetName, 'Strength Data');
     }
+    excel['Run Data'];
+    excel['10 Week Plan'];
 
     final allDays = await select(workoutDays).get();
     final dayById = <String, String>{
@@ -4394,6 +5864,7 @@ class AppDb extends _$AppDb {
     Map<int, PlanDay> planDayByNumber = {};
     Map<String, List<PlanPrescribedStrengthSet>> planSetsByDayId = {};
     Map<String, PlanPrescribedRun> planRunByDayId = {};
+    Map<String, List<PlanExerciseAlternative>> planAlternativesByDayId = {};
     Map<String, List<List<dynamic>>> snapshotsByTab = {};
 
     if (activeCycle != null) {
@@ -4422,6 +5893,30 @@ class AppDb extends _$AppDb {
         for (final runPlan in runPlans) {
           planRunByDayId[runPlan.planDayId] = runPlan;
         }
+        final altRows = await (select(planExerciseAlternatives)
+              ..where((a) => a.planDayId.isIn(dayIds))
+              ..orderBy([
+                (a) => OrderingTerm(
+                      expression: a.prescribedExerciseCanonical,
+                      mode: OrderingMode.asc,
+                    ),
+                (a) => OrderingTerm(
+                      expression: a.priority,
+                      mode: OrderingMode.desc,
+                    ),
+                (a) => OrderingTerm(
+                      expression: a.createdAt,
+                      mode: OrderingMode.asc,
+                    ),
+              ]))
+            .get();
+        for (final alt in altRows) {
+          final bucket = planAlternativesByDayId.putIfAbsent(
+            alt.planDayId ?? '',
+            () => <PlanExerciseAlternative>[],
+          );
+          bucket.add(alt);
+        }
       }
 
       final snapshots = await (select(planSummarySnapshots)
@@ -4433,13 +5928,31 @@ class AppDb extends _$AppDb {
       }
     }
 
-    final strengthSummaryRows = snapshotsByTab['5-Day Push Pull Plan'] ??
+    final tenWeekPlanRows =
+        snapshotsByTab['10 Week Plan'] ?? _generateTenWeekPlanRows();
+    final strengthSummaryTabName =
+        snapshotsByTab.containsKey('7-Day Push Pull Plan')
+            ? '7-Day Push Pull Plan'
+            : '5-Day Push Pull Plan';
+    final strengthSummaryRows = snapshotsByTab[strengthSummaryTabName] ??
+        snapshotsByTab['5-Day Push Pull Plan'] ??
+        snapshotsByTab['7-Day Push Pull Plan'] ??
         _generateStrengthSummaryRows(planDayByNumber, planSetsByDayId);
+    final runSummaryTabName = snapshotsByTab.containsKey('Run Plan - 5mi @ 8')
+        ? 'Run Plan - 5mi @ 8'
+        : 'Run Plan - 5mi @ 8 min';
     final runSummaryRows = snapshotsByTab['Run Plan - 5mi @ 8 min'] ??
         snapshotsByTab['Run Plan - 5mi @ 8'] ??
         _generateRunSummaryRows(planDayByNumber, planRunByDayId);
-    _writeRows(excel['5-Day Push Pull Plan'], strengthSummaryRows);
-    _writeRows(excel['Run Plan - 5mi @ 8 min'], runSummaryRows);
+    _writeRows(excel['10 Week Plan'], tenWeekPlanRows);
+    _writeTenWeekExportContext(
+      sheet: excel['10 Week Plan'],
+      tenWeekPlanRows: tenWeekPlanRows,
+      exportWeekStart: previousWeekStartYmd,
+      exportWeekEnd: previousWeekEndYmd,
+    );
+    _writeRows(excel[strengthSummaryTabName], strengthSummaryRows);
+    _writeRows(excel[runSummaryTabName], runSummaryRows);
 
     for (var dayOffset = 0; dayOffset < 7; dayOffset++) {
       final dayNumber = dayOffset + 1;
@@ -4534,6 +6047,51 @@ class AppDb extends _$AppDb {
       }
 
       rowCursor += 1;
+      _setCell(
+        sheet,
+        rowCursor,
+        0,
+        TextCellValue('Exercise Alternatives (Substitute Suggestions)'),
+      );
+      rowCursor += 1;
+      _setCell(sheet, rowCursor, 0, TextCellValue('Prescribed Exercise'));
+      _setCell(sheet, rowCursor, 1, TextCellValue('Rank'));
+      _setCell(sheet, rowCursor, 2, TextCellValue('Alternative Exercise'));
+      _setCell(sheet, rowCursor, 3, TextCellValue('Tier'));
+      _setCell(sheet, rowCursor, 4, TextCellValue('Rationale'));
+      _setCell(sheet, rowCursor, 5, TextCellValue('Notes'));
+      rowCursor += 1;
+
+      final dayAltRows = planDay == null
+          ? const <PlanExerciseAlternative>[]
+          : (planAlternativesByDayId[planDay.id] ??
+              const <PlanExerciseAlternative>[]);
+      final nextRankByPrescribed = <String, int>{};
+      for (final alt in dayAltRows) {
+        final meta = _parseStoredAlternativeNotes(alt.notes);
+        final nextRank =
+            (nextRankByPrescribed[alt.prescribedExerciseCanonical] ?? 0) + 1;
+        nextRankByPrescribed[alt.prescribedExerciseCanonical] = nextRank;
+        _setCell(
+          sheet,
+          rowCursor,
+          0,
+          TextCellValue(alt.prescribedExerciseCanonical),
+        );
+        _setCell(sheet, rowCursor, 1, IntCellValue(nextRank));
+        _setCell(
+          sheet,
+          rowCursor,
+          2,
+          TextCellValue(alt.alternativeExerciseCanonical),
+        );
+        _setCell(sheet, rowCursor, 3, TextCellValue(meta.tier ?? ''));
+        _setCell(sheet, rowCursor, 4, TextCellValue(meta.rationale ?? ''));
+        _setCell(sheet, rowCursor, 5, TextCellValue(meta.notes ?? ''));
+        rowCursor++;
+      }
+
+      rowCursor += 1;
       _setCell(sheet, rowCursor, 0, TextCellValue('Run Results (Actual)'));
       rowCursor += 1;
       _setCell(sheet, rowCursor, 0, TextCellValue('Start Time'));
@@ -4619,6 +6177,16 @@ class AppDb extends _$AppDb {
       }
     }
 
+    await _recordPlanLongRangeWeekPerformanceSnapshot(
+      exportWeekStart: previousWeekStartYmd,
+      exportWeekEnd: previousWeekEndYmd,
+      activeCycle: activeCycle,
+      planDayByNumber: planDayByNumber,
+      planSetsByDayId: planSetsByDayId,
+      planRunByDayId: planRunByDayId,
+      tenWeekPlanRows: tenWeekPlanRows,
+    );
+
     final encoded = excel.encode();
     if (encoded == null) {
       throw StateError('Failed to encode workbook.');
@@ -4684,6 +6252,429 @@ class AppDb extends _$AppDb {
         _setCell(sheet, r, c, TextCellValue(value.toString()));
       }
     }
+  }
+
+  List<List<dynamic>> _generateTenWeekPlanRows() {
+    final rows = <List<dynamic>>[
+      <dynamic>[
+        'Week',
+        'Week Start',
+        'Week End',
+        'Run Focus',
+        'Strength Focus',
+        'Strength Progression Expectation',
+        'Primary Progression Target',
+        'Recovery Emphasis',
+        'Notes',
+      ]
+    ];
+    final today = DateTime.now();
+    final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
+    for (var i = 0; i < 10; i++) {
+      final weekStart = startOfWeek.add(Duration(days: i * 7));
+      final weekEnd = weekStart.add(const Duration(days: 6));
+      rows.add([
+        'Week ${i + 1}',
+        toYmd(weekStart),
+        toYmd(weekEnd),
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ]);
+    }
+    return rows;
+  }
+
+  void _writeTenWeekExportContext({
+    required Sheet sheet,
+    required List<List<dynamic>> tenWeekPlanRows,
+    required String exportWeekStart,
+    required String exportWeekEnd,
+  }) {
+    final matchedWeekLabel = _findTenWeekWeekLabelForExport(
+      tenWeekPlanRows: tenWeekPlanRows,
+      exportWeekStart: exportWeekStart,
+      exportWeekEnd: exportWeekEnd,
+    );
+    final matchedWeekNumber = matchedWeekLabel == null
+        ? null
+        : int.tryParse(
+            RegExp(r'(\d+)').firstMatch(matchedWeekLabel)?.group(1) ?? '');
+
+    // Write export context off to the right so the 10-week table shape remains unchanged.
+    _setCell(sheet, 0, 10, TextCellValue('Export Context'));
+    _setCell(sheet, 1, 10, TextCellValue('Exported Week Number'));
+    _setCell(sheet, 1, 11, TextCellValue(matchedWeekNumber?.toString() ?? ''));
+    _setCell(sheet, 2, 10, TextCellValue('Exported Week Label'));
+    _setCell(sheet, 2, 11, TextCellValue(matchedWeekLabel ?? ''));
+    _setCell(sheet, 3, 10, TextCellValue('Export Week Start'));
+    _setCell(sheet, 3, 11, TextCellValue(exportWeekStart));
+    _setCell(sheet, 4, 10, TextCellValue('Export Week End'));
+    _setCell(sheet, 4, 11, TextCellValue(exportWeekEnd));
+  }
+
+  String? _findTenWeekWeekLabelForExport({
+    required List<List<dynamic>> tenWeekPlanRows,
+    required String exportWeekStart,
+    required String exportWeekEnd,
+  }) {
+    for (var i = 1; i < tenWeekPlanRows.length; i++) {
+      final row = tenWeekPlanRows[i];
+      final weekLabel = row.isNotEmpty ? _cleanString(row[0]) : null;
+      final weekStart = row.length > 1 ? _cleanString(row[1]) : null;
+      final weekEnd = row.length > 2 ? _cleanString(row[2]) : null;
+      if (weekStart == exportWeekStart && weekEnd == exportWeekEnd) {
+        return weekLabel;
+      }
+    }
+    return null;
+  }
+
+  _StrengthProgressionEvaluationResult _evaluateStrengthProgressionForWeek({
+    required PlanLongRangeWeek? longRangeWeek,
+    required Map<int, PlanDay> planDayByNumber,
+    required Map<String, List<PlanPrescribedStrengthSet>> planSetsByDayId,
+    required List<ActualStrengthSet> actualStrengthRows,
+    required Map<String, String> workoutDateById,
+  }) {
+    final expectation =
+        (longRangeWeek?.strengthProgressionExpectation ?? '').trim();
+    if (expectation.isEmpty) {
+      return const _StrengthProgressionEvaluationResult(
+        evaluation: null,
+        expectation: null,
+        comparedSetCount: 0,
+        metSetCount: 0,
+        exceededSetCount: 0,
+        underSetCount: 0,
+        averageScore: null,
+        expectedSetCount: 0,
+        matchedSetCount: 0,
+      );
+    }
+
+    final planDateByDayId = <String, String>{};
+    for (final day in planDayByNumber.values) {
+      final ymd = (day.estimatedDate ?? '').trim();
+      if (ymd.isEmpty) {
+        continue;
+      }
+      planDateByDayId[day.id] = ymd;
+    }
+
+    String planKey(String dateYmd, String exerciseCanonical, int setIndex) =>
+        '$dateYmd|${ExerciseNormalizer.normalize(exerciseCanonical)}|$setIndex';
+
+    final plannedByKey = <String, PlanPrescribedStrengthSet>{};
+    for (final entry in planSetsByDayId.entries) {
+      final planDate = planDateByDayId[entry.key];
+      if (planDate == null) {
+        continue;
+      }
+      for (final set in entry.value) {
+        plannedByKey[planKey(planDate, set.exerciseCanonical, set.setIndex)] =
+            set;
+      }
+    }
+    if (plannedByKey.isEmpty) {
+      return _StrengthProgressionEvaluationResult(
+        evaluation: 'insufficient_data',
+        expectation: expectation,
+        comparedSetCount: 0,
+        metSetCount: 0,
+        exceededSetCount: 0,
+        underSetCount: 0,
+        averageScore: null,
+        expectedSetCount: 0,
+        matchedSetCount: 0,
+      );
+    }
+
+    final bestScoreByPlanKey = <String, double>{};
+    var matchedSetCount = 0;
+    for (final actual in actualStrengthRows) {
+      final workoutDate = workoutDateById[actual.workoutDayId];
+      if (workoutDate == null || workoutDate.trim().isEmpty) {
+        continue;
+      }
+      final prescribedCanonical =
+          actual.prescribedExerciseCanonical ?? actual.exerciseCanonical;
+      final key = planKey(workoutDate, prescribedCanonical, actual.setIndex);
+      final planned = plannedByKey[key];
+      if (planned == null) {
+        continue;
+      }
+      matchedSetCount++;
+      final score =
+          _strengthSetAttainmentScore(planned: planned, actual: actual);
+      if (score == null) {
+        continue;
+      }
+      final existing = bestScoreByPlanKey[key];
+      if (existing == null || score > existing) {
+        bestScoreByPlanKey[key] = score;
+      }
+    }
+
+    final comparedScores = bestScoreByPlanKey.values.toList(growable: false);
+    if (comparedScores.isEmpty) {
+      return _StrengthProgressionEvaluationResult(
+        evaluation: 'insufficient_data',
+        expectation: expectation,
+        comparedSetCount: 0,
+        metSetCount: 0,
+        exceededSetCount: 0,
+        underSetCount: 0,
+        averageScore: null,
+        expectedSetCount: plannedByKey.length,
+        matchedSetCount: matchedSetCount,
+      );
+    }
+
+    var metCount = 0;
+    var exceededCount = 0;
+    var underCount = 0;
+    var scoreSum = 0.0;
+    for (final score in comparedScores) {
+      scoreSum += score;
+      if (score > 1.03) {
+        exceededCount++;
+      } else if (score < 0.97) {
+        underCount++;
+      } else {
+        metCount++;
+      }
+    }
+    final avgScore = scoreSum / comparedScores.length;
+    final coverage = plannedByKey.isEmpty
+        ? 0.0
+        : comparedScores.length / plannedByKey.length;
+
+    String evaluation;
+    if (coverage < 0.25) {
+      evaluation = 'insufficient_data';
+    } else if (avgScore > 1.03) {
+      evaluation = 'exceeded';
+    } else if (avgScore < 0.97) {
+      evaluation = 'under';
+    } else {
+      evaluation = 'met';
+    }
+
+    return _StrengthProgressionEvaluationResult(
+      evaluation: evaluation,
+      expectation: expectation,
+      comparedSetCount: comparedScores.length,
+      metSetCount: metCount,
+      exceededSetCount: exceededCount,
+      underSetCount: underCount,
+      averageScore: double.parse(avgScore.toStringAsFixed(4)),
+      expectedSetCount: plannedByKey.length,
+      matchedSetCount: matchedSetCount,
+    );
+  }
+
+  double? _strengthSetAttainmentScore({
+    required PlanPrescribedStrengthSet planned,
+    required ActualStrengthSet actual,
+  }) {
+    final componentScores = <double>[];
+
+    if (planned.weight != null && actual.weight != null) {
+      final plannedWeight = planned.weight!;
+      final actualWeight = actual.weight!;
+      if (plannedWeight > 0) {
+        componentScores.add(
+            ((actualWeight / plannedWeight).clamp(0.5, 1.5) as num).toDouble());
+      }
+    }
+    if (planned.reps != null && actual.reps != null) {
+      final plannedReps = planned.reps!;
+      final actualReps = actual.reps!;
+      if (plannedReps > 0) {
+        componentScores.add(
+            ((actualReps / plannedReps).clamp(0.5, 1.5) as num).toDouble());
+      }
+    }
+    if (planned.rir != null && actual.rir != null) {
+      final rirDelta = (planned.rir! - actual.rir!).toDouble();
+      componentScores
+          .add((((1.0 + (rirDelta * 0.05)).clamp(0.8, 1.2)) as num).toDouble());
+    }
+
+    if (componentScores.isEmpty) {
+      return null;
+    }
+    final avg = componentScores.fold<double>(0, (a, b) => a + b) /
+        componentScores.length;
+    return double.parse(avg.toStringAsFixed(4));
+  }
+
+  Future<void> _recordPlanLongRangeWeekPerformanceSnapshot({
+    required String exportWeekStart,
+    required String exportWeekEnd,
+    required PlanCycle? activeCycle,
+    required Map<int, PlanDay> planDayByNumber,
+    required Map<String, List<PlanPrescribedStrengthSet>> planSetsByDayId,
+    required Map<String, PlanPrescribedRun> planRunByDayId,
+    required List<List<dynamic>> tenWeekPlanRows,
+  }) async {
+    final plannedDayCount = 7;
+    final plannedDays = planDayByNumber.values.toList();
+    final plannedSets = planSetsByDayId.values.expand((e) => e).toList();
+    final plannedStrengthSets = plannedSets.length;
+    final plannedStrengthExercises =
+        plannedSets.map((s) => s.exerciseCanonical).toSet().length;
+    final plannedRunRows = planRunByDayId.values
+        .where((r) => (r.runType ?? '').trim().isNotEmpty)
+        .toList();
+    final plannedRunDays = plannedRunRows.length;
+    final plannedRunSessions = plannedRunRows.length;
+
+    final workoutDayRows = await (select(workoutDays)
+          ..where((w) => w.workoutDate.isBiggerOrEqualValue(exportWeekStart))
+          ..where((w) => w.workoutDate.isSmallerOrEqualValue(exportWeekEnd)))
+        .get();
+    final workoutDayIds = workoutDayRows.map((w) => w.id).toList();
+    final workoutDateById = {
+      for (final w in workoutDayRows) w.id: w.workoutDate
+    };
+
+    final actualStrengthRows = workoutDayIds.isEmpty
+        ? const <ActualStrengthSet>[]
+        : await (select(actualStrengthSets)
+              ..where((a) => a.workoutDayId.isIn(workoutDayIds)))
+            .get();
+    final actualRunRows = workoutDayIds.isEmpty
+        ? const <RunSession>[]
+        : await (select(runSessions)
+              ..where((r) => r.workoutDayId.isIn(workoutDayIds)))
+            .get();
+
+    final actualStrengthSetsCount = actualStrengthRows.length;
+    final actualStrengthExercises = actualStrengthRows
+        .map((a) => a.prescribedExerciseCanonical ?? a.exerciseCanonical)
+        .map(ExerciseNormalizer.normalize)
+        .toSet()
+        .length;
+    final actualRunSessions = actualRunRows.length;
+    final actualRunDaySet = actualRunRows
+        .map((r) => r.workoutDayId)
+        .whereType<String>()
+        .map((id) => workoutDateById[id])
+        .whereType<String>()
+        .toSet();
+    final actualRunDays = actualRunDaySet.length;
+    final actualStrengthDaySet = actualStrengthRows
+        .map((a) => workoutDateById[a.workoutDayId])
+        .whereType<String>()
+        .toSet();
+    final completedPlanDays = plannedDays
+        .map((d) => d.estimatedDate)
+        .whereType<String>()
+        .where((ymd) =>
+            actualRunDaySet.contains(ymd) || actualStrengthDaySet.contains(ymd))
+        .toSet()
+        .length;
+    final totalRunDistanceM = actualRunRows
+        .map((r) => r.distanceM)
+        .whereType<double>()
+        .fold<double>(0, (a, b) => a + b);
+    final totalRunDurationS = actualRunRows
+        .map((r) => r.durationS)
+        .whereType<int>()
+        .fold<int>(0, (a, b) => a + b);
+
+    final longRangeWeek = await (select(planLongRangeWeeks)
+          ..where((w) => w.weekStart.equals(exportWeekStart))
+          ..where((w) => w.weekEnd.equals(exportWeekEnd))
+          ..orderBy([
+            (w) =>
+                OrderingTerm(expression: w.updatedAt, mode: OrderingMode.desc),
+          ])
+          ..limit(1))
+        .getSingleOrNull();
+    final fallbackWeekLabel = _findTenWeekWeekLabelForExport(
+      tenWeekPlanRows: tenWeekPlanRows,
+      exportWeekStart: exportWeekStart,
+      exportWeekEnd: exportWeekEnd,
+    );
+    final fallbackWeekNumber = _weekNumberFromLabel(fallbackWeekLabel);
+    final weekLabel = longRangeWeek?.weekLabel ?? fallbackWeekLabel;
+    final weekNumber = longRangeWeek?.weekNumber ?? fallbackWeekNumber;
+    final strengthProgressionEval = _evaluateStrengthProgressionForWeek(
+      longRangeWeek: longRangeWeek,
+      planDayByNumber: planDayByNumber,
+      planSetsByDayId: planSetsByDayId,
+      actualStrengthRows: actualStrengthRows,
+      workoutDateById: workoutDateById,
+    );
+
+    final plannedRunDayAdherence =
+        plannedRunDays == 0 ? null : actualRunDays / plannedRunDays;
+    final strengthSetAdherence = plannedStrengthSets == 0
+        ? null
+        : actualStrengthSetsCount / plannedStrengthSets;
+    final plannedDayCompletion =
+        plannedDayCount == 0 ? null : completedPlanDays / plannedDayCount;
+    final metricsJson = jsonEncode({
+      'planned_day_completion': plannedDayCompletion,
+      'planned_run_day_adherence': plannedRunDayAdherence,
+      'strength_set_adherence': strengthSetAdherence,
+      'actual_run_distance_m': totalRunDistanceM,
+      'actual_run_duration_s': totalRunDurationS,
+      'actual_strength_days': actualStrengthDaySet.length,
+      'strength_progression_expectation': strengthProgressionEval.expectation,
+      'strength_progression_evaluation': strengthProgressionEval.evaluation,
+      'strength_progression_compared_set_count':
+          strengthProgressionEval.comparedSetCount,
+      'strength_progression_expected_set_count':
+          strengthProgressionEval.expectedSetCount,
+      'strength_progression_matched_set_count':
+          strengthProgressionEval.matchedSetCount,
+      'strength_progression_met_set_count': strengthProgressionEval.metSetCount,
+      'strength_progression_exceeded_set_count':
+          strengthProgressionEval.exceededSetCount,
+      'strength_progression_under_set_count':
+          strengthProgressionEval.underSetCount,
+      'strength_progression_average_score':
+          strengthProgressionEval.averageScore,
+      'captured_from_export': true,
+    });
+
+    await into(planLongRangeWeekPerformance).insert(
+      PlanLongRangeWeekPerformanceCompanion.insert(
+        id: _uuid.v4(),
+        planLongRangeWeekId: Value(longRangeWeek?.id),
+        weekLabel: Value(weekLabel),
+        weekNumber: Value(weekNumber),
+        weekStart: exportWeekStart,
+        weekEnd: exportWeekEnd,
+        evaluatedPlanCycleId: Value(activeCycle?.id),
+        evaluationSource: 'standard_workbook_export',
+        plannedDayCount: plannedDayCount,
+        completedPlanDays: completedPlanDays,
+        plannedRunDays: plannedRunDays,
+        actualRunDays: actualRunDays,
+        plannedRunSessions: plannedRunSessions,
+        actualRunSessions: actualRunSessions,
+        plannedStrengthExercises: plannedStrengthExercises,
+        actualStrengthExercises: actualStrengthExercises,
+        plannedStrengthSets: plannedStrengthSets,
+        actualStrengthSets: actualStrengthSetsCount,
+        strengthProgressionExpectation:
+            Value(strengthProgressionEval.expectation),
+        strengthProgressionEvaluation:
+            Value(strengthProgressionEval.evaluation),
+        actualRunDistanceM: Value(totalRunDistanceM),
+        actualRunDurationS: Value(totalRunDurationS),
+        metricsJson: Value(metricsJson),
+        capturedAt: unixMsNow(),
+      ),
+    );
   }
 
   List<List<dynamic>> _generateStrengthSummaryRows(
