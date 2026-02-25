@@ -110,8 +110,7 @@ class SettingsScreen extends ConsumerWidget {
                     FilterChip(
                       label: Text(item),
                       selected: settings.availableEquipment.contains(item),
-                      onSelected: (_) =>
-                          settingsNotifier.toggleEquipment(item),
+                      onSelected: (_) => settingsNotifier.toggleEquipment(item),
                     ),
                 ],
               ),
@@ -195,10 +194,16 @@ class SettingsScreen extends ConsumerWidget {
                   text: 'Sync Now',
                   variant: PillButtonVariant.outlined,
                   onPressed: () async {
+                    ref
+                        .read(syncStatusProvider.notifier)
+                        .setSyncing(reason: 'manual');
                     final status = await SyncService(
                       db: ref.read(appDbProvider),
                       client: Supabase.instance.client,
                     ).syncNow();
+                    ref
+                        .read(syncStatusProvider.notifier)
+                        .setResult(status, reason: 'manual');
                     if (context.mounted) {
                       ScaffoldMessenger.of(context)
                           .showSnackBar(SnackBar(content: Text(status)));
@@ -257,7 +262,8 @@ class _WeeklyPlanPromptCardState extends ConsumerState<_WeeklyPlanPromptCard> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _loadPromptTemplate() async {
@@ -470,7 +476,9 @@ class _WeeklyPlanPromptCardState extends ConsumerState<_WeeklyPlanPromptCard> {
             runSpacing: 8,
             children: [
               FilledButton.icon(
-                onPressed: busy || (!_isDirty && _hasOverride) ? null : _savePromptOverride,
+                onPressed: busy || (!_isDirty && _hasOverride)
+                    ? null
+                    : _savePromptOverride,
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('Save Override'),
               ),

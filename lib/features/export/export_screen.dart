@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/utils/app_providers.dart';
+import '../../core/utils/date_utils.dart';
 import '../../db/app_db.dart';
 import '../training/garmin_csv_import_service.dart';
 import '../ui/clinical_widgets.dart';
@@ -172,6 +173,68 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     }
   }
 
+  Future<bool> _confirmPlanCycleOverrideIfNeeded({
+    required DateTime splitStartDate,
+    required String actionLabel,
+  }) async {
+    final normalizedStart = DateTime(
+      splitStartDate.year,
+      splitStartDate.month,
+      splitStartDate.day,
+    );
+    final weekStart = toYmd(normalizedStart);
+    final weekEnd = toYmd(normalizedStart.add(const Duration(days: 6)));
+    final existing = await ref.read(appDbProvider).findOverlappingPlanCycles(
+          rangeStartYmd: weekStart,
+          rangeEndYmd: weekEnd,
+        );
+    if (existing.isEmpty) {
+      return true;
+    }
+    if (!mounted) {
+      return false;
+    }
+
+    final message = existing
+        .map((c) => '${c.weekStart} to ${c.weekEnd} (${c.source})')
+        .join('\n');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Replace Existing Plan Cycle?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'A plan cycle already exists for the selected dates ($weekStart to $weekEnd).',
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Continuing will delete the overlapping plan cycle(s) before importing the new one.',
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
   Future<void> _importGarminCsv() async {
     if (_selectedCsvPath == null) {
       _showMessage('Pick a Garmin CSV file first.');
@@ -229,6 +292,14 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   Future<void> _importStandardWorkbook() async {
     if (_selectedStandardWorkbookPath == null) {
       _showMessage('Pick a standard workbook XLSX first.');
+      return;
+    }
+    final confirmed = await _confirmPlanCycleOverrideIfNeeded(
+      splitStartDate: _standardSplitStartDate,
+      actionLabel: 'Replace & Import',
+    );
+    if (!confirmed) {
+      _showMessage('Standard workbook import cancelled.');
       return;
     }
     setState(() => _standardImporting = true);

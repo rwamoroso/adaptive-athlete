@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../db/app_db.dart';
@@ -13,6 +15,59 @@ class SupabaseBootstrap {
 }
 
 enum UnitPreference { lb, kg }
+
+enum AppSyncPhase { idle, syncing, success, error }
+
+class AppSyncStatus {
+  const AppSyncStatus({
+    required this.phase,
+    required this.label,
+    this.detail,
+    this.updatedAtMs,
+  });
+
+  const AppSyncStatus.idle()
+      : phase = AppSyncPhase.idle,
+        label = 'Idle',
+        detail = null,
+        updatedAtMs = null;
+
+  final AppSyncPhase phase;
+  final String label;
+  final String? detail;
+  final int? updatedAtMs;
+
+  AppSyncStatus copyWith({
+    AppSyncPhase? phase,
+    String? label,
+    String? detail,
+    int? updatedAtMs,
+  }) {
+    return AppSyncStatus(
+      phase: phase ?? this.phase,
+      label: label ?? this.label,
+      detail: detail ?? this.detail,
+      updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+    );
+  }
+
+  factory AppSyncStatus.syncing({required String reason}) => AppSyncStatus(
+        phase: AppSyncPhase.syncing,
+        label: 'Syncing...',
+        detail: 'Automatic sync ($reason)',
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+
+  factory AppSyncStatus.fromSyncResult(String result, {String? reason}) {
+    final isError = result.toLowerCase().startsWith('sync failed');
+    return AppSyncStatus(
+      phase: isError ? AppSyncPhase.error : AppSyncPhase.success,
+      label: isError ? 'Sync failed' : 'Synced',
+      detail: reason == null ? result : '$result ($reason)',
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+}
 
 class AppSettings {
   const AppSettings({
@@ -76,6 +131,55 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
   }
 }
 
+class AppSyncStatusNotifier extends StateNotifier<AppSyncStatus> {
+  AppSyncStatusNotifier() : super(const AppSyncStatus.idle());
+
+  Timer? _hideTimer;
+
+  void setIdle() => _setStatus(const AppSyncStatus.idle());
+
+  void setSyncing({required String reason}) {
+    _setStatus(AppSyncStatus.syncing(reason: reason));
+  }
+
+  void setResult(String result, {String? reason}) {
+    _setStatus(AppSyncStatus.fromSyncResult(result, reason: reason));
+  }
+
+  void setError({
+    required String label,
+    required String detail,
+  }) {
+    _setStatus(AppSyncStatus(
+      phase: AppSyncPhase.error,
+      label: label,
+      detail: detail,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    ));
+  }
+
+  void _setStatus(AppSyncStatus next) {
+    _hideTimer?.cancel();
+    _hideTimer = null;
+    state = next;
+
+    if (next.phase == AppSyncPhase.success) {
+      _hideTimer = Timer(const Duration(seconds: 20), () {
+        if (!mounted) {
+          return;
+        }
+        state = const AppSyncStatus.idle();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+}
+
 final appDbProvider = Provider<AppDb>((ref) {
   final db = AppDb();
   ref.onDispose(db.close);
@@ -89,6 +193,11 @@ final settingsProvider =
 final supabaseBootstrapProvider = Provider<SupabaseBootstrap>(
     (_) => const SupabaseBootstrap(initialized: false));
 
+final syncStatusProvider =
+    StateNotifierProvider<AppSyncStatusNotifier, AppSyncStatus>(
+  (_) => AppSyncStatusNotifier(),
+);
+
 final aiAnalyzeServiceProvider =
     Provider<AiAnalyzeService>((_) => const AiAnalyzeService());
 
@@ -97,6 +206,7 @@ final exerciseSubstitutionServiceProvider =
   return ExerciseSubstitutionService(db: ref.read(appDbProvider));
 });
 
-final weeklyPlanPromptServiceProvider = Provider<WeeklyPlanPromptService>((ref) {
+final weeklyPlanPromptServiceProvider =
+    Provider<WeeklyPlanPromptService>((ref) {
   return WeeklyPlanPromptService(db: ref.read(appDbProvider));
 });

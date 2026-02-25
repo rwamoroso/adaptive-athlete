@@ -62,10 +62,82 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     }
   }
 
+  Future<bool> _confirmPlanCycleOverrideIfNeeded({
+    required DateTime splitStartDate,
+    required String actionLabel,
+  }) async {
+    final normalizedStart = DateTime(
+      splitStartDate.year,
+      splitStartDate.month,
+      splitStartDate.day,
+    );
+    final weekStart = toYmd(normalizedStart);
+    final weekEnd = toYmd(normalizedStart.add(const Duration(days: 6)));
+    final existing = await ref.read(appDbProvider).findOverlappingPlanCycles(
+          rangeStartYmd: weekStart,
+          rangeEndYmd: weekEnd,
+        );
+    if (existing.isEmpty) {
+      return true;
+    }
+    if (!mounted) {
+      return false;
+    }
+
+    final message = existing
+        .map((c) => '${c.weekStart} to ${c.weekEnd} (${c.source})')
+        .join('\n');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Replace Existing Plan Cycle?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'A plan cycle already exists for the selected dates ($weekStart to $weekEnd).',
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Continuing will delete the overlapping plan cycle(s) before importing the new one.',
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
   Future<void> _generatePlan() async {
     if (_templatePath == null) {
       setState(() {
         _status = 'Pick your training template XLSX first.';
+      });
+      return;
+    }
+    final confirmed = await _confirmPlanCycleOverrideIfNeeded(
+      splitStartDate: _startDate,
+      actionLabel: 'Replace & Generate',
+    );
+    if (!confirmed) {
+      setState(() {
+        _status = 'Plan generation cancelled.';
       });
       return;
     }
@@ -123,6 +195,16 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     if (_aiWeeklyPlanTextPath == null) {
       setState(() {
         _status = 'Pick an AI weekly plan text file (.txt/.md) first.';
+      });
+      return;
+    }
+    final confirmed = await _confirmPlanCycleOverrideIfNeeded(
+      splitStartDate: _startDate,
+      actionLabel: 'Replace & Import',
+    );
+    if (!confirmed) {
+      setState(() {
+        _status = 'AI weekly plan import cancelled.';
       });
       return;
     }

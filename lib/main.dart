@@ -12,6 +12,7 @@ import 'core/utils/app_providers.dart';
 import 'core/utils/go_router_refresh_stream.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/auth/reset_password_screen.dart';
+import 'features/sync/sync_service.dart';
 import 'features/training/home_shell.dart';
 
 Future<void> main() async {
@@ -104,12 +105,91 @@ class MyApp extends ConsumerStatefulWidget {
   ConsumerState<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends ConsumerState<MyApp> {
+class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   StreamSubscription<AuthState>? _authSubscription;
+  bool _autoSyncInFlight = false;
+  DateTime? _lastAutoSyncAt;
+
+  void _scheduleAutoSync({
+    required String reason,
+    bool force = false,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_triggerAutoSync(reason: reason, force: force));
+    });
+  }
+
+  void _scheduleSyncStatusReset() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      ref.read(syncStatusProvider.notifier).setIdle();
+    });
+  }
+
+  Future<void> _triggerAutoSync({
+    required String reason,
+    bool force = false,
+  }) async {
+    if (!mounted) {
+      return;
+    }
+    final bootstrap = ref.read(supabaseBootstrapProvider);
+    final settings = ref.read(settingsProvider);
+    if (!bootstrap.initialized || settings.localOnly) {
+      return;
+    }
+
+    final client = Supabase.instance.client;
+    if (client.auth.currentSession == null) {
+      return;
+    }
+
+    final now = DateTime.now();
+    if (!force && _lastAutoSyncAt != null) {
+      final elapsed = now.difference(_lastAutoSyncAt!);
+      if (elapsed < const Duration(seconds: 15)) {
+        return;
+      }
+    }
+    if (_autoSyncInFlight) {
+      return;
+    }
+
+    _autoSyncInFlight = true;
+    ref.read(syncStatusProvider.notifier).setSyncing(reason: reason);
+    try {
+      final status = await SyncService(
+        db: ref.read(appDbProvider),
+        client: client,
+      ).syncNow();
+      if (!mounted) {
+        return;
+      }
+      ref.read(syncStatusProvider.notifier).setResult(status, reason: reason);
+      _lastAutoSyncAt = DateTime.now();
+      debugPrint('Auto sync ($reason): $status');
+    } catch (e) {
+      if (mounted) {
+        ref.read(syncStatusProvider.notifier).setError(
+              label: 'Sync failed',
+              detail: 'Auto sync ($reason) failed: $e',
+            );
+      }
+      debugPrint('Auto sync ($reason) failed: $e');
+    } finally {
+      _autoSyncInFlight = false;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final bootstrap = ref.read(supabaseBootstrapProvider);
     if (bootstrap.initialized) {
       _authSubscription =
@@ -119,13 +199,33 @@ class _MyAppState extends ConsumerState<MyApp> {
         }
         if (event.event == AuthChangeEvent.passwordRecovery) {
           ref.read(routerProvider).go('/reset-password');
+          return;
+        }
+        if (event.event == AuthChangeEvent.signedIn) {
+          _scheduleAutoSync(reason: 'signed_in', force: true);
+          return;
+        }
+        if (event.event == AuthChangeEvent.signedOut) {
+          _scheduleSyncStatusReset();
         }
       });
+
+      if (Supabase.instance.client.auth.currentSession != null) {
+        _scheduleAutoSync(reason: 'app_open', force: true);
+      }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _scheduleAutoSync(reason: 'resume');
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authSubscription?.cancel();
     super.dispose();
   }

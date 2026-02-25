@@ -940,6 +940,24 @@ class _DailyClinicalContent extends StatelessWidget {
   final VoidCallback onRunMockAi;
   final Future<void> Function() onRefresh;
 
+  String? _dailyGoalTitle() {
+    final liftFocus = safeDetail.prescribedRun?.liftFocus?.trim();
+    if (liftFocus != null && liftFocus.isNotEmpty) {
+      return liftFocus;
+    }
+    final dayLabel = safeDetail.prescribedRun?.dayLabel?.trim();
+    if (dayLabel != null && dayLabel.isNotEmpty) {
+      return dayLabel;
+    }
+    if (safeDetail.planDayNumber == null) {
+      return null;
+    }
+    return sessionTypeLabel(safeDetail.planSessionType);
+  }
+
+  String _dailyGoalTitleOrFallback() =>
+      _dailyGoalTitle() ?? sessionTypeLabel(safeDetail.planSessionType);
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
@@ -965,7 +983,11 @@ class _DailyClinicalContent extends StatelessWidget {
             _buildSecondaryActionRow(context),
             const SizedBox(height: 16),
             const ClinicalDivider(),
-            const SectionHeader(text: 'Prescribed Run'),
+            SectionHeader(
+              text: _dailyGoalTitle() == null
+                  ? 'Prescribed Run'
+                  : 'Prescribed Run • ${_dailyGoalTitle()!}',
+            ),
             const SizedBox(height: 8),
             _buildPrescribedRun(context),
             const SizedBox(height: 16),
@@ -989,7 +1011,11 @@ class _DailyClinicalContent extends StatelessWidget {
             const SizedBox(height: 8),
             _buildRunsList(context),
             const SizedBox(height: 8),
-            const SectionHeader(text: 'Strength'),
+            SectionHeader(
+              text: _dailyGoalTitle() == null
+                  ? 'Strength'
+                  : 'Strength • ${_dailyGoalTitle()!}',
+            ),
             const SizedBox(height: 8),
             _buildStrength(context),
           ],
@@ -1096,6 +1122,7 @@ class _DailyClinicalContent extends StatelessWidget {
               valueText:
                   '${_formatMiles(runMileageSummary.last7DaysMiles)} last 7 days',
               subtitleText:
+                  '${_dailyGoalTitle() == null ? '' : '${_dailyGoalTitle()!} • '}'
                   '${safeDetail.runSessions.length} session${safeDetail.runSessions.length == 1 ? '' : 's'} today'
                   '${totalRunDistance > 0 ? ' • ${_formatDistanceMiles(totalRunDistance)} today' : ' • No distance today'}'
                   ' • Tap to log/edit',
@@ -1115,7 +1142,7 @@ class _DailyClinicalContent extends StatelessWidget {
                   '7-day load: ${_formatLoad(strengthLoadSummary.last7DaysTotalLoad)}',
               subtitleText: safeDetail.planDayNumber == null
                   ? 'No split linked • Tap to open workout detail'
-                  : 'Day ${safeDetail.planDayNumber} • ${sessionTypeLabel(safeDetail.planSessionType)} • Tap to open workout detail',
+                  : 'Day ${safeDetail.planDayNumber} • ${_dailyGoalTitleOrFallback()} • Tap to open workout detail',
               trailingWidget: SizedBox(
                 width: 176,
                 height: 66,
