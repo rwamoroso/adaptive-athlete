@@ -452,8 +452,9 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     }
 
     final unitIsKm = value.contains('/km') || value.contains(' per km');
-    final unitIsMi =
-        value.contains('/mi') || value.contains('/mile') || value.contains(' per mile');
+    final unitIsMi = value.contains('/mi') ||
+        value.contains('/mile') ||
+        value.contains(' per mile');
 
     final firstTimeMatch =
         RegExp(r'(\d{1,2}:\d{2}(?::\d{2})?)').firstMatch(value);
@@ -461,7 +462,8 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
       return null;
     }
 
-    final parts = firstTimeMatch.group(1)!.split(':').map(double.parse).toList();
+    final parts =
+        firstTimeMatch.group(1)!.split(':').map(double.parse).toList();
     double seconds;
     if (parts.length == 3) {
       seconds = (parts[0] * 3600) + (parts[1] * 60) + parts[2];
@@ -822,7 +824,9 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
                 .toDouble()
             : (safeDetail.runSessions.isEmpty
                 ? 0.0
-                : (safeDetail.runSessions.length / 7).clamp(0.0, 1.0).toDouble());
+                : (safeDetail.runSessions.length / 7)
+                    .clamp(0.0, 1.0)
+                    .toDouble());
         final totalRunDistance = safeDetail.runSessions.fold<double>(
           0,
           (sum, run) => sum + (run.session.distanceM ?? 0),
@@ -912,6 +916,24 @@ class _DailyClinicalContent extends StatelessWidget {
   final VoidCallback onRunMockAi;
   final Future<void> Function() onRefresh;
 
+  String? _dailyGoalTitle() {
+    final liftFocus = safeDetail.prescribedRun?.liftFocus?.trim();
+    if (liftFocus != null && liftFocus.isNotEmpty) {
+      return liftFocus;
+    }
+    final dayLabel = safeDetail.prescribedRun?.dayLabel?.trim();
+    if (dayLabel != null && dayLabel.isNotEmpty) {
+      return dayLabel;
+    }
+    if (safeDetail.planDayNumber == null) {
+      return null;
+    }
+    return sessionTypeLabel(safeDetail.planSessionType);
+  }
+
+  String _dailyGoalTitleOrFallback() =>
+      _dailyGoalTitle() ?? sessionTypeLabel(safeDetail.planSessionType);
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
@@ -937,7 +959,11 @@ class _DailyClinicalContent extends StatelessWidget {
             _buildSecondaryActionRow(context),
             const SizedBox(height: 16),
             const ClinicalDivider(),
-            const SectionHeader(text: 'Prescribed Run'),
+            SectionHeader(
+              text: _dailyGoalTitle() == null
+                  ? 'Prescribed Run'
+                  : 'Prescribed Run • ${_dailyGoalTitle()!}',
+            ),
             const SizedBox(height: 8),
             _buildPrescribedRun(context),
             const SizedBox(height: 16),
@@ -961,7 +987,11 @@ class _DailyClinicalContent extends StatelessWidget {
             const SizedBox(height: 8),
             _buildRunsList(context),
             const SizedBox(height: 8),
-            const SectionHeader(text: 'Strength'),
+            SectionHeader(
+              text: _dailyGoalTitle() == null
+                  ? 'Strength'
+                  : 'Strength • ${_dailyGoalTitle()!}',
+            ),
             const SizedBox(height: 8),
             _buildStrength(context),
           ],
@@ -1059,6 +1089,7 @@ class _DailyClinicalContent extends StatelessWidget {
               valueText:
                   '${_formatMiles(runMileageSummary.last7DaysMiles)} last 7 days',
               subtitleText:
+                  '${_dailyGoalTitle() == null ? '' : '${_dailyGoalTitle()!} • '}'
                   '${safeDetail.runSessions.length} session${safeDetail.runSessions.length == 1 ? '' : 's'} today'
                   '${totalRunDistance > 0 ? ' • ${_formatDistanceMiles(totalRunDistance)} today' : ' • No distance today'}'
                   ' • Tap to log/edit',
@@ -1078,7 +1109,7 @@ class _DailyClinicalContent extends StatelessWidget {
                   '7-day load: ${_formatLoad(strengthLoadSummary.last7DaysTotalLoad)}',
               subtitleText: safeDetail.planDayNumber == null
                   ? 'No split linked • Tap to open workout detail'
-                  : 'Day ${safeDetail.planDayNumber} • ${sessionTypeLabel(safeDetail.planSessionType)} • Tap to open workout detail',
+                  : 'Day ${safeDetail.planDayNumber} • ${_dailyGoalTitleOrFallback()} • Tap to open workout detail',
               trailingWidget: SizedBox(
                 width: 176,
                 height: 66,
@@ -1819,8 +1850,8 @@ class _WeeklyMileageMiniChart extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
                     color: Colors.white.withValues(alpha: 0.04),
-                    border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08)),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.08)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(4, 4, 4, 2),

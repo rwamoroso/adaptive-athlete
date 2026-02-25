@@ -142,6 +142,18 @@ class _WorkoutDayDetailScreenState
     return 'Unknown';
   }
 
+  String? _goalTitle(WorkoutDayDetail detail) {
+    final liftFocus = detail.prescribedRun?.liftFocus?.trim();
+    if (liftFocus != null && liftFocus.isNotEmpty) {
+      return liftFocus;
+    }
+    final dayLabel = detail.prescribedRun?.dayLabel?.trim();
+    if (dayLabel != null && dayLabel.isNotEmpty) {
+      return dayLabel;
+    }
+    return null;
+  }
+
   String _setKey(String exercise, int setIndex) => '$exercise::$setIndex';
 
   void _ensureEditableRows(WorkoutDayDetail detail) {
@@ -453,6 +465,36 @@ class _WorkoutDayDetailScreenState
             return const Center(child: CircularProgressIndicator());
           }
 
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Workout detail failed to load.',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(snapshot.error.toString()),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: _refreshDetail,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+
           final detail = snapshot.data;
           if (detail == null) {
             return const Center(child: Text('No detail found.'));
@@ -477,7 +519,7 @@ class _WorkoutDayDetailScreenState
                   child: Text(
                     detail.planDayNumber == null
                         ? 'No split day linked.'
-                        : 'Split Day ${detail.planDayNumber} | Session Type: ${_sessionTypeLabel(detail.planSessionType)}',
+                        : 'Split Day ${detail.planDayNumber} | ${_goalTitle(detail) ?? _sessionTypeLabel(detail.planSessionType)}',
                   ),
                 ),
               ),
@@ -562,9 +604,9 @@ class _WorkoutDayDetailScreenState
                     ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
                   final skippingExercise =
                       _savingExercises.contains(group.exercise);
-                  final performedExercise = group.substitution
-                          ?.substituteExerciseCanonical ??
-                      group.exercise;
+                  final performedExercise =
+                      group.substitution?.substituteExerciseCanonical ??
+                          group.exercise;
                   final nextExercise = index < detail.groups.length - 1
                       ? detail.groups[index + 1].exercise
                       : null;
@@ -622,21 +664,20 @@ class _WorkoutDayDetailScreenState
                             ),
                           ),
                         ],
-                        Row(
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            group.substitution == null
+                                ? 'Adjust Prescribed and Confirm as Actual'
+                                : 'Adjusted for substitute; confirm as actual',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  group.substitution == null
-                                      ? 'Adjust Prescribed and Confirm as Actual'
-                                      : 'Adjusted for substitute; confirm as actual',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
                             FilledButton.tonal(
                               onPressed: prescribedSets.isEmpty
                                   ? null
@@ -647,27 +688,24 @@ class _WorkoutDayDetailScreenState
                                       ),
                               child: const Text('Substitute Exercise'),
                             ),
-                            if (group.substitution != null) ...[
-                              const SizedBox(width: 8),
+                            if (group.substitution != null)
                               OutlinedButton(
-                                onPressed: () => _clearSubstitutionForGroup(group),
+                                onPressed: () =>
+                                    _clearSubstitutionForGroup(group),
                                 child: const Text('Clear'),
                               ),
-                            ],
-                            const SizedBox(width: 8),
                             FilledButton.tonal(
-                              onPressed:
-                                  skippingExercise || prescribedSets.isEmpty
-                                      ? null
-                                      : () => _skipExercise(
-                                            performedExerciseCanonical:
-                                                performedExercise,
-                                            prescribedExerciseCanonical:
-                                                group.exercise,
-                                            substitutionId:
-                                                group.substitution?.id,
-                                            prescribedSets: prescribedSets,
-                                          ),
+                              onPressed: skippingExercise ||
+                                      prescribedSets.isEmpty
+                                  ? null
+                                  : () => _skipExercise(
+                                        performedExerciseCanonical:
+                                            performedExercise,
+                                        prescribedExerciseCanonical:
+                                            group.exercise,
+                                        substitutionId: group.substitution?.id,
+                                        prescribedSets: prescribedSets,
+                                      ),
                               child: const Text('Skip Exercise (log 0)'),
                             ),
                           ],
@@ -896,7 +934,8 @@ class _SubstitutionPickerSheet extends StatefulWidget {
   final List<SubstitutionCandidate> suggestions;
 
   @override
-  State<_SubstitutionPickerSheet> createState() => _SubstitutionPickerSheetState();
+  State<_SubstitutionPickerSheet> createState() =>
+      _SubstitutionPickerSheetState();
 }
 
 class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
@@ -991,8 +1030,10 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
                     value: 'equipment_unavailable',
                     child: Text('Equipment unavailable')),
                 DropdownMenuItem(value: 'pain', child: Text('Pain')),
-                DropdownMenuItem(value: 'machine_busy', child: Text('Machine busy')),
-                DropdownMenuItem(value: 'preference', child: Text('Preference')),
+                DropdownMenuItem(
+                    value: 'machine_busy', child: Text('Machine busy')),
+                DropdownMenuItem(
+                    value: 'preference', child: Text('Preference')),
                 DropdownMenuItem(value: 'other', child: Text('Other')),
               ],
               onChanged: (v) => setState(() => _reasonCode = v ?? 'preference'),
@@ -1020,7 +1061,8 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
                 onChanged: selectedIsWeak
                     ? (v) => setState(() => _warningAcknowledged = v ?? false)
                     : null,
-                title: const Text('Acknowledge warning (required for weak match)'),
+                title:
+                    const Text('Acknowledge warning (required for weak match)'),
               ),
             ],
             const SizedBox(height: 8),
