@@ -432,8 +432,6 @@ class _AiParsedWeeklyPlanDayBuilder {
   String? notes;
   final List<_ParsedPlannedStrengthRow> strengthRows =
       <_ParsedPlannedStrengthRow>[];
-  final List<_ParsedPlannedStrengthRow> strengthRows =
-      <_ParsedPlannedStrengthRow>[];
   final List<_AiParsedPlanAlternative> alternatives =
       <_AiParsedPlanAlternative>[];
 
@@ -450,7 +448,6 @@ class _AiParsedWeeklyPlanDayBuilder {
       effortHrGuardrails: effortHrGuardrails,
       notes: notes,
       strengthRows: List<_ParsedPlannedStrengthRow>.unmodifiable(strengthRows),
-      alternatives: List<_AiParsedPlanAlternative>.unmodifiable(alternatives),
       alternatives: List<_AiParsedPlanAlternative>.unmodifiable(alternatives),
     );
   }
@@ -912,8 +909,6 @@ class AppDb extends _$AppDb {
     if (tableExists == null) {
       return;
     }
-    final columns =
-        await customSelect('PRAGMA table_info(actual_strength_sets)').get();
     final columns =
         await customSelect('PRAGMA table_info(actual_strength_sets)').get();
     final hasPrescribed = columns.any(
@@ -2033,8 +2028,6 @@ class AppDb extends _$AppDb {
           ..where((a) => a.setIndex.equals(setIndex))
           ..where(
               (a) => a.prescribedExerciseCanonical.equals(canonicalPrescribed))
-          ..where(
-              (a) => a.prescribedExerciseCanonical.equals(canonicalPrescribed))
           ..orderBy([
             (a) =>
                 OrderingTerm(expression: a.createdAt, mode: OrderingMode.desc)
@@ -2111,10 +2104,6 @@ class AppDb extends _$AppDb {
         ExerciseNormalizer.normalize(prescribedExerciseCanonical);
     final substitute =
         ExerciseNormalizer.normalize(substituteExerciseCanonical);
-    final prescribed =
-        ExerciseNormalizer.normalize(prescribedExerciseCanonical);
-    final substitute =
-        ExerciseNormalizer.normalize(substituteExerciseCanonical);
     final existing = await (select(exerciseSubstitutions)
           ..where((t) => t.workoutDayId.equals(workoutDayId))
           ..where((t) => t.prescribedExerciseCanonical.equals(prescribed))
@@ -2132,8 +2121,6 @@ class AppDb extends _$AppDb {
           reasonCode: reasonCode,
           reasonNotes: Value(
               reasonNotes?.trim().isEmpty ?? true ? null : reasonNotes!.trim()),
-          reasonNotes: Value(
-              reasonNotes?.trim().isEmpty ?? true ? null : reasonNotes!.trim()),
           selectedAt: now,
           selectedBy: const Value.absent(),
           matchScore: Value(matchScore),
@@ -2146,15 +2133,11 @@ class AppDb extends _$AppDb {
     }
     await (update(exerciseSubstitutions)
           ..where((t) => t.id.equals(existing.id)))
-    await (update(exerciseSubstitutions)
-          ..where((t) => t.id.equals(existing.id)))
         .write(
       ExerciseSubstitutionsCompanion(
         planDayId: Value(planDayId),
         substituteExerciseCanonical: Value(substitute),
         reasonCode: Value(reasonCode),
-        reasonNotes: Value(
-            reasonNotes?.trim().isEmpty ?? true ? null : reasonNotes!.trim()),
         reasonNotes: Value(
             reasonNotes?.trim().isEmpty ?? true ? null : reasonNotes!.trim()),
         selectedAt: Value(now),
@@ -2177,8 +2160,6 @@ class AppDb extends _$AppDb {
     }
     final prescribed =
         ExerciseNormalizer.normalize(prescribedExerciseCanonical);
-    final prescribed =
-        ExerciseNormalizer.normalize(prescribedExerciseCanonical);
     await (delete(exerciseSubstitutions)
           ..where((t) => t.workoutDayId.equals(day.id))
           ..where((t) => t.prescribedExerciseCanonical.equals(prescribed)))
@@ -2187,13 +2168,9 @@ class AppDb extends _$AppDb {
 
   Future<List<ExerciseAlternativeChoice>>
       getPlanExerciseAlternativesForPlanDay({
-  Future<List<ExerciseAlternativeChoice>>
-      getPlanExerciseAlternativesForPlanDay({
     required String? planDayId,
     required String prescribedExerciseCanonical,
   }) async {
-    final prescribed =
-        ExerciseNormalizer.normalize(prescribedExerciseCanonical);
     final prescribed =
         ExerciseNormalizer.normalize(prescribedExerciseCanonical);
     final query = select(planExerciseAlternatives)
@@ -2230,10 +2207,6 @@ class AppDb extends _$AppDb {
         ExerciseNormalizer.normalize(prescribedExerciseCanonical);
     final alternative =
         ExerciseNormalizer.normalize(alternativeExerciseCanonical);
-    final prescribed =
-        ExerciseNormalizer.normalize(prescribedExerciseCanonical);
-    final alternative =
-        ExerciseNormalizer.normalize(alternativeExerciseCanonical);
     final existingQuery = select(planExerciseAlternatives)
       ..where((t) => t.prescribedExerciseCanonical.equals(prescribed))
       ..where((t) => t.alternativeExerciseCanonical.equals(alternative))
@@ -2245,8 +2218,6 @@ class AppDb extends _$AppDb {
     }
     final existing = await existingQuery.getSingleOrNull();
     if (existing != null) {
-      await (update(planExerciseAlternatives)
-            ..where((t) => t.id.equals(existing.id)))
       await (update(planExerciseAlternatives)
             ..where((t) => t.id.equals(existing.id)))
           .write(
@@ -2267,7 +2238,6 @@ class AppDb extends _$AppDb {
         notes: Value(notes),
         createdAt: unixMsNow(),
       ),
-    );
     );
   }
 
@@ -3202,8 +3172,6 @@ class AppDb extends _$AppDb {
     final expectedWeekStart = toYmd(normalizedSplitStart);
     final expectedWeekEnd =
         toYmd(normalizedSplitStart.add(const Duration(days: 6)));
-    final expectedWeekEnd =
-        toYmd(normalizedSplitStart.add(const Duration(days: 6)));
 
     if (parsed.weekStart != expectedWeekStart) {
       throw StateError(
@@ -3879,8 +3847,6 @@ class AppDb extends _$AppDb {
         if (dayEndMatch != null) {
           throw StateError(
               'Line $lineNo: END DAY found before DAY block start.');
-          throw StateError(
-              'Line $lineNo: END DAY found before DAY block start.');
         }
         final colonIndex = trimmed.indexOf(':');
         if (colonIndex <= 0) {
@@ -3890,8 +3856,6 @@ class AppDb extends _$AppDb {
         final value = trimmed.substring(colonIndex + 1).trim();
         switch (key) {
           case 'WEEK_START':
-            weekStart =
-                _parseAiWeeklyPlanYmd(value, lineNo: lineNo, field: key);
             weekStart =
                 _parseAiWeeklyPlanYmd(value, lineNo: lineNo, field: key);
             break;
@@ -3978,8 +3942,6 @@ class AppDb extends _$AppDb {
         default:
           throw StateError(
               'Line $lineNo: unexpected field "$key" in day block.');
-          throw StateError(
-              'Line $lineNo: unexpected field "$key" in day block.');
       }
     }
 
@@ -3987,8 +3949,6 @@ class AppDb extends _$AppDb {
       throw StateError('Missing WEEK_PLAN_V1 header.');
     }
     if (currentDay != null) {
-      throw StateError(
-          'DAY ${currentDay.dayNumber} is missing END DAY ${currentDay.dayNumber}.');
       throw StateError(
           'DAY ${currentDay.dayNumber} is missing END DAY ${currentDay.dayNumber}.');
     }
@@ -4008,12 +3968,7 @@ class AppDb extends _$AppDb {
     final missingDays = List<int>.generate(7, (i) => i + 1)
         .where((d) => !dayBuilders.containsKey(d))
         .toList();
-    final missingDays = List<int>.generate(7, (i) => i + 1)
-        .where((d) => !dayBuilders.containsKey(d))
-        .toList();
     if (missingDays.isNotEmpty) {
-      throw StateError(
-          'Missing required day blocks: ${missingDays.join(', ')}.');
       throw StateError(
           'Missing required day blocks: ${missingDays.join(', ')}.');
     }
@@ -4183,8 +4138,6 @@ class AppDb extends _$AppDb {
     if (parts.isEmpty) {
       throw StateError('Line $lineNo: ALT row is empty.');
     }
-    final prescribedExerciseCanonical =
-        ExerciseNormalizer.normalize(parts.first);
     final prescribedExerciseCanonical =
         ExerciseNormalizer.normalize(parts.first);
     if (prescribedExerciseCanonical.isEmpty) {
@@ -5294,22 +5247,6 @@ class AppDb extends _$AppDb {
           matchedPlanDay = planDayRows.isEmpty ? null : planDayRows.first;
         }
       }
-    final day = await (select(workoutDays)
-          ..where((d) => d.workoutDate.equals(dateString)))
-        .getSingleOrNull();
-    PlanCycle? activeCycle = await getActivePlanCycleForDate(dateString);
-    PlanDay? matchedPlanDay;
-    if (activeCycle != null) {
-      final cycleId = activeCycle.id;
-      final cycleWeekStart = activeCycle.weekStart;
-      final dayNumber =
-          parseYmd(dateString).difference(parseYmd(cycleWeekStart)).inDays + 1;
-      if (dayNumber >= 1 && dayNumber <= 7) {
-        matchedPlanDay = await (select(planDays)
-              ..where((d) => d.planCycleId.equals(cycleId))
-              ..where((d) => d.dayNumber.equals(dayNumber)))
-            .getSingleOrNull();
-      }
     }
     matchedPlanDay ??= await _getLatestPlanDayByEstimatedDate(dateString);
     if (activeCycle == null && matchedPlanDay != null) {
@@ -5341,11 +5278,6 @@ class AppDb extends _$AppDb {
           .get();
       plannedRun = rows.isEmpty ? null : rows.first;
     }
-    final plannedRun = matchedPlanDayId == null
-        ? null
-        : await (select(planPrescribedRuns)
-              ..where((r) => r.planDayId.equals(matchedPlanDayId)))
-            .getSingleOrNull();
     final resolvedPlanSessionType = _resolveDisplaySessionType(
       storedSessionType: matchedPlanDay?.sessionType,
       plannedSets: plannedSets,
@@ -6969,5 +6901,11 @@ class AppDb extends _$AppDb {
 }
 
 QueryExecutor _openConnection() {
-  return driftDatabase(name: 'adaptive_athlete_local.db');
+  return driftDatabase(
+    name: 'adaptive_athlete_local.db',
+    web: DriftWebOptions(
+      sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+      driftWorker: Uri.parse('drift_worker.js'),
+    ),
+  );
 }

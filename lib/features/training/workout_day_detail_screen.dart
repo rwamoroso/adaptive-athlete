@@ -144,18 +144,6 @@ class _WorkoutDayDetailScreenState
     return 'Unknown';
   }
 
-  String? _goalTitle(WorkoutDayDetail detail) {
-    final liftFocus = detail.prescribedRun?.liftFocus?.trim();
-    if (liftFocus != null && liftFocus.isNotEmpty) {
-      return liftFocus;
-    }
-    final dayLabel = detail.prescribedRun?.dayLabel?.trim();
-    if (dayLabel != null && dayLabel.isNotEmpty) {
-      return dayLabel;
-    }
-    return null;
-  }
-
   String _setKey(String exercise, int setIndex) => '$exercise::$setIndex';
 
   void _ensureEditableRows(WorkoutDayDetail detail) {
@@ -976,8 +964,6 @@ class _SubstitutionPickerSheet extends StatefulWidget {
   @override
   State<_SubstitutionPickerSheet> createState() =>
       _SubstitutionPickerSheetState();
-  State<_SubstitutionPickerSheet> createState() =>
-      _SubstitutionPickerSheetState();
 }
 
 class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
@@ -1076,10 +1062,6 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
                     value: 'machine_busy', child: Text('Machine busy')),
                 DropdownMenuItem(
                     value: 'preference', child: Text('Preference')),
-                DropdownMenuItem(
-                    value: 'machine_busy', child: Text('Machine busy')),
-                DropdownMenuItem(
-                    value: 'preference', child: Text('Preference')),
                 DropdownMenuItem(value: 'other', child: Text('Other')),
               ],
               onChanged: (v) => setState(() => _reasonCode = v ?? 'preference'),
@@ -1107,8 +1089,6 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
                 onChanged: selectedIsWeak
                     ? (v) => setState(() => _warningAcknowledged = v ?? false)
                     : null,
-                title:
-                    const Text('Acknowledge warning (required for weak match)'),
                 title:
                     const Text('Acknowledge warning (required for weak match)'),
               ),
