@@ -415,6 +415,21 @@ class _WorkspaceInviteCardState extends ConsumerState<_WorkspaceInviteCard> {
                       );
                       return;
                     }
+                    if (!email.contains('@')) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Enter a valid email address.')),
+                      );
+                      return;
+                    }
+                    if (_selectedProfileIds.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text(
+                                'Select at least one athlete profile for this invite.')),
+                      );
+                      return;
+                    }
                     setState(() => _submitting = true);
                     try {
                       final invite = await ref
@@ -443,8 +458,17 @@ class _WorkspaceInviteCardState extends ConsumerState<_WorkspaceInviteCard> {
                       if (!mounted) {
                         return;
                       }
+                      final errorText = e is PostgrestException
+                          ? () {
+                              final details = e.details?.toString();
+                              if (details != null && details.isNotEmpty) {
+                                return '${e.message} ($details)';
+                              }
+                              return e.message;
+                            }()
+                          : e.toString();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Invite failed: $e')),
+                        SnackBar(content: Text('Invite failed: $errorText')),
                       );
                     } finally {
                       if (mounted) {

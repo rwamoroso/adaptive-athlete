@@ -291,15 +291,22 @@ class WorkspaceService {
 
   Future<InviteCreateResult> createInviteLink(
       InviteCreateRequest request) async {
+    final params = <String, dynamic>{
+      'p_workspace_id': request.workspaceId,
+      'p_email': request.email.trim().toLowerCase(),
+      'p_role': request.role,
+    };
+    final displayName = request.displayName?.trim();
+    if (displayName != null && displayName.isNotEmpty) {
+      params['p_display_name'] = displayName;
+    }
+    if (request.assignedProfileIds.isNotEmpty) {
+      params['p_assigned_profile_ids'] = request.assignedProfileIds;
+    }
+
     final responseRaw = await client.rpc(
       'create_workspace_invite',
-      params: {
-        'p_workspace_id': request.workspaceId,
-        'p_email': request.email.trim().toLowerCase(),
-        'p_role': request.role,
-        'p_display_name': request.displayName,
-        'p_assigned_profile_ids': request.assignedProfileIds,
-      },
+      params: params,
     );
     final response = _asMap(responseRaw);
     final token = _requiredString(response, 'token');
