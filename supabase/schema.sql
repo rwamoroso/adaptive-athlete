@@ -198,6 +198,32 @@ create table if not exists public.plan_prescribed_runs (
   created_at bigint not null
 );
 
+create table if not exists public.plan_exercise_alternatives (
+  id text primary key,
+  plan_day_id text null,
+  prescribed_exercise_canonical text not null,
+  alternative_exercise_canonical text not null,
+  priority integer not null default 0,
+  notes text null,
+  created_at bigint not null
+);
+
+create table if not exists public.exercise_substitutions (
+  id text primary key,
+  workout_day_id text not null,
+  plan_day_id text null,
+  prescribed_exercise_canonical text not null,
+  substitute_exercise_canonical text not null,
+  reason_code text not null,
+  reason_notes text null,
+  selected_at bigint not null,
+  selected_by text null,
+  match_score double precision null,
+  match_explanation_json text null,
+  warning_acknowledged boolean not null default false,
+  created_at bigint not null
+);
+
 create table if not exists public.plan_summary_snapshots (
   id text primary key,
   plan_cycle_id text not null,
@@ -231,6 +257,8 @@ alter table public.plan_cycles enable row level security;
 alter table public.plan_days enable row level security;
 alter table public.plan_prescribed_strength_sets enable row level security;
 alter table public.plan_prescribed_runs enable row level security;
+alter table public.plan_exercise_alternatives enable row level security;
+alter table public.exercise_substitutions enable row level security;
 alter table public.plan_summary_snapshots enable row level security;
 alter table public.plan_import_audit enable row level security;
 
@@ -275,6 +303,12 @@ create policy "auth_all_plan_prescribed_strength_sets" on public.plan_prescribed
 
 drop policy if exists "auth_all_plan_prescribed_runs" on public.plan_prescribed_runs;
 create policy "auth_all_plan_prescribed_runs" on public.plan_prescribed_runs for all to authenticated using (true) with check (true);
+
+drop policy if exists "auth_all_plan_exercise_alternatives" on public.plan_exercise_alternatives;
+create policy "auth_all_plan_exercise_alternatives" on public.plan_exercise_alternatives for all to authenticated using (true) with check (true);
+
+drop policy if exists "auth_all_exercise_substitutions" on public.exercise_substitutions;
+create policy "auth_all_exercise_substitutions" on public.exercise_substitutions for all to authenticated using (true) with check (true);
 
 drop policy if exists "auth_all_plan_summary_snapshots" on public.plan_summary_snapshots;
 create policy "auth_all_plan_summary_snapshots" on public.plan_summary_snapshots for all to authenticated using (true) with check (true);

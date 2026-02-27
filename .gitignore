@@ -46,3 +46,5 @@ app.*.map.json
 
 # Local secrets
 lib/config/supabase_config.dart
+scripts/testflight.env
+scripts/supabase_db.env

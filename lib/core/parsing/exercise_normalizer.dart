@@ -1,4 +1,13 @@
 class ExerciseNormalizer {
+  static const Set<String> _sectionPrefixes = {
+    'core',
+    'accessory',
+    'warmup',
+    'warm-up',
+    'mobility',
+    'finisher',
+  };
+
   static const Map<String, String> _map = {
     'back squat': 'Back Squat',
     'squat': 'Back Squat',
@@ -12,7 +21,15 @@ class ExerciseNormalizer {
   };
 
   static String normalize(String input) {
-    final cleaned = input.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    var cleaned = input.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    final colonIdx = cleaned.indexOf(':');
+    if (colonIdx > 0) {
+      final prefix = cleaned.substring(0, colonIdx).trim();
+      final remainder = cleaned.substring(colonIdx + 1).trim();
+      if (_sectionPrefixes.contains(prefix) && remainder.isNotEmpty) {
+        cleaned = remainder;
+      }
+    }
     if (cleaned.isEmpty) {
       return 'Unknown Exercise';
     }

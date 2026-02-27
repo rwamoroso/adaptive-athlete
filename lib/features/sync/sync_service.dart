@@ -64,8 +64,10 @@ class SyncService {
     await _upsertAiAudit();
     await _upsertPlanCycles();
     await _upsertPlanDays();
+    await _upsertExerciseSubstitutions();
     await _upsertPlanPrescribedStrengthSets();
     await _upsertPlanPrescribedRuns();
+    await _upsertPlanExerciseAlternatives();
     await _upsertPlanSummarySnapshots();
     await _upsertPlanImportAudit();
   }
@@ -74,8 +76,10 @@ class SyncService {
     await _pullWorkoutDays();
     await _pullPlanCycles();
     await _pullPlanDays();
+    await _pullExerciseSubstitutions();
     await _pullPlanPrescribedStrengthSets();
     await _pullPlanPrescribedRuns();
+    await _pullPlanExerciseAlternatives();
     await _pullPlanSummarySnapshots();
     await _pullPlanImportAudit();
     await _pullActualStrengthSets();
@@ -99,10 +103,7 @@ class SyncService {
 
     while (true) {
       final response = columns == null
-          ? await client
-              .from(table)
-              .select()
-              .range(from, from + pageSize - 1)
+          ? await client.from(table).select().range(from, from + pageSize - 1)
           : await client
               .from(table)
               .select(columns)
@@ -525,6 +526,60 @@ class SyncService {
     });
   }
 
+  Future<void> _pullPlanExerciseAlternatives() async {
+    final rows = await _fetchRows('plan_exercise_alternatives');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.planExerciseAlternatives,
+          PlanExerciseAlternativesCompanion(
+            id: Value(_requiredString(r, 'id')),
+            planDayId: Value(r['plan_day_id']?.toString()),
+            prescribedExerciseCanonical:
+                Value(_requiredString(r, 'prescribed_exercise_canonical')),
+            alternativeExerciseCanonical:
+                Value(_requiredString(r, 'alternative_exercise_canonical')),
+            priority: Value(_asInt(r['priority']) ?? 0),
+            notes: Value(r['notes']?.toString()),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullExerciseSubstitutions() async {
+    final rows = await _fetchRows('exercise_substitutions');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.exerciseSubstitutions,
+          ExerciseSubstitutionsCompanion(
+            id: Value(_requiredString(r, 'id')),
+            workoutDayId: Value(_requiredString(r, 'workout_day_id')),
+            planDayId: Value(r['plan_day_id']?.toString()),
+            prescribedExerciseCanonical:
+                Value(_requiredString(r, 'prescribed_exercise_canonical')),
+            substituteExerciseCanonical:
+                Value(_requiredString(r, 'substitute_exercise_canonical')),
+            reasonCode: Value(_requiredString(r, 'reason_code')),
+            reasonNotes: Value(r['reason_notes']?.toString()),
+            selectedAt: Value(_requiredInt(r, 'selected_at')),
+            selectedBy: Value(r['selected_by']?.toString()),
+            matchScore: Value(_asDouble(r['match_score'])),
+            matchExplanationJson:
+                Value(r['match_explanation_json']?.toString()),
+            warningAcknowledged:
+                Value(_asBool(r['warning_acknowledged']) ?? false),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
   Future<void> _pullPlanSummarySnapshots() async {
     final rows = await _fetchRows('plan_summary_snapshots');
     await db.batch((batch) {
@@ -849,6 +904,39 @@ class SyncService {
         );
   }
 
+  Future<void> _upsertExerciseSubstitutions() async {
+    final rows = await db.select(db.exerciseSubstitutions).get();
+    await _deleteRemoteRowsMissingLocally(
+      table: 'exercise_substitutions',
+      localIds: rows.map((r) => r.id),
+    );
+    if (rows.isEmpty) {
+      return;
+    }
+    await client.from('exercise_substitutions').upsert(
+          rows
+              .map((r) => {
+                    'id': r.id,
+                    'workout_day_id': r.workoutDayId,
+                    'plan_day_id': r.planDayId,
+                    'prescribed_exercise_canonical':
+                        r.prescribedExerciseCanonical,
+                    'substitute_exercise_canonical':
+                        r.substituteExerciseCanonical,
+                    'reason_code': r.reasonCode,
+                    'reason_notes': r.reasonNotes,
+                    'selected_at': r.selectedAt,
+                    'selected_by': r.selectedBy,
+                    'match_score': r.matchScore,
+                    'match_explanation_json': r.matchExplanationJson,
+                    'warning_acknowledged': r.warningAcknowledged,
+                    'created_at': r.createdAt,
+                  })
+              .toList(),
+          onConflict: 'id',
+        );
+  }
+
   Future<void> _upsertPlanPrescribedStrengthSets() async {
     final rows = await db.select(db.planPrescribedStrengthSets).get();
     await _deleteRemoteRowsMissingLocally(
@@ -897,6 +985,33 @@ class SyncService {
                     'duration_text': r.durationText,
                     'target_pace': r.targetPace,
                     'effort_hr_guardrails': r.effortHrGuardrails,
+                    'notes': r.notes,
+                    'created_at': r.createdAt,
+                  })
+              .toList(),
+          onConflict: 'id',
+        );
+  }
+
+  Future<void> _upsertPlanExerciseAlternatives() async {
+    final rows = await db.select(db.planExerciseAlternatives).get();
+    await _deleteRemoteRowsMissingLocally(
+      table: 'plan_exercise_alternatives',
+      localIds: rows.map((r) => r.id),
+    );
+    if (rows.isEmpty) {
+      return;
+    }
+    await client.from('plan_exercise_alternatives').upsert(
+          rows
+              .map((r) => {
+                    'id': r.id,
+                    'plan_day_id': r.planDayId,
+                    'prescribed_exercise_canonical':
+                        r.prescribedExerciseCanonical,
+                    'alternative_exercise_canonical':
+                        r.alternativeExerciseCanonical,
+                    'priority': r.priority,
                     'notes': r.notes,
                     'created_at': r.createdAt,
                   })

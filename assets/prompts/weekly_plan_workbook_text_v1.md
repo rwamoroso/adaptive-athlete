@@ -64,6 +64,11 @@ IMPORTANT:
 - In preferred mode, read the existing worksheet headers/layout and write values into the existing row/column structure without changing layout semantics.
 - Preserve formulas, merged cells, formatting, and hidden rows/columns whenever possible.
 - If a required area is ambiguous, infer the mapping from headers and surrounding structure, then update in place conservatively.
+- Exercise alternative coverage requirement (required):
+  - For every prescribed strength exercise written into a day sheet, provide substitute suggestions in that day sheet's `Exercise Alternatives (Substitute Suggestions)` table.
+  - Do not leave any prescribed strength exercise without alternatives unless the day has no strength prescription.
+  - Target 3-6 alternatives per prescribed exercise (minimum 2 when constraints are severe).
+  - Rank alternatives from best fit to least fit (`Rank = 1` is best).
 - Workbook-mode hard constraints (required):
   - Do not change schema/header labels in existing planning sheets.
   - Do not replace header cells with commentary (for example, do not replace `Date` with `Day X Updated Plan`).
@@ -115,6 +120,7 @@ STRENGTH_SET: <exercise_canonical> | set=<n> | weight=<number or blank> | reps=<
 STRENGTH_SET: ...
 ALT: <prescribed_exercise_canonical> | rank=<1..N> | exercise=<alternative_exercise_canonical> | tier=strong|acceptable|weak | rationale=<short reason> | notes=<optional>
 ALT: ...
+RULE: Include ALT rows for every prescribed strength exercise listed in each DAY block (target 3-6 alternatives each; minimum 2 unless impossible)
 END DAY 1
 
 DAY 2

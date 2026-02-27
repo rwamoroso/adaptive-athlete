@@ -150,4 +150,49 @@ void main() {
     expect(row.prescribedExerciseCanonical, 'Bench Press');
     expect(row.substitutionId, 'sub_1');
   });
+
+  test('workout detail exercise groups preserve prescribed plan order', () async {
+    final db = AppDb.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    const ymd = '2026-02-15';
+    await _seedPlanForDate(db, ymd);
+
+    // Intentionally use the same createdAt and a lower setIndex on the second
+    // exercise to ensure setIndex does not reorder the exercise cards.
+    await db.into(db.planPrescribedStrengthSets).insert(
+          PlanPrescribedStrengthSetsCompanion.insert(
+            id: 'pss_1',
+            planDayId: 'day_1',
+            exerciseCanonical: 'Bench Press',
+            setIndex: 2,
+            weight: const Value(185),
+            reps: const Value(8),
+            rir: const Value(2),
+            unit: 'lb',
+            rawSetString: const Value('185x8r2'),
+            createdAt: 1000,
+          ),
+        );
+    await db.into(db.planPrescribedStrengthSets).insert(
+          PlanPrescribedStrengthSetsCompanion.insert(
+            id: 'pss_2',
+            planDayId: 'day_1',
+            exerciseCanonical: 'Lat Pulldown',
+            setIndex: 1,
+            weight: const Value(120),
+            reps: const Value(10),
+            rir: const Value(2),
+            unit: 'lb',
+            rawSetString: const Value('120x10r2'),
+            createdAt: 1000,
+          ),
+        );
+
+    final detail = await db.getWorkoutDayDetail(ymd);
+    expect(detail.groups.map((g) => g.exercise).toList(), [
+      'Bench Press',
+      'Lat Pulldown',
+    ]);
+  });
 }

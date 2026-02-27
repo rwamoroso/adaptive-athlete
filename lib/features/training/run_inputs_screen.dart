@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,37 @@ import 'garmin_csv_import_service.dart';
 enum DistanceUnit { miles, kilometers }
 
 enum IntervalSegmentType { interval, rest }
+
+Map<int, String> _manualRunSegmentLabelsByIdx(String? rawMetricsJson) {
+  if (rawMetricsJson == null || rawMetricsJson.trim().isEmpty) {
+    return const <int, String>{};
+  }
+  try {
+    final decoded = jsonDecode(rawMetricsJson);
+    if (decoded is! Map) {
+      return const <int, String>{};
+    }
+    final rawSegments = decoded['manual_segments'];
+    if (rawSegments is! List) {
+      return const <int, String>{};
+    }
+    final labels = <int, String>{};
+    for (final segment in rawSegments) {
+      if (segment is! Map) {
+        continue;
+      }
+      final idx = int.tryParse('${segment['idx'] ?? ''}');
+      if (idx == null) {
+        continue;
+      }
+      final kind = '${segment['kind'] ?? ''}'.trim().toLowerCase();
+      labels[idx] = kind == 'rest' ? 'Rest' : 'Interval';
+    }
+    return labels;
+  } catch (_) {
+    return const <int, String>{};
+  }
+}
 
 class RunInputsScreen extends ConsumerStatefulWidget {
   const RunInputsScreen({super.key});
@@ -44,6 +77,9 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   GarminImportResult? _importResult;
   bool _savingManual = false;
   bool _importing = false;
+  List<RunSessionWithSegments> _loggedRunsForSelectedDate =
+      const <RunSessionWithSegments>[];
+  String? _editingRunSessionId;
 
   @override
   void initState() {
@@ -103,6 +139,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       setState(() {
         _prescribedRunType = runType;
         _prescribedLiftFocus = liftFocus;
+        _loggedRunsForSelectedDate = detail.runSessions;
         _loadingRunType = false;
         if (!_intervalModeTouched && _isIntervalRunType(runType)) {
           _intervalLoggingEnabled = true;
@@ -113,7 +150,10 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       if (!mounted) {
         return;
       }
-      setState(() => _loadingRunType = false);
+      setState(() {
+        _loadingRunType = false;
+        _loggedRunsForSelectedDate = const <RunSessionWithSegments>[];
+      });
     }
   }
 
@@ -320,6 +360,117 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     });
   }
 
+  String _formatRunStartTime(int? startTimeMs) {
+    if (startTimeMs == null) {
+      return 'Unknown start';
+    }
+    final dt = DateTime.fromMillisecondsSinceEpoch(startTimeMs);
+    final tod = TimeOfDay.fromDateTime(dt);
+    return '${toYmd(dt)} • ${tod.format(context)}';
+  }
+
+  String _formatRunDistanceForCurrentUnit(double? meters) {
+    if (meters == null) {
+      return 'unknown';
+    }
+    final value = _distanceUnit == DistanceUnit.miles
+        ? meters / GarminCsvImportService.metersPerMile
+        : meters / 1000;
+    return '${value.toStringAsFixed(2)} ${_distanceUnitLabel()}';
+  }
+
+  void _clearIntervalSegments() {
+    for (final segment in _intervalSegments) {
+      segment.dispose();
+    }
+    _intervalSegments.clear();
+  }
+
+  void _startNewManualEntry() {
+    setState(() {
+      _editingRunSessionId = null;
+      _durationController.text = '00:30:00';
+      _distanceController.clear();
+      _maxHrController.clear();
+      _avgHrController.clear();
+      _intervalModeTouched = false;
+      _intervalLoggingEnabled = _isIntervalRunType(_prescribedRunType);
+      _clearIntervalSegments();
+      if (_intervalLoggingEnabled) {
+        _seedDefaultIntervalRowsIfEmpty();
+      }
+    });
+  }
+
+  void _loadRunIntoManualForm(RunSessionWithSegments run) {
+    final session = run.session;
+    final startTime = session.startTime;
+    final startDt = startTime == null
+        ? DateTime(
+            _selectedDate.year,
+            _selectedDate.month,
+            _selectedDate.day,
+            _selectedTime.hour,
+            _selectedTime.minute,
+          )
+        : DateTime.fromMillisecondsSinceEpoch(startTime);
+
+    final segmentKinds = _manualRunSegmentLabelsByIdx(session.rawMetricsJson);
+    final hasSegments = run.segments.isNotEmpty;
+    final nextSegments = <_ManualIntervalSegmentDraft>[];
+    var nextSegmentId = 1;
+    if (hasSegments) {
+      for (final seg in run.segments) {
+        final label = (segmentKinds[seg.idx] ?? 'Interval').toLowerCase();
+        final type = label == 'rest'
+            ? IntervalSegmentType.rest
+            : IntervalSegmentType.interval;
+        final durationS = seg.durationS ?? 0;
+        final safeDurationS = durationS < 0 ? 0 : durationS;
+        final draft = _ManualIntervalSegmentDraft(
+          id: nextSegmentId++,
+          type: type,
+          durationText: _formatSecondsAsHms(safeDurationS),
+        );
+        final distanceM = seg.distanceM ?? 0.0;
+        if (distanceM > 0) {
+          final converted = _distanceUnit == DistanceUnit.miles
+              ? distanceM / GarminCsvImportService.metersPerMile
+              : distanceM / 1000;
+          draft.distanceController.text = converted.toStringAsFixed(2);
+        }
+        nextSegments.add(draft);
+      }
+    }
+
+    setState(() {
+      _editingRunSessionId = session.id;
+      _selectedDate = DateTime(startDt.year, startDt.month, startDt.day);
+      _selectedTime = TimeOfDay.fromDateTime(startDt);
+      _durationController.text = session.durationS == null
+          ? '00:30:00'
+          : _formatSecondsAsHms(session.durationS!);
+      if ((session.distanceM ?? 0) > 0) {
+        final converted = _distanceUnit == DistanceUnit.miles
+            ? session.distanceM! / GarminCsvImportService.metersPerMile
+            : session.distanceM! / 1000;
+        _distanceController.text = converted.toStringAsFixed(2);
+      } else {
+        _distanceController.clear();
+      }
+      _avgHrController.text = session.avgHr?.toStringAsFixed(0) ?? '';
+      _maxHrController.text = session.maxHr?.toStringAsFixed(0) ?? '';
+      _intervalModeTouched = true;
+      _intervalLoggingEnabled = hasSegments;
+      _clearIntervalSegments();
+      _intervalSegments.addAll(nextSegments);
+      _nextSegmentId = nextSegmentId;
+    });
+
+    _refreshRunTypeForSelectedDate();
+    _showMessage('Loaded run into form for editing.');
+  }
+
   Future<void> _saveManualRun() async {
     var durationSeconds = 0;
     var distanceM = 0.0;
@@ -371,15 +522,28 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
 
     setState(() => _savingManual = true);
     try {
-      final outcome = await ref.read(appDbProvider).insertOrUpdateManualRun(
-            dateString: toYmd(_selectedDate),
-            startTimeMs: startDateTime.millisecondsSinceEpoch,
-            durationS: durationSeconds,
-            distanceM: distanceM,
-            avgHr: avgHr,
-            maxHr: maxHr,
-            manualSegments: manualSegments,
-          );
+      final db = ref.read(appDbProvider);
+      final editingRunSessionId = _editingRunSessionId;
+      final outcome = editingRunSessionId == null
+          ? await db.insertOrUpdateManualRun(
+              dateString: toYmd(_selectedDate),
+              startTimeMs: startDateTime.millisecondsSinceEpoch,
+              durationS: durationSeconds,
+              distanceM: distanceM,
+              avgHr: avgHr,
+              maxHr: maxHr,
+              manualSegments: manualSegments,
+            )
+          : await db.updateExistingRunFromManualEntry(
+              runSessionId: editingRunSessionId,
+              dateString: toYmd(_selectedDate),
+              startTimeMs: startDateTime.millisecondsSinceEpoch,
+              durationS: durationSeconds,
+              distanceM: distanceM,
+              avgHr: avgHr,
+              maxHr: maxHr,
+              manualSegments: manualSegments,
+            );
 
       if (!mounted) {
         return;
@@ -389,10 +553,17 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         _showMessage(
             'Garmin data already exists for that run start time. Manual entry was not applied.');
       } else {
+        final wasEditing = editingRunSessionId != null;
+        if (wasEditing) {
+          _editingRunSessionId = null;
+        }
+        await _refreshRunTypeForSelectedDate();
         _showMessage(
           _intervalLoggingEnabled
-              ? 'Manual interval run saved.'
-              : 'Manual run saved.',
+              ? (wasEditing
+                  ? 'Run updated from manual interval entry.'
+                  : 'Manual interval run saved.')
+              : (wasEditing ? 'Run updated.' : 'Manual run saved.'),
         );
       }
     } catch (e) {
@@ -423,6 +594,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       }
 
       setState(() => _importResult = result);
+      await _refreshRunTypeForSelectedDate();
       _showMessage(
         'Import done. inserted=${result.insertedCount}, updated=${result.updatedCount}, overridden=${result.overriddenCount}, skipped=${result.skippedCount}',
       );
@@ -456,6 +628,16 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
             totalDistanceM: 0,
             hasInvalidInput: false,
           );
+    RunSessionWithSegments? editingRun;
+    final editingRunId = _editingRunSessionId;
+    if (editingRunId != null) {
+      for (final run in _loggedRunsForSelectedDate) {
+        if (run.session.id == editingRunId) {
+          editingRun = run;
+          break;
+        }
+      }
+    }
 
     return Theme(
       data: pageTheme,
@@ -482,6 +664,104 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                       'Log manual runs or import Garmin CSV. Interval mode supports work/rest segment tracking.',
                 ),
                 const SizedBox(height: 14),
+                SectionHeader(
+                  text: 'Logged Runs (${toYmd(_selectedDate)})',
+                  trailing: _loggedRunsForSelectedDate.isEmpty
+                      ? null
+                      : Text(
+                          '${_loggedRunsForSelectedDate.length}',
+                          style: pageTheme.textTheme.labelLarge,
+                        ),
+                ),
+                const SizedBox(height: 8),
+                GlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_loadingRunType)
+                        const Text('Loading runs...')
+                      else if (_loggedRunsForSelectedDate.isEmpty)
+                        const Text('No logged runs for this date yet.')
+                      else
+                        ..._loggedRunsForSelectedDate.map((run) {
+                          final session = run.session;
+                          final isEditing = session.id == _editingRunSessionId;
+                          final durationText = session.durationS == null
+                              ? 'unknown'
+                              : _formatSecondsAsHms(session.durationS!);
+                          final subtitleParts = <String>[
+                            _formatRunStartTime(session.startTime),
+                            '${session.source} • $durationText',
+                            _formatRunDistanceForCurrentUnit(session.distanceM),
+                            if (run.segments.isNotEmpty)
+                              '${run.segments.length} segment${run.segments.length == 1 ? '' : 's'}',
+                          ];
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.03),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isEditing
+                                    ? pageTheme.colorScheme.primary
+                                        .withValues(alpha: 0.5)
+                                    : Colors.white.withValues(alpha: 0.12),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        (session.title?.trim().isNotEmpty ??
+                                                false)
+                                            ? session.title!.trim()
+                                            : ((session.activityType
+                                                        ?.trim()
+                                                        .isNotEmpty ??
+                                                    false)
+                                                ? session.activityType!.trim()
+                                                : 'Run'),
+                                        style: pageTheme.textTheme.titleSmall
+                                            ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isEditing)
+                                      const Chip(label: Text('Editing')),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(subtitleParts.join(' | ')),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    FilledButton.tonal(
+                                      onPressed: () =>
+                                          _loadRunIntoManualForm(run),
+                                      child: const Text('Load for Edit'),
+                                    ),
+                                    if (isEditing)
+                                      OutlinedButton(
+                                        onPressed: _startNewManualEntry,
+                                        child: const Text('Stop Editing'),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
                 const SectionHeader(text: 'Manual Entry'),
                 const SizedBox(height: 8),
                 GlassCard(
@@ -490,6 +770,35 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                     children: [
                       Text('Manual Run Entry',
                           style: Theme.of(context).textTheme.titleMedium),
+                      if (editingRun != null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: pageTheme.colorScheme.tertiaryContainer
+                                .withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: pageTheme.colorScheme.outline,
+                            ),
+                          ),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                'Editing existing run: ${_formatRunStartTime(editingRun.session.startTime)}',
+                              ),
+                              OutlinedButton(
+                                onPressed: _startNewManualEntry,
+                                child: const Text('New Run Instead'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -694,7 +1003,11 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                       const SizedBox(height: 12),
                       FilledButton(
                         onPressed: _savingManual ? null : _saveManualRun,
-                        child: const Text('Save Manual Run'),
+                        child: Text(
+                          _editingRunSessionId == null
+                              ? 'Save Manual Run'
+                              : 'Update Run',
+                        ),
                       ),
                     ],
                   ),

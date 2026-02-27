@@ -1689,16 +1689,19 @@ class AppDb extends _$AppDb {
           );
         }
         for (final alt in source.alternatives) {
-          await into(planExerciseAlternatives).insert(
-            PlanExerciseAlternativesCompanion.insert(
-              id: _uuid.v4(),
-              planDayId: Value(targetDay.id),
-              prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
-              alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
-              priority: Value(alt.priority),
-              notes: Value(alt.notes),
-              createdAt: unixMsNow(),
-            ),
+          await upsertPlanExerciseAlternative(
+            planDayId: targetDay.id,
+            prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
+            alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
+            priority: alt.priority,
+            notes: alt.notes,
+          );
+          await upsertPlanExerciseAlternative(
+            planDayId: null,
+            prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
+            alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
+            priority: alt.priority,
+            notes: alt.notes,
           );
         }
       }
@@ -1901,16 +1904,19 @@ class AppDb extends _$AppDb {
           );
         }
         for (final alt in source.alternatives) {
-          await into(planExerciseAlternatives).insert(
-            PlanExerciseAlternativesCompanion.insert(
-              id: _uuid.v4(),
-              planDayId: Value(targetDay.id),
-              prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
-              alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
-              priority: Value(alt.priority),
-              notes: Value(alt.notes),
-              createdAt: unixMsNow(),
-            ),
+          await upsertPlanExerciseAlternative(
+            planDayId: targetDay.id,
+            prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
+            alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
+            priority: alt.priority,
+            notes: alt.notes,
+          );
+          await upsertPlanExerciseAlternative(
+            planDayId: null,
+            prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
+            alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
+            priority: alt.priority,
+            notes: alt.notes,
           );
         }
       }
@@ -2173,27 +2179,50 @@ class AppDb extends _$AppDb {
   }) async {
     final prescribed =
         ExerciseNormalizer.normalize(prescribedExerciseCanonical);
-    final query = select(planExerciseAlternatives)
-      ..where((t) => t.prescribedExerciseCanonical.equals(prescribed))
-      ..orderBy([
-        (t) => OrderingTerm(expression: t.priority, mode: OrderingMode.desc),
-        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
-      ]);
-    if (planDayId == null) {
-      query.where((t) => t.planDayId.isNull());
-    } else {
-      query.where((t) => t.planDayId.equals(planDayId) | t.planDayId.isNull());
+    final ordered = <PlanExerciseAlternative>[];
+
+    if (planDayId != null) {
+      final planDayRows = await (select(planExerciseAlternatives)
+            ..where((t) => t.prescribedExerciseCanonical.equals(prescribed))
+            ..where((t) => t.planDayId.equals(planDayId))
+            ..orderBy([
+              (t) =>
+                  OrderingTerm(expression: t.priority, mode: OrderingMode.desc),
+              (t) =>
+                  OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
+            ]))
+          .get();
+      ordered.addAll(planDayRows);
     }
-    final rows = await query.get();
-    return rows
-        .map(
-          (r) => ExerciseAlternativeChoice(
-            exerciseCanonical: r.alternativeExerciseCanonical,
-            priority: r.priority,
-            notes: r.notes,
-          ),
-        )
-        .toList();
+
+    final globalRows = await (select(planExerciseAlternatives)
+          ..where((t) => t.prescribedExerciseCanonical.equals(prescribed))
+          ..where((t) => t.planDayId.isNull())
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.priority, mode: OrderingMode.desc),
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
+          ]))
+        .get();
+    ordered.addAll(globalRows);
+
+    final seen = <String>{};
+    final output = <ExerciseAlternativeChoice>[];
+    for (final r in ordered) {
+      final alt = ExerciseNormalizer.normalize(r.alternativeExerciseCanonical);
+      if (!seen.add(alt)) {
+        continue;
+      }
+      output.add(
+        ExerciseAlternativeChoice(
+          exerciseCanonical: alt,
+          priority: r.priority,
+          notes: r.notes,
+        ),
+      );
+    }
+    return output;
   }
 
   Future<void> upsertPlanExerciseAlternative({
@@ -2406,6 +2435,104 @@ class AppDb extends _$AppDb {
         inserted: false,
         updated: true,
         overriddenManual: false,
+        preservedGarmin: false,
+      );
+    });
+  }
+
+  Future<RunUpsertOutcome> updateExistingRunFromManualEntry({
+    required String runSessionId,
+    required String dateString,
+    required int startTimeMs,
+    required int durationS,
+    required double distanceM,
+    required double? avgHr,
+    required double? maxHr,
+    List<ManualRunSegmentInput> manualSegments =
+        const <ManualRunSegmentInput>[],
+  }) async {
+    final sanitizedSegments = _sanitizeManualRunSegments(manualSegments);
+    final rawMetricsJson = _manualRunRawMetricsJson(sanitizedSegments);
+    final runKey = GarminCsvImportService.runKeyFromDateTime(
+      DateTime.fromMillisecondsSinceEpoch(startTimeMs),
+    );
+    final workoutDayId = await createOrGetWorkoutDayByDate(dateString);
+    final mappedPlanDayId = await _resolvePlanDayIdForDate(dateString);
+    final endTimeMs = startTimeMs + (durationS * 1000);
+
+    return transaction(() async {
+      final existing = await (select(runSessions)
+            ..where((r) => r.id.equals(runSessionId)))
+          .getSingleOrNull();
+      if (existing == null) {
+        throw StateError('Run session not found: $runSessionId');
+      }
+
+      final conflicting = await (select(runSessions)
+            ..where((r) => r.runKey.equals(runKey))
+            ..where((r) => r.id.equals(runSessionId).not())
+            ..limit(1))
+          .getSingleOrNull();
+      if (conflicting != null) {
+        throw StateError(
+          'Another run already exists at that start time. Pick a different start time.',
+        );
+      }
+
+      final wasHighPriority = existing.sourcePriority >= 100;
+      if (wasHighPriority) {
+        await insertRunOverrideAudit(
+          runKey: existing.runKey,
+          workoutDayId: workoutDayId,
+          oldSource: existing.source,
+          newSource: 'manual',
+          oldSnapshot: _snapshotFromRun(existing),
+          newSnapshot: {
+            'id': existing.id,
+            'run_key': runKey,
+            'workout_day_id': workoutDayId,
+            'plan_day_id': mappedPlanDayId,
+            'start_time': startTimeMs,
+            'end_time': endTimeMs,
+            'duration_s': durationS,
+            'distance_m': distanceM,
+            'avg_hr': avgHr,
+            'max_hr': maxHr,
+            'source': 'manual',
+            'source_priority': 10,
+          },
+          reason: 'manual_edit_override',
+        );
+      }
+
+      await (update(runSessions)..where((r) => r.id.equals(runSessionId)))
+          .write(
+        RunSessionsCompanion(
+          runKey: Value(runKey),
+          workoutDayId: Value(workoutDayId),
+          planDayId: Value(mappedPlanDayId),
+          startTime: Value(startTimeMs),
+          endTime: Value(endTimeMs),
+          durationS: Value(durationS),
+          distanceM: Value(distanceM),
+          avgHr: Value(avgHr),
+          maxHr: Value(maxHr),
+          treadmill: const Value(false),
+          rawMetricsJson: Value(rawMetricsJson),
+          source: const Value('manual'),
+          sourcePriority: const Value(10),
+        ),
+      );
+      await _replaceRunSegmentsForManualRun(
+        runSessionId: runSessionId,
+        segments: sanitizedSegments,
+      );
+
+      return RunUpsertOutcome(
+        runSessionId: runSessionId,
+        inserted: false,
+        updated: true,
+        overriddenManual: wasHighPriority,
         preservedGarmin: false,
       );
     });
@@ -3109,20 +3236,25 @@ class AppDb extends _$AppDb {
         }
 
         for (final alt in day.alternatives) {
-          await into(planExerciseAlternatives).insert(
-            PlanExerciseAlternativesCompanion.insert(
-              id: _uuid.v4(),
-              planDayId: Value(planDayId),
-              prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
-              alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
-              priority: Value(1000 - alt.rank),
-              notes: Value(_composeAlternativeNotes(
-                tier: alt.tier,
-                rationale: alt.rationale,
-                notes: alt.notes,
-              )),
-              createdAt: unixMsNow(),
-            ),
+          final combinedNotes = _composeAlternativeNotes(
+            tier: alt.tier,
+            rationale: alt.rationale,
+            notes: alt.notes,
+          );
+          await upsertPlanExerciseAlternative(
+            planDayId: planDayId,
+            prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
+            alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
+            priority: 1000 - alt.rank,
+            notes: combinedNotes,
+          );
+          // Also store a reusable global substitute bank entry sourced from AI/workbook output.
+          await upsertPlanExerciseAlternative(
+            planDayId: null,
+            prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
+            alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
+            priority: 1000 - alt.rank,
+            notes: combinedNotes,
           );
           insertedAlternativeCount++;
         }
@@ -3301,20 +3433,24 @@ class AppDb extends _$AppDb {
         }
 
         for (final alt in day.alternatives) {
-          await into(planExerciseAlternatives).insert(
-            PlanExerciseAlternativesCompanion.insert(
-              id: _uuid.v4(),
-              planDayId: Value(planDayId),
-              prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
-              alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
-              priority: Value(1000 - alt.rank),
-              notes: Value(_composeAlternativeNotes(
-                tier: alt.tier,
-                rationale: alt.rationale,
-                notes: alt.notes,
-              )),
-              createdAt: unixMsNow(),
-            ),
+          final combinedNotes = _composeAlternativeNotes(
+            tier: alt.tier,
+            rationale: alt.rationale,
+            notes: alt.notes,
+          );
+          await upsertPlanExerciseAlternative(
+            planDayId: planDayId,
+            prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
+            alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
+            priority: 1000 - alt.rank,
+            notes: combinedNotes,
+          );
+          await upsertPlanExerciseAlternative(
+            planDayId: null,
+            prescribedExerciseCanonical: alt.prescribedExerciseCanonical,
+            alternativeExerciseCanonical: alt.alternativeExerciseCanonical,
+            priority: 1000 - alt.rank,
+            notes: combinedNotes,
           );
           insertedAlternativeCount++;
         }
@@ -5263,8 +5399,6 @@ class AppDb extends _$AppDb {
               ..orderBy([
                 (s) => OrderingTerm(
                     expression: s.createdAt, mode: OrderingMode.asc),
-                (s) => OrderingTerm(
-                    expression: s.setIndex, mode: OrderingMode.asc),
               ]))
             .get();
     PlanPrescribedRun? plannedRun;

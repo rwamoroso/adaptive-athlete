@@ -381,6 +381,8 @@ class _WorkoutDayDetailScreenState
     final result = await showModalBottomSheet<_SubstitutionSelectionResult>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (context) => _SubstitutionPickerSheet(
         prescribedExercise: group.exercise,
         currentSubstitute: group.substitution?.substituteExerciseCanonical,
@@ -641,21 +643,22 @@ class _WorkoutDayDetailScreenState
                                   ),
                                 ),
                               ],
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        group.substitution == null
-                                            ? 'Adjust Prescribed and Confirm as Actual'
-                                            : 'Adjusted for substitute; confirm as actual',
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  group.substitution == null
+                                      ? 'Adjust Prescribed and Confirm as Actual'
+                                      : 'Adjusted for substitute; confirm as actual',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  const SizedBox(width: 8),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
                                   FilledButton.tonal(
                                     onPressed: prescribedSets.isEmpty
                                         ? null
@@ -666,15 +669,12 @@ class _WorkoutDayDetailScreenState
                                             ),
                                     child: const Text('Substitute Exercise'),
                                   ),
-                                  if (group.substitution != null) ...[
-                                    const SizedBox(width: 8),
+                                  if (group.substitution != null)
                                     OutlinedButton(
                                       onPressed: () =>
                                           _clearSubstitutionForGroup(group),
                                       child: const Text('Clear'),
                                     ),
-                                  ],
-                                  const SizedBox(width: 8),
                                   FilledButton.tonal(
                                     onPressed: skippingExercise ||
                                             prescribedSets.isEmpty
@@ -981,6 +981,7 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final sheetTheme = buildClinicalTheme();
     final filtered = widget.suggestions
         .where((c) => _query.trim().isEmpty
             ? true
@@ -999,139 +1000,162 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
     selectedCandidate ??= filtered.isEmpty ? null : filtered.first;
     final selectedIsWeak = selectedCandidate?.tier == SubstitutionTier.weak;
 
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 16,
-          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Substitute ${widget.prescribedExercise}',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              onChanged: (value) => setState(() => _query = value),
-              decoration: const InputDecoration(
-                labelText: 'Search alternatives',
-                prefixIcon: Icon(Icons.search),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 320,
-              child: filtered.isEmpty
-                  ? const Center(child: Text('No suggestions found.'))
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: filtered.length,
-                      itemBuilder: (context, index) {
-                        final c = filtered[index];
-                        return RadioListTile<String>(
-                          value: c.exerciseCanonical,
-                          groupValue: _selectedExercise,
-                          onChanged: (v) => setState(() {
-                            _selectedExercise = v;
-                            _warningAcknowledged = false;
-                          }),
-                          title: Text(c.exerciseCanonical),
-                          subtitle: Text(
-                            '${_tierLabel(c.tier)} • ${c.score.round()}/100'
-                            '${c.isCurated ? ' • curated' : ''}'
-                            '${c.warnings.isEmpty ? '' : '\n${c.warnings.join('; ')}'}',
-                          ),
-                        );
-                      },
-                    ),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _reasonCode,
-              items: const [
-                DropdownMenuItem(
-                    value: 'equipment_unavailable',
-                    child: Text('Equipment unavailable')),
-                DropdownMenuItem(value: 'pain', child: Text('Pain')),
-                DropdownMenuItem(
-                    value: 'machine_busy', child: Text('Machine busy')),
-                DropdownMenuItem(
-                    value: 'preference', child: Text('Preference')),
-                DropdownMenuItem(value: 'other', child: Text('Other')),
-              ],
-              onChanged: (v) => setState(() => _reasonCode = v ?? 'preference'),
-              decoration: const InputDecoration(labelText: 'Reason'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _reasonNotesController,
-              decoration: const InputDecoration(
-                labelText: 'Notes (optional)',
-              ),
-            ),
-            if (selectedCandidate != null) ...[
-              const SizedBox(height: 8),
-              if (selectedCandidate.warnings.isNotEmpty)
-                Text(
-                  'Warnings: ${selectedCandidate.warnings.join(' | ')}',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _warningAcknowledged || !selectedIsWeak,
-                onChanged: selectedIsWeak
-                    ? (v) => setState(() => _warningAcknowledged = v ?? false)
-                    : null,
-                title:
-                    const Text('Acknowledge warning (required for weak match)'),
-              ),
-            ],
-            const SizedBox(height: 8),
-            Row(
+    return Theme(
+      data: sheetTheme,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 12,
+            right: 12,
+            top: 8,
+            bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: GlassCard(
+            radius: 22,
+            padding: const EdgeInsets.all(14),
+            tintColor: sheetTheme.colorScheme.surface.withValues(alpha: 0.72),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (widget.currentSubstitute != null)
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(
-                      const _SubstitutionSelectionResult(clear: true),
-                    ),
-                    child: const Text('Clear Current'),
-                  ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                Text(
+                  'Substitute ${widget.prescribedExercise}',
+                  style: sheetTheme.textTheme.titleLarge,
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _selectedExercise == null
-                      ? null
-                      : () {
-                          final selected = widget.suggestions.firstWhere(
-                            (c) => c.exerciseCanonical == _selectedExercise,
-                          );
-                          Navigator.of(context).pop(
-                            _SubstitutionSelectionResult(
-                              substituteExerciseCanonical: _selectedExercise,
-                              reasonCode: _reasonCode,
-                              reasonNotes: _reasonNotesController.text.trim(),
-                              warningAcknowledged:
-                                  _warningAcknowledged || !selectedIsWeak,
-                              isCurated: selected.isCurated,
-                            ),
-                          );
-                        },
-                  child: const Text('Apply'),
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: const InputDecoration(
+                    labelText: 'Search alternatives',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color:
+                          sheetTheme.colorScheme.outline.withValues(alpha: 0.9),
+                    ),
+                    color: Colors.white.withValues(alpha: 0.03),
+                  ),
+                  child: SizedBox(
+                    height: 320,
+                    child: filtered.isEmpty
+                        ? const Center(child: Text('No suggestions found.'))
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) {
+                              final c = filtered[index];
+                              return RadioListTile<String>(
+                                value: c.exerciseCanonical,
+                                groupValue: _selectedExercise,
+                                onChanged: (v) => setState(() {
+                                  _selectedExercise = v;
+                                  _warningAcknowledged = false;
+                                }),
+                                title: Text(c.exerciseCanonical),
+                                subtitle: Text(
+                                  '${_tierLabel(c.tier)} • ${c.score.round()}/100'
+                                  '${c.isCurated ? ' • curated' : ''}'
+                                  '${c.warnings.isEmpty ? '' : '\n${c.warnings.join('; ')}'}',
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: _reasonCode,
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'equipment_unavailable',
+                        child: Text('Equipment unavailable')),
+                    DropdownMenuItem(value: 'pain', child: Text('Pain')),
+                    DropdownMenuItem(
+                        value: 'machine_busy', child: Text('Machine busy')),
+                    DropdownMenuItem(
+                        value: 'preference', child: Text('Preference')),
+                    DropdownMenuItem(value: 'other', child: Text('Other')),
+                  ],
+                  onChanged: (v) =>
+                      setState(() => _reasonCode = v ?? 'preference'),
+                  decoration: const InputDecoration(labelText: 'Reason'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _reasonNotesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes (optional)',
+                  ),
+                ),
+                if (selectedCandidate != null) ...[
+                  const SizedBox(height: 8),
+                  if (selectedCandidate.warnings.isNotEmpty)
+                    Text(
+                      'Warnings: ${selectedCandidate.warnings.join(' | ')}',
+                      style: TextStyle(color: sheetTheme.colorScheme.error),
+                    ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _warningAcknowledged || !selectedIsWeak,
+                    onChanged: selectedIsWeak
+                        ? (v) =>
+                            setState(() => _warningAcknowledged = v ?? false)
+                        : null,
+                    title: const Text(
+                      'Acknowledge warning (required for weak match)',
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    if (widget.currentSubstitute != null)
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(
+                          const _SubstitutionSelectionResult(clear: true),
+                        ),
+                        child: const Text('Clear Current'),
+                      ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: _selectedExercise == null
+                          ? null
+                          : () {
+                              final selected = widget.suggestions.firstWhere(
+                                (c) => c.exerciseCanonical == _selectedExercise,
+                              );
+                              Navigator.of(context).pop(
+                                _SubstitutionSelectionResult(
+                                  substituteExerciseCanonical:
+                                      _selectedExercise,
+                                  reasonCode: _reasonCode,
+                                  reasonNotes:
+                                      _reasonNotesController.text.trim(),
+                                  warningAcknowledged:
+                                      _warningAcknowledged || !selectedIsWeak,
+                                  isCurated: selected.isCurated,
+                                ),
+                              );
+                            },
+                      child: const Text('Apply'),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );

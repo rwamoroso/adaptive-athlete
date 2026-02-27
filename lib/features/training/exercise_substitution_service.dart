@@ -136,47 +136,61 @@ class ExerciseSubstitutionService {
     required String? planDayId,
     required Set<String> availableEquipment,
     required Set<String> contraindications,
-    int limit = 12,
+    int limit = 6,
   }) async {
-    final prescribed = ExerciseNormalizer.normalize(prescribedExerciseCanonical);
-    final source = getProfile(prescribed);
-    if (source == null) {
-      return const <SubstitutionCandidate>[];
-    }
-
+    final prescribed =
+        ExerciseNormalizer.normalize(prescribedExerciseCanonical);
     final curated = await db.getPlanExerciseAlternativesForPlanDay(
       planDayId: planDayId,
       prescribedExerciseCanonical: prescribed,
     );
     final curatedSet = curated.map((e) => e.exerciseCanonical).toSet();
+    final source = getProfile(prescribed);
 
-    final candidates = <String>{};
-    for (final profile in _profiles.values) {
-      if (profile.exerciseCanonical == prescribed) {
-        continue;
-      }
-      final sharesPattern = profile.movementPatterns
-          .any(source.movementPatterns.toSet().contains);
-      final sharesMuscle =
-          profile.primaryMuscles.any(source.primaryMuscles.toSet().contains);
-      if (sharesPattern || sharesMuscle || curatedSet.contains(profile.exerciseCanonical)) {
-        candidates.add(profile.exerciseCanonical);
+    final candidates = <String>{...curatedSet};
+    if (source != null) {
+      for (final profile in _profiles.values) {
+        if (profile.exerciseCanonical == prescribed) {
+          continue;
+        }
+        final sharesPattern = profile.movementPatterns
+            .any(source.movementPatterns.toSet().contains);
+        final sharesMuscle =
+            profile.primaryMuscles.any(source.primaryMuscles.toSet().contains);
+        if (sharesPattern ||
+            sharesMuscle ||
+            curatedSet.contains(profile.exerciseCanonical)) {
+          candidates.add(profile.exerciseCanonical);
+        }
       }
     }
 
     final scored = <SubstitutionCandidate>[];
     for (final candidateExercise in candidates) {
-      final target = _profiles[candidateExercise]!;
       final isCurated = curatedSet.contains(candidateExercise);
-      final result = _scoreCandidate(
-        source: source,
-        target: target,
-        prescribedSets: prescribedSets,
-        availableEquipment: availableEquipment,
-        contraindications: contraindications,
-        isCurated: isCurated,
+      final target = _profiles[candidateExercise];
+      if (source != null && target != null) {
+        scored.add(
+          _scoreCandidate(
+            source: source,
+            target: target,
+            prescribedSets: prescribedSets,
+            availableEquipment: availableEquipment,
+            contraindications: contraindications,
+            isCurated: isCurated,
+          ),
+        );
+        continue;
+      }
+      scored.add(
+        _fallbackCandidate(
+          exerciseCanonical: candidateExercise,
+          sourceMissing: source == null,
+          targetMissing: target == null,
+          isCurated: isCurated,
+          targetProfile: target,
+        ),
       );
-      scored.add(result);
     }
 
     scored.sort((a, b) {
@@ -187,6 +201,56 @@ class ExerciseSubstitutionService {
       return b.score.compareTo(a.score);
     });
     return scored.take(limit).toList();
+  }
+
+  SubstitutionCandidate _fallbackCandidate({
+    required String exerciseCanonical,
+    required bool sourceMissing,
+    required bool targetMissing,
+    required bool isCurated,
+    required ExerciseIntentProfile? targetProfile,
+  }) {
+    final warnings = <String>[];
+    if (sourceMissing) {
+      warnings.add('Missing prescribed exercise taxonomy profile');
+    }
+    if (targetMissing) {
+      warnings.add('Missing alternative exercise taxonomy profile');
+    }
+    if (isCurated) {
+      warnings.add('Curated alternative shown without full scoring');
+    }
+    final score = isCurated ? 55.0 : 20.0;
+    return SubstitutionCandidate(
+      exerciseCanonical: exerciseCanonical,
+      score: score,
+      tier: SubstitutionTier.weak,
+      isCurated: isCurated,
+      warnings: warnings,
+      explanation: <String, dynamic>{
+        'mode': 'fallback',
+        'is_curated': isCurated,
+        'source_missing': sourceMissing,
+        'target_missing': targetMissing,
+        'score': score,
+        'tier': SubstitutionTier.weak.name,
+      },
+      profile: targetProfile ?? _placeholderProfile(exerciseCanonical),
+    );
+  }
+
+  ExerciseIntentProfile _placeholderProfile(String exerciseCanonical) {
+    return ExerciseIntentProfile(
+      exerciseCanonical: exerciseCanonical,
+      displayName: exerciseCanonical,
+      primaryMuscles: const <String>[],
+      secondaryMuscles: const <String>[],
+      movementPatterns: const <String>[],
+      equipment: const <String>[],
+      loadingStyle: 'unknown',
+      stabilityDemand: 'unknown',
+      jointStressFlags: const <String>[],
+    );
   }
 
   Future<SubstitutionValidation> validateSelection({
@@ -232,13 +296,14 @@ class ExerciseSubstitutionService {
     final source = getProfile(prescribedExerciseCanonical);
     final target = getProfile(substituteExerciseCanonical);
     final historyRows = await (db.select(db.actualStrengthSets)
-          ..where((t) =>
-              t.exerciseCanonical.equals(
+          ..where((t) => t.exerciseCanonical.equals(
                 ExerciseNormalizer.normalize(substituteExerciseCanonical),
               ))
           ..orderBy([
-            (t) => OrderingTerm(expression: t.performedAt, mode: OrderingMode.desc),
-            (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+            (t) => OrderingTerm(
+                expression: t.performedAt, mode: OrderingMode.desc),
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
           ])
           ..limit(20))
         .get();
@@ -263,7 +328,8 @@ class ExerciseSubstitutionService {
           reps != null &&
           target.defaultRepMin != null &&
           target.defaultRepMax != null) {
-        final clamped = reps.clamp(target.defaultRepMin!, target.defaultRepMax!);
+        final clamped =
+            reps.clamp(target.defaultRepMin!, target.defaultRepMax!);
         if (clamped != reps) {
           warnings.add(
             'Reps adjusted to fit ${target.displayName} target range (${target.defaultRepMin}-${target.defaultRepMax})',
@@ -348,8 +414,9 @@ class ExerciseSubstitutionService {
     final sourcePatterns = source.movementPatterns.toSet();
     final targetPatterns = target.movementPatterns.toSet();
     final patternOverlap = sourcePatterns.intersection(targetPatterns);
-    final patternScore =
-        sourcePatterns.isEmpty ? 0.0 : (patternOverlap.length / sourcePatterns.length) * 35.0;
+    final patternScore = sourcePatterns.isEmpty
+        ? 0.0
+        : (patternOverlap.length / sourcePatterns.length) * 35.0;
     score += patternScore;
     breakdown['movement_pattern'] = {
       'score': patternScore,
@@ -362,15 +429,17 @@ class ExerciseSubstitutionService {
     final sourceMuscles = source.primaryMuscles.toSet();
     final targetMuscles = target.primaryMuscles.toSet();
     final muscleOverlap = sourceMuscles.intersection(targetMuscles);
-    final muscleScore =
-        sourceMuscles.isEmpty ? 0.0 : (muscleOverlap.length / sourceMuscles.length) * 25.0;
+    final muscleScore = sourceMuscles.isEmpty
+        ? 0.0
+        : (muscleOverlap.length / sourceMuscles.length) * 25.0;
     score += muscleScore;
     breakdown['primary_muscles'] = {
       'score': muscleScore,
       'shared': muscleOverlap.toList(),
     };
 
-    final loadingScore = source.loadingStyle == target.loadingStyle ? 15.0 : 0.0;
+    final loadingScore =
+        source.loadingStyle == target.loadingStyle ? 15.0 : 0.0;
     score += loadingScore;
     breakdown['loading_style'] = {
       'score': loadingScore,
@@ -378,10 +447,17 @@ class ExerciseSubstitutionService {
       'target': target.loadingStyle,
     };
 
-    final prescribedReps = prescribedSets.where((s) => s.reps != null).map((s) => s.reps!).toList();
+    final prescribedReps = prescribedSets
+        .where((s) => s.reps != null)
+        .map((s) => s.reps!)
+        .toList();
     var repScore = 10.0;
-    if (prescribedReps.isNotEmpty && target.defaultRepMin != null && target.defaultRepMax != null) {
-      final outside = prescribedReps.where((r) => r < target.defaultRepMin! || r > target.defaultRepMax!).length;
+    if (prescribedReps.isNotEmpty &&
+        target.defaultRepMin != null &&
+        target.defaultRepMax != null) {
+      final outside = prescribedReps
+          .where((r) => r < target.defaultRepMin! || r > target.defaultRepMax!)
+          .length;
       if (outside > 0) {
         repScore = 10.0 * (1 - outside / prescribedReps.length);
         score -= 15.0;
@@ -391,7 +467,8 @@ class ExerciseSubstitutionService {
     score += repScore;
     breakdown['rep_range'] = {'score': repScore};
 
-    final stabilityScore = source.stabilityDemand == target.stabilityDemand ? 5.0 : 2.0;
+    final stabilityScore =
+        source.stabilityDemand == target.stabilityDemand ? 5.0 : 2.0;
     score += stabilityScore;
     breakdown['stability'] = {'score': stabilityScore};
 
@@ -452,7 +529,8 @@ class ExerciseSubstitutionService {
     return (factor.round() * increment).toDouble();
   }
 
-  static const List<ExerciseIntentProfile> _seedProfiles = <ExerciseIntentProfile>[
+  static const List<ExerciseIntentProfile> _seedProfiles =
+      <ExerciseIntentProfile>[
     ExerciseIntentProfile(
       exerciseCanonical: 'Bench Press',
       displayName: 'Bench Press',
@@ -636,6 +714,104 @@ class ExerciseSubstitutionService {
       defaultRepMin: 8,
       defaultRepMax: 15,
       progressionGroupId: 'horizontal_pull',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Straight Leg Raise',
+      displayName: 'Straight Leg Raise',
+      primaryMuscles: ['abs', 'hip_flexors'],
+      secondaryMuscles: ['obliques'],
+      movementPatterns: ['core_flexion'],
+      equipment: ['bodyweight'],
+      loadingStyle: 'bodyweight',
+      stabilityDemand: 'medium',
+      jointStressFlags: [],
+      defaultRepMin: 8,
+      defaultRepMax: 20,
+      progressionGroupId: 'core_flexion',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Reverse Crunch',
+      displayName: 'Reverse Crunch',
+      primaryMuscles: ['abs'],
+      secondaryMuscles: ['hip_flexors'],
+      movementPatterns: ['core_flexion'],
+      equipment: ['bodyweight'],
+      loadingStyle: 'bodyweight',
+      stabilityDemand: 'medium',
+      jointStressFlags: [],
+      defaultRepMin: 10,
+      defaultRepMax: 25,
+      progressionGroupId: 'core_flexion',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Hanging Knee Raise',
+      displayName: 'Hanging Knee Raise',
+      primaryMuscles: ['abs', 'hip_flexors'],
+      secondaryMuscles: ['grip'],
+      movementPatterns: ['core_flexion'],
+      equipment: ['bodyweight'],
+      loadingStyle: 'bodyweight',
+      stabilityDemand: 'high',
+      jointStressFlags: ['elbow_flexion_irritation'],
+      defaultRepMin: 6,
+      defaultRepMax: 15,
+      progressionGroupId: 'core_flexion',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Seated Cable Crunch Machine',
+      displayName: 'Seated Cable Crunch Machine',
+      primaryMuscles: ['abs'],
+      secondaryMuscles: ['obliques'],
+      movementPatterns: ['core_flexion'],
+      equipment: ['cable', 'machine'],
+      loadingStyle: 'machine_guided',
+      stabilityDemand: 'low',
+      jointStressFlags: [],
+      defaultRepMin: 8,
+      defaultRepMax: 20,
+      progressionGroupId: 'core_flexion',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Cable Crunch',
+      displayName: 'Cable Crunch',
+      primaryMuscles: ['abs'],
+      secondaryMuscles: ['obliques'],
+      movementPatterns: ['core_flexion'],
+      equipment: ['cable'],
+      loadingStyle: 'machine_guided',
+      stabilityDemand: 'low',
+      jointStressFlags: [],
+      defaultRepMin: 8,
+      defaultRepMax: 20,
+      progressionGroupId: 'core_flexion',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Pallof Press',
+      displayName: 'Pallof Press',
+      primaryMuscles: ['obliques', 'abs'],
+      secondaryMuscles: ['glutes'],
+      movementPatterns: ['anti_rotation'],
+      equipment: ['cable', 'bands'],
+      loadingStyle: 'unilateral_load',
+      stabilityDemand: 'medium',
+      jointStressFlags: [],
+      defaultRepMin: 8,
+      defaultRepMax: 15,
+      progressionGroupId: 'core_stability',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Dead Bug',
+      displayName: 'Dead Bug',
+      primaryMuscles: ['abs'],
+      secondaryMuscles: ['obliques'],
+      movementPatterns: ['anti_extension'],
+      equipment: ['bodyweight'],
+      loadingStyle: 'bodyweight',
+      stabilityDemand: 'medium',
+      jointStressFlags: [],
+      defaultRepMin: 6,
+      defaultRepMax: 16,
+      progressionGroupId: 'core_stability',
     ),
   ];
 }
