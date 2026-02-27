@@ -2,12 +2,20 @@ import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../db/app_db.dart';
+import '../workspace/workspace_service.dart';
 
 class SyncService {
-  SyncService({required this.db, required this.client});
+  SyncService({
+    required this.db,
+    required this.client,
+    WorkspaceService? workspaceService,
+  }) : workspaceService =
+            workspaceService ?? WorkspaceService(db: db, client: client);
 
   final AppDb db;
   final SupabaseClient client;
+  final WorkspaceService workspaceService;
+  late final _ScopedSyncContext _context;
 
   Future<String> syncNow() async {
     final user = client.auth.currentUser;
@@ -16,6 +24,18 @@ class SyncService {
     }
 
     try {
+      final activeContext = await workspaceService.requireContext();
+      _context = _ScopedSyncContext(
+        workspaceId: activeContext.workspaceId,
+        athleteProfileId: activeContext.profileId,
+      );
+      if (activeContext.needsCloudClaim &&
+          activeContext.role.toLowerCase() == 'owner') {
+        await workspaceService.claimLegacyRowsForActiveProfile(
+          context: activeContext,
+        );
+      }
+
       final hasLocalRows = await _hasAnyLocalRows();
       if (hasLocalRows) {
         await _pushToSupabase();
@@ -102,12 +122,13 @@ class SyncService {
     var from = 0;
 
     while (true) {
-      final response = columns == null
-          ? await client.from(table).select().range(from, from + pageSize - 1)
-          : await client
-              .from(table)
-              .select(columns)
-              .range(from, from + pageSize - 1);
+      final query = columns == null
+          ? client.from(table).select()
+          : client.from(table).select(columns);
+      final response = await query
+          .eq('workspace_id', _context.workspaceId)
+          .eq('athlete_profile_id', _context.athleteProfileId)
+          .range(from, from + pageSize - 1);
 
       final rows = (response as List)
           .map((row) => Map<String, dynamic>.from(row as Map))
@@ -192,6 +213,12 @@ class SyncService {
     }
     return null;
   }
+
+  Map<String, dynamic> _scopedRow(Map<String, dynamic> row) => {
+        ...row,
+        'workspace_id': _context.workspaceId,
+        'athlete_profile_id': _context.athleteProfileId,
+      };
 
   Future<void> _pullWorkoutDays() async {
     final rows = await _fetchRows('workout_days');
@@ -626,12 +653,12 @@ class SyncService {
     }
     await client.from('workout_days').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'workout_date': r.workoutDate,
                     'created_at': r.createdAt,
                     'notes': r.notes,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -644,7 +671,7 @@ class SyncService {
     }
     await client.from('actual_strength_sets').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'workout_day_id': r.workoutDayId,
                     'plan_day_id': r.planDayId,
@@ -658,7 +685,7 @@ class SyncService {
                     'source': r.source,
                     'raw_set_string': r.rawSetString,
                     'created_at': r.createdAt,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -671,7 +698,7 @@ class SyncService {
     }
     await client.from('prescribed_strength_sets').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'workout_day_id': r.workoutDayId,
                     'exercise_canonical': r.exerciseCanonical,
@@ -680,7 +707,7 @@ class SyncService {
                     'reps': r.reps,
                     'rir': r.rir,
                     'unit': r.unit,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -693,7 +720,7 @@ class SyncService {
     }
     await client.from('sleep_nights').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'sleep_date': r.sleepDate,
                     'start_time': r.startTime,
@@ -704,7 +731,7 @@ class SyncService {
                     'light_min': r.lightMin,
                     'awake_min': r.awakeMin,
                     'source': r.source,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -717,7 +744,7 @@ class SyncService {
     }
     await client.from('run_sessions').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'run_key': r.runKey,
                     'workout_day_id': r.workoutDayId,
@@ -738,7 +765,7 @@ class SyncService {
                     'import_file_name': r.importFileName,
                     'raw_metrics_json': r.rawMetricsJson,
                     'source': r.source,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -751,14 +778,14 @@ class SyncService {
     }
     await client.from('run_segments').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'run_session_id': r.runSessionId,
                     'idx': r.idx,
                     'duration_s': r.durationS,
                     'distance_m': r.distanceM,
                     'speed_mps': r.speedMps,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -771,7 +798,7 @@ class SyncService {
     }
     await client.from('run_session_details').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'run_session_id': r.runSessionId,
                     'favorite': r.favorite,
                     'aerobic_te': r.aerobicTe,
@@ -792,7 +819,7 @@ class SyncService {
                     'min_elevation': r.minElevation,
                     'max_elevation': r.maxElevation,
                     'raw_metrics_json': r.rawMetricsJson,
-                  })
+                  }))
               .toList(),
           onConflict: 'run_session_id',
         );
@@ -805,7 +832,7 @@ class SyncService {
     }
     await client.from('run_override_audit').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'run_key': r.runKey,
                     'workout_day_id': r.workoutDayId,
@@ -815,7 +842,7 @@ class SyncService {
                     'new_snapshot_json': r.newSnapshotJson,
                     'reason': r.reason,
                     'created_at': r.createdAt,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -828,14 +855,14 @@ class SyncService {
     }
     await client.from('rule_triggers').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'trigger_date': r.triggerDate,
                     'rule_code': r.ruleCode,
                     'triggered': r.triggered,
                     'details_json': r.detailsJson,
                     'created_at': r.createdAt,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -848,7 +875,7 @@ class SyncService {
     }
     await client.from('ai_audit').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'requested_at': r.requestedAt,
                     'date_window_start': r.dateWindowStart,
@@ -857,7 +884,7 @@ class SyncService {
                     'response_json': r.responseJson,
                     'schema_valid': r.schemaValid,
                     'notes': r.notes,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -870,14 +897,14 @@ class SyncService {
     }
     await client.from('plan_cycles').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'cycle_key': r.cycleKey,
                     'week_start': r.weekStart,
                     'week_end': r.weekEnd,
                     'source': r.source,
                     'created_at': r.createdAt,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -890,7 +917,7 @@ class SyncService {
     }
     await client.from('plan_days').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'plan_cycle_id': r.planCycleId,
                     'day_number': r.dayNumber,
@@ -898,7 +925,7 @@ class SyncService {
                     'estimated_date': r.estimatedDate,
                     'session_type': r.sessionType,
                     'created_at': r.createdAt,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -915,7 +942,7 @@ class SyncService {
     }
     await client.from('exercise_substitutions').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'workout_day_id': r.workoutDayId,
                     'plan_day_id': r.planDayId,
@@ -931,7 +958,7 @@ class SyncService {
                     'match_explanation_json': r.matchExplanationJson,
                     'warning_acknowledged': r.warningAcknowledged,
                     'created_at': r.createdAt,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -948,7 +975,7 @@ class SyncService {
     }
     await client.from('plan_prescribed_strength_sets').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'plan_day_id': r.planDayId,
                     'exercise_canonical': r.exerciseCanonical,
@@ -959,7 +986,7 @@ class SyncService {
                     'unit': r.unit,
                     'raw_set_string': r.rawSetString,
                     'created_at': r.createdAt,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -976,7 +1003,7 @@ class SyncService {
     }
     await client.from('plan_prescribed_runs').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'plan_day_id': r.planDayId,
                     'day_label': r.dayLabel,
@@ -987,7 +1014,7 @@ class SyncService {
                     'effort_hr_guardrails': r.effortHrGuardrails,
                     'notes': r.notes,
                     'created_at': r.createdAt,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -1004,7 +1031,7 @@ class SyncService {
     }
     await client.from('plan_exercise_alternatives').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'plan_day_id': r.planDayId,
                     'prescribed_exercise_canonical':
@@ -1014,7 +1041,7 @@ class SyncService {
                     'priority': r.priority,
                     'notes': r.notes,
                     'created_at': r.createdAt,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -1027,13 +1054,13 @@ class SyncService {
     }
     await client.from('plan_summary_snapshots').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'plan_cycle_id': r.planCycleId,
                     'tab_name': r.tabName,
                     'snapshot_json': r.snapshotJson,
                     'created_at': r.createdAt,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -1046,14 +1073,14 @@ class SyncService {
     }
     await client.from('plan_import_audit').upsert(
           rows
-              .map((r) => {
+              .map((r) => _scopedRow({
                     'id': r.id,
                     'imported_at': r.importedAt,
                     'file_name': r.fileName,
                     'success': r.success,
                     'details_json': r.detailsJson,
                     'conflict_report_path': r.conflictReportPath,
-                  })
+                  }))
               .toList(),
           onConflict: 'id',
         );
@@ -1081,7 +1108,22 @@ class SyncService {
       final end =
           (i + chunkSize < staleIds.length) ? i + chunkSize : staleIds.length;
       final chunk = staleIds.sublist(i, end);
-      await client.from(table).delete().inFilter('id', chunk);
+      await client
+          .from(table)
+          .delete()
+          .eq('workspace_id', _context.workspaceId)
+          .eq('athlete_profile_id', _context.athleteProfileId)
+          .inFilter('id', chunk);
     }
   }
+}
+
+class _ScopedSyncContext {
+  const _ScopedSyncContext({
+    required this.workspaceId,
+    required this.athleteProfileId,
+  });
+
+  final String workspaceId;
+  final String athleteProfileId;
 }

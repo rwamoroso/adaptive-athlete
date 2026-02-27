@@ -1,11 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../db/app_db.dart';
 import '../../features/ai/ai_analyze_service.dart';
 import '../../features/plan/weekly_plan_prompt_service.dart';
 import '../../features/training/exercise_substitution_service.dart';
+import '../../features/workspace/invite_service.dart';
+import '../../features/workspace/workspace_models.dart';
+import '../../features/workspace/workspace_service.dart';
 
 class SupabaseBootstrap {
   const SupabaseBootstrap({required this.initialized, this.error});
@@ -209,4 +213,27 @@ final exerciseSubstitutionServiceProvider =
 final weeklyPlanPromptServiceProvider =
     Provider<WeeklyPlanPromptService>((ref) {
   return WeeklyPlanPromptService(db: ref.read(appDbProvider));
+});
+
+final workspaceServiceProvider = Provider<WorkspaceService>((ref) {
+  return WorkspaceService(
+    db: ref.read(appDbProvider),
+    client: Supabase.instance.client,
+  );
+});
+
+final inviteServiceProvider = Provider<InviteService>((ref) {
+  return InviteService(workspaceService: ref.read(workspaceServiceProvider));
+});
+
+final activeWorkspaceContextProvider =
+    FutureProvider<ActiveWorkspaceContext?>((ref) async {
+  final bootstrap = ref.watch(supabaseBootstrapProvider);
+  if (!bootstrap.initialized) {
+    return null;
+  }
+  if (Supabase.instance.client.auth.currentUser == null) {
+    return null;
+  }
+  return ref.read(workspaceServiceProvider).bootstrapAndGetContext();
 });

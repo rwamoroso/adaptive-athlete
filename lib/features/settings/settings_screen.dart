@@ -11,6 +11,7 @@ import '../plan/weekly_plan_prompt_service.dart';
 import '../sync/sync_service.dart';
 import '../training/exercise_substitution_service.dart';
 import '../ui/clinical_widgets.dart';
+import '../workspace/workspace_models.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -20,6 +21,7 @@ class SettingsScreen extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
     final bootstrap = ref.watch(supabaseBootstrapProvider);
+    final workspaceContextAsync = ref.watch(activeWorkspaceContextProvider);
 
     String? userId;
     if (bootstrap.initialized) {
@@ -166,6 +168,95 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 12),
+        const SectionHeader(text: 'Workspace'),
+        const SizedBox(height: 8),
+        GlassCard(
+          child: workspaceContextAsync.when(
+            loading: () => const Text('Loading workspace context...'),
+            error: (error, _) => Text('Workspace context error: $error'),
+            data: (ctx) {
+              if (ctx == null) {
+                return const Text(
+                  'No workspace context. Sign in and sync once to bootstrap.',
+                );
+              }
+              final workspace = ctx.workspaces
+                  .where((w) => w.id == ctx.workspaceId)
+                  .cast<WorkspaceSummary?>()
+                  .firstWhere((_) => true, orElse: () => null);
+              final profiles = ctx.activeWorkspaceProfiles;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Workspace: ${workspace?.name ?? ctx.workspaceId}\nRole: ${ctx.role}\nActive profile: ${ctx.profileId}',
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: profiles.any((p) => p.id == ctx.profileId)
+                        ? ctx.profileId
+                        : (profiles.isNotEmpty ? profiles.first.id : null),
+                    decoration:
+                        const InputDecoration(labelText: 'Active profile'),
+                    items: profiles
+                        .map(
+                          (p) => DropdownMenuItem<String>(
+                            value: p.id,
+                            child: Text(p.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: profiles.isEmpty
+                        ? null
+                        : (selectedProfileId) async {
+                            if (selectedProfileId == null ||
+                                selectedProfileId == ctx.profileId) {
+                              return;
+                            }
+                            try {
+                              await ref
+                                  .read(workspaceServiceProvider)
+                                  .switchActiveProfile(
+                                    workspaceId: ctx.workspaceId,
+                                    profileId: selectedProfileId,
+                                  );
+                              final status = await SyncService(
+                                db: ref.read(appDbProvider),
+                                client: Supabase.instance.client,
+                                workspaceService:
+                                    ref.read(workspaceServiceProvider),
+                              ).syncNow();
+                              ref.invalidate(activeWorkspaceContextProvider);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(status)),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Profile switch failed: $e'),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                  ),
+                  if (ctx.role.toLowerCase() == 'owner' &&
+                      profiles.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _WorkspaceInviteCard(
+                      workspaceId: ctx.workspaceId,
+                      profiles: profiles,
+                    ),
+                  ],
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
         const SectionHeader(text: 'Actions'),
         const SizedBox(height: 8),
         GlassCard(
@@ -180,6 +271,8 @@ class SettingsScreen extends ConsumerWidget {
                       ? null
                       : () async {
                           await Supabase.instance.client.auth.signOut();
+                          await ref.read(appDbProvider).clearAppContextState();
+                          ref.invalidate(activeWorkspaceContextProvider);
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Signed out.')));
@@ -200,10 +293,12 @@ class SettingsScreen extends ConsumerWidget {
                     final status = await SyncService(
                       db: ref.read(appDbProvider),
                       client: Supabase.instance.client,
+                      workspaceService: ref.read(workspaceServiceProvider),
                     ).syncNow();
                     ref
                         .read(syncStatusProvider.notifier)
                         .setResult(status, reason: 'manual');
+                    ref.invalidate(activeWorkspaceContextProvider);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context)
                           .showSnackBar(SnackBar(content: Text(status)));
@@ -212,6 +307,151 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WorkspaceInviteCard extends ConsumerStatefulWidget {
+  const _WorkspaceInviteCard({
+    required this.workspaceId,
+    required this.profiles,
+  });
+
+  final String workspaceId;
+  final List<AthleteProfileSummary> profiles;
+
+  @override
+  ConsumerState<_WorkspaceInviteCard> createState() =>
+      _WorkspaceInviteCardState();
+}
+
+class _WorkspaceInviteCardState extends ConsumerState<_WorkspaceInviteCard> {
+  final TextEditingController _emailController = TextEditingController();
+  String _role = 'coach';
+  final Set<String> _selectedProfileIds = <String>{};
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedProfileIds.addAll(widget.profiles.map((p) => p.id));
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Invite user',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(labelText: 'User email'),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _role,
+          decoration: const InputDecoration(labelText: 'Role'),
+          items: const [
+            DropdownMenuItem(value: 'coach', child: Text('coach')),
+            DropdownMenuItem(value: 'athlete', child: Text('athlete')),
+          ],
+          onChanged: (value) {
+            if (value == null) {
+              return;
+            }
+            setState(() => _role = value);
+          },
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: widget.profiles
+              .map(
+                (profile) => FilterChip(
+                  label: Text(profile.name),
+                  selected: _selectedProfileIds.contains(profile.id),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedProfileIds.add(profile.id);
+                      } else {
+                        _selectedProfileIds.remove(profile.id);
+                      }
+                    });
+                  },
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: PrimaryPillButton(
+            text: _submitting ? 'Creating invite...' : 'Create invite link',
+            variant: PillButtonVariant.outlined,
+            onPressed: _submitting
+                ? null
+                : () async {
+                    final email = _emailController.text.trim();
+                    if (email.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Enter an email address.')),
+                      );
+                      return;
+                    }
+                    setState(() => _submitting = true);
+                    try {
+                      final invite = await ref
+                          .read(inviteServiceProvider)
+                          .createInvite(
+                            InviteCreateRequest(
+                              workspaceId: widget.workspaceId,
+                              email: email,
+                              role: _role,
+                              assignedProfileIds: _selectedProfileIds.toList(),
+                            ),
+                          );
+                      await Clipboard.setData(
+                          ClipboardData(text: invite.deepLink));
+                      if (!mounted) {
+                        return;
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Invite link copied: ${invite.deepLink}',
+                          ),
+                        ),
+                      );
+                    } catch (e) {
+                      if (!mounted) {
+                        return;
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Invite failed: $e')),
+                      );
+                    } finally {
+                      if (mounted) {
+                        setState(() => _submitting = false);
+                      }
+                    }
+                  },
           ),
         ),
       ],

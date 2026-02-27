@@ -51,8 +51,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
+      await ref.read(workspaceServiceProvider).bootstrapAndGetContext();
       if (mounted) {
-        context.go('/home');
+        final pendingToken =
+            await ref.read(workspaceServiceProvider).getPendingInviteToken();
+        if (!mounted) {
+          return;
+        }
+        if (pendingToken != null && pendingToken.trim().isNotEmpty) {
+          context.go('/join?token=${Uri.encodeComponent(pendingToken)}');
+        } else {
+          context.go('/home');
+        }
       }
     } catch (e) {
       setState(() => _message = e.toString());

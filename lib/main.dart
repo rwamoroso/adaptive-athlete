@@ -11,6 +11,7 @@ import 'config/supabase_config.dart';
 import 'core/utils/app_providers.dart';
 import 'core/utils/go_router_refresh_stream.dart';
 import 'features/auth/auth_screen.dart';
+import 'features/auth/join_workspace_screen.dart';
 import 'features/auth/reset_password_screen.dart';
 import 'features/sync/sync_service.dart';
 import 'features/training/home_shell.dart';
@@ -74,6 +75,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           path: '/reset-password',
           builder: (context, state) =>
               const Scaffold(body: ResetPasswordScreen())),
+      GoRoute(
+        path: '/join',
+        builder: (context, state) => Scaffold(
+          body: JoinWorkspaceScreen(
+            inviteToken: state.uri.queryParameters['token'],
+          ),
+        ),
+      ),
       GoRoute(path: '/home', builder: (context, state) => const HomeShell()),
     ],
     redirect: (context, state) {
@@ -86,8 +95,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           : null;
       final onAuth = state.matchedLocation == '/auth';
       final onResetPassword = state.matchedLocation == '/reset-password';
+      final onJoin = state.matchedLocation == '/join';
 
-      if (session == null && !onAuth && !onResetPassword) {
+      if (session == null && !onAuth && !onResetPassword && !onJoin) {
         return '/auth';
       }
       if (session != null && onAuth) {
@@ -206,6 +216,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           return;
         }
         if (event.event == AuthChangeEvent.signedOut) {
+          unawaited(ref.read(appDbProvider).clearAppContextState());
+          ref.invalidate(activeWorkspaceContextProvider);
           _scheduleSyncStatusReset();
         }
       });

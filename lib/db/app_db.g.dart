@@ -11525,6 +11525,2610 @@ class PlanImportAuditCompanion extends UpdateCompanion<PlanImportAuditData> {
   }
 }
 
+class $CloudWorkspacesTable extends CloudWorkspaces
+    with TableInfo<$CloudWorkspacesTable, CloudWorkspace> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CloudWorkspacesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _createdByUserIdMeta =
+      const VerificationMeta('createdByUserId');
+  @override
+  late final GeneratedColumn<String> createdByUserId = GeneratedColumn<String>(
+      'created_by_user_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [id, name, createdAt, createdByUserId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cloud_workspaces';
+  @override
+  VerificationContext validateIntegrity(Insertable<CloudWorkspace> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('created_by_user_id')) {
+      context.handle(
+          _createdByUserIdMeta,
+          createdByUserId.isAcceptableOrUnknown(
+              data['created_by_user_id']!, _createdByUserIdMeta));
+    } else if (isInserting) {
+      context.missing(_createdByUserIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CloudWorkspace map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CloudWorkspace(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+      createdByUserId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}created_by_user_id'])!,
+    );
+  }
+
+  @override
+  $CloudWorkspacesTable createAlias(String alias) {
+    return $CloudWorkspacesTable(attachedDatabase, alias);
+  }
+}
+
+class CloudWorkspace extends DataClass implements Insertable<CloudWorkspace> {
+  final String id;
+  final String name;
+  final int createdAt;
+  final String createdByUserId;
+  const CloudWorkspace(
+      {required this.id,
+      required this.name,
+      required this.createdAt,
+      required this.createdByUserId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['created_at'] = Variable<int>(createdAt);
+    map['created_by_user_id'] = Variable<String>(createdByUserId);
+    return map;
+  }
+
+  CloudWorkspacesCompanion toCompanion(bool nullToAbsent) {
+    return CloudWorkspacesCompanion(
+      id: Value(id),
+      name: Value(name),
+      createdAt: Value(createdAt),
+      createdByUserId: Value(createdByUserId),
+    );
+  }
+
+  factory CloudWorkspace.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CloudWorkspace(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      createdByUserId: serializer.fromJson<String>(json['createdByUserId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'createdByUserId': serializer.toJson<String>(createdByUserId),
+    };
+  }
+
+  CloudWorkspace copyWith(
+          {String? id,
+          String? name,
+          int? createdAt,
+          String? createdByUserId}) =>
+      CloudWorkspace(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        createdAt: createdAt ?? this.createdAt,
+        createdByUserId: createdByUserId ?? this.createdByUserId,
+      );
+  CloudWorkspace copyWithCompanion(CloudWorkspacesCompanion data) {
+    return CloudWorkspace(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      createdByUserId: data.createdByUserId.present
+          ? data.createdByUserId.value
+          : this.createdByUserId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudWorkspace(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('createdByUserId: $createdByUserId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, createdAt, createdByUserId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CloudWorkspace &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.createdAt == this.createdAt &&
+          other.createdByUserId == this.createdByUserId);
+}
+
+class CloudWorkspacesCompanion extends UpdateCompanion<CloudWorkspace> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<int> createdAt;
+  final Value<String> createdByUserId;
+  final Value<int> rowid;
+  const CloudWorkspacesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.createdByUserId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CloudWorkspacesCompanion.insert({
+    required String id,
+    required String name,
+    required int createdAt,
+    required String createdByUserId,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        name = Value(name),
+        createdAt = Value(createdAt),
+        createdByUserId = Value(createdByUserId);
+  static Insertable<CloudWorkspace> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<int>? createdAt,
+    Expression<String>? createdByUserId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (createdAt != null) 'created_at': createdAt,
+      if (createdByUserId != null) 'created_by_user_id': createdByUserId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CloudWorkspacesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? name,
+      Value<int>? createdAt,
+      Value<String>? createdByUserId,
+      Value<int>? rowid}) {
+    return CloudWorkspacesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      createdAt: createdAt ?? this.createdAt,
+      createdByUserId: createdByUserId ?? this.createdByUserId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (createdByUserId.present) {
+      map['created_by_user_id'] = Variable<String>(createdByUserId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudWorkspacesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('createdByUserId: $createdByUserId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CloudWorkspaceMembershipsTable extends CloudWorkspaceMemberships
+    with TableInfo<$CloudWorkspaceMembershipsTable, CloudWorkspaceMembership> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CloudWorkspaceMembershipsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _workspaceIdMeta =
+      const VerificationMeta('workspaceId');
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+      'workspace_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+      'user_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _userEmailMeta =
+      const VerificationMeta('userEmail');
+  @override
+  late final GeneratedColumn<String> userEmail = GeneratedColumn<String>(
+      'user_email', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _displayNameMeta =
+      const VerificationMeta('displayName');
+  @override
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+      'display_name', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _roleMeta = const VerificationMeta('role');
+  @override
+  late final GeneratedColumn<String> role = GeneratedColumn<String>(
+      'role', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _createdByUserIdMeta =
+      const VerificationMeta('createdByUserId');
+  @override
+  late final GeneratedColumn<String> createdByUserId = GeneratedColumn<String>(
+      'created_by_user_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        workspaceId,
+        userId,
+        userEmail,
+        displayName,
+        role,
+        status,
+        createdAt,
+        createdByUserId
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cloud_workspace_memberships';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<CloudWorkspaceMembership> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+          _workspaceIdMeta,
+          workspaceId.isAcceptableOrUnknown(
+              data['workspace_id']!, _workspaceIdMeta));
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('user_email')) {
+      context.handle(_userEmailMeta,
+          userEmail.isAcceptableOrUnknown(data['user_email']!, _userEmailMeta));
+    } else if (isInserting) {
+      context.missing(_userEmailMeta);
+    }
+    if (data.containsKey('display_name')) {
+      context.handle(
+          _displayNameMeta,
+          displayName.isAcceptableOrUnknown(
+              data['display_name']!, _displayNameMeta));
+    }
+    if (data.containsKey('role')) {
+      context.handle(
+          _roleMeta, role.isAcceptableOrUnknown(data['role']!, _roleMeta));
+    } else if (isInserting) {
+      context.missing(_roleMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('created_by_user_id')) {
+      context.handle(
+          _createdByUserIdMeta,
+          createdByUserId.isAcceptableOrUnknown(
+              data['created_by_user_id']!, _createdByUserIdMeta));
+    } else if (isInserting) {
+      context.missing(_createdByUserIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CloudWorkspaceMembership map(Map<String, dynamic> data,
+      {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CloudWorkspaceMembership(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      workspaceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}workspace_id'])!,
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}user_id'])!,
+      userEmail: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}user_email'])!,
+      displayName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}display_name']),
+      role: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}role'])!,
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+      createdByUserId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}created_by_user_id'])!,
+    );
+  }
+
+  @override
+  $CloudWorkspaceMembershipsTable createAlias(String alias) {
+    return $CloudWorkspaceMembershipsTable(attachedDatabase, alias);
+  }
+}
+
+class CloudWorkspaceMembership extends DataClass
+    implements Insertable<CloudWorkspaceMembership> {
+  final String id;
+  final String workspaceId;
+  final String userId;
+  final String userEmail;
+  final String? displayName;
+  final String role;
+  final String status;
+  final int createdAt;
+  final String createdByUserId;
+  const CloudWorkspaceMembership(
+      {required this.id,
+      required this.workspaceId,
+      required this.userId,
+      required this.userEmail,
+      this.displayName,
+      required this.role,
+      required this.status,
+      required this.createdAt,
+      required this.createdByUserId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['user_id'] = Variable<String>(userId);
+    map['user_email'] = Variable<String>(userEmail);
+    if (!nullToAbsent || displayName != null) {
+      map['display_name'] = Variable<String>(displayName);
+    }
+    map['role'] = Variable<String>(role);
+    map['status'] = Variable<String>(status);
+    map['created_at'] = Variable<int>(createdAt);
+    map['created_by_user_id'] = Variable<String>(createdByUserId);
+    return map;
+  }
+
+  CloudWorkspaceMembershipsCompanion toCompanion(bool nullToAbsent) {
+    return CloudWorkspaceMembershipsCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      userId: Value(userId),
+      userEmail: Value(userEmail),
+      displayName: displayName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(displayName),
+      role: Value(role),
+      status: Value(status),
+      createdAt: Value(createdAt),
+      createdByUserId: Value(createdByUserId),
+    );
+  }
+
+  factory CloudWorkspaceMembership.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CloudWorkspaceMembership(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      userId: serializer.fromJson<String>(json['userId']),
+      userEmail: serializer.fromJson<String>(json['userEmail']),
+      displayName: serializer.fromJson<String?>(json['displayName']),
+      role: serializer.fromJson<String>(json['role']),
+      status: serializer.fromJson<String>(json['status']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      createdByUserId: serializer.fromJson<String>(json['createdByUserId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'userId': serializer.toJson<String>(userId),
+      'userEmail': serializer.toJson<String>(userEmail),
+      'displayName': serializer.toJson<String?>(displayName),
+      'role': serializer.toJson<String>(role),
+      'status': serializer.toJson<String>(status),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'createdByUserId': serializer.toJson<String>(createdByUserId),
+    };
+  }
+
+  CloudWorkspaceMembership copyWith(
+          {String? id,
+          String? workspaceId,
+          String? userId,
+          String? userEmail,
+          Value<String?> displayName = const Value.absent(),
+          String? role,
+          String? status,
+          int? createdAt,
+          String? createdByUserId}) =>
+      CloudWorkspaceMembership(
+        id: id ?? this.id,
+        workspaceId: workspaceId ?? this.workspaceId,
+        userId: userId ?? this.userId,
+        userEmail: userEmail ?? this.userEmail,
+        displayName: displayName.present ? displayName.value : this.displayName,
+        role: role ?? this.role,
+        status: status ?? this.status,
+        createdAt: createdAt ?? this.createdAt,
+        createdByUserId: createdByUserId ?? this.createdByUserId,
+      );
+  CloudWorkspaceMembership copyWithCompanion(
+      CloudWorkspaceMembershipsCompanion data) {
+    return CloudWorkspaceMembership(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId:
+          data.workspaceId.present ? data.workspaceId.value : this.workspaceId,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      userEmail: data.userEmail.present ? data.userEmail.value : this.userEmail,
+      displayName:
+          data.displayName.present ? data.displayName.value : this.displayName,
+      role: data.role.present ? data.role.value : this.role,
+      status: data.status.present ? data.status.value : this.status,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      createdByUserId: data.createdByUserId.present
+          ? data.createdByUserId.value
+          : this.createdByUserId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudWorkspaceMembership(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('userId: $userId, ')
+          ..write('userEmail: $userEmail, ')
+          ..write('displayName: $displayName, ')
+          ..write('role: $role, ')
+          ..write('status: $status, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('createdByUserId: $createdByUserId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, workspaceId, userId, userEmail,
+      displayName, role, status, createdAt, createdByUserId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CloudWorkspaceMembership &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.userId == this.userId &&
+          other.userEmail == this.userEmail &&
+          other.displayName == this.displayName &&
+          other.role == this.role &&
+          other.status == this.status &&
+          other.createdAt == this.createdAt &&
+          other.createdByUserId == this.createdByUserId);
+}
+
+class CloudWorkspaceMembershipsCompanion
+    extends UpdateCompanion<CloudWorkspaceMembership> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<String> userId;
+  final Value<String> userEmail;
+  final Value<String?> displayName;
+  final Value<String> role;
+  final Value<String> status;
+  final Value<int> createdAt;
+  final Value<String> createdByUserId;
+  final Value<int> rowid;
+  const CloudWorkspaceMembershipsCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.userEmail = const Value.absent(),
+    this.displayName = const Value.absent(),
+    this.role = const Value.absent(),
+    this.status = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.createdByUserId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CloudWorkspaceMembershipsCompanion.insert({
+    required String id,
+    required String workspaceId,
+    required String userId,
+    required String userEmail,
+    this.displayName = const Value.absent(),
+    required String role,
+    required String status,
+    required int createdAt,
+    required String createdByUserId,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        workspaceId = Value(workspaceId),
+        userId = Value(userId),
+        userEmail = Value(userEmail),
+        role = Value(role),
+        status = Value(status),
+        createdAt = Value(createdAt),
+        createdByUserId = Value(createdByUserId);
+  static Insertable<CloudWorkspaceMembership> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<String>? userId,
+    Expression<String>? userEmail,
+    Expression<String>? displayName,
+    Expression<String>? role,
+    Expression<String>? status,
+    Expression<int>? createdAt,
+    Expression<String>? createdByUserId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (userId != null) 'user_id': userId,
+      if (userEmail != null) 'user_email': userEmail,
+      if (displayName != null) 'display_name': displayName,
+      if (role != null) 'role': role,
+      if (status != null) 'status': status,
+      if (createdAt != null) 'created_at': createdAt,
+      if (createdByUserId != null) 'created_by_user_id': createdByUserId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CloudWorkspaceMembershipsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? workspaceId,
+      Value<String>? userId,
+      Value<String>? userEmail,
+      Value<String?>? displayName,
+      Value<String>? role,
+      Value<String>? status,
+      Value<int>? createdAt,
+      Value<String>? createdByUserId,
+      Value<int>? rowid}) {
+    return CloudWorkspaceMembershipsCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      userId: userId ?? this.userId,
+      userEmail: userEmail ?? this.userEmail,
+      displayName: displayName ?? this.displayName,
+      role: role ?? this.role,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      createdByUserId: createdByUserId ?? this.createdByUserId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (userEmail.present) {
+      map['user_email'] = Variable<String>(userEmail.value);
+    }
+    if (displayName.present) {
+      map['display_name'] = Variable<String>(displayName.value);
+    }
+    if (role.present) {
+      map['role'] = Variable<String>(role.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (createdByUserId.present) {
+      map['created_by_user_id'] = Variable<String>(createdByUserId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudWorkspaceMembershipsCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('userId: $userId, ')
+          ..write('userEmail: $userEmail, ')
+          ..write('displayName: $displayName, ')
+          ..write('role: $role, ')
+          ..write('status: $status, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('createdByUserId: $createdByUserId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CloudAthleteProfilesTable extends CloudAthleteProfiles
+    with TableInfo<$CloudAthleteProfilesTable, CloudAthleteProfile> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CloudAthleteProfilesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _workspaceIdMeta =
+      const VerificationMeta('workspaceId');
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+      'workspace_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _dateOfBirthMeta =
+      const VerificationMeta('dateOfBirth');
+  @override
+  late final GeneratedColumn<String> dateOfBirth = GeneratedColumn<String>(
+      'date_of_birth', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+      'notes', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _createdByUserIdMeta =
+      const VerificationMeta('createdByUserId');
+  @override
+  late final GeneratedColumn<String> createdByUserId = GeneratedColumn<String>(
+      'created_by_user_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, workspaceId, name, dateOfBirth, notes, createdAt, createdByUserId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cloud_athlete_profiles';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<CloudAthleteProfile> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+          _workspaceIdMeta,
+          workspaceId.isAcceptableOrUnknown(
+              data['workspace_id']!, _workspaceIdMeta));
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('date_of_birth')) {
+      context.handle(
+          _dateOfBirthMeta,
+          dateOfBirth.isAcceptableOrUnknown(
+              data['date_of_birth']!, _dateOfBirthMeta));
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+          _notesMeta, notes.isAcceptableOrUnknown(data['notes']!, _notesMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('created_by_user_id')) {
+      context.handle(
+          _createdByUserIdMeta,
+          createdByUserId.isAcceptableOrUnknown(
+              data['created_by_user_id']!, _createdByUserIdMeta));
+    } else if (isInserting) {
+      context.missing(_createdByUserIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CloudAthleteProfile map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CloudAthleteProfile(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      workspaceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}workspace_id'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      dateOfBirth: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}date_of_birth']),
+      notes: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notes']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+      createdByUserId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}created_by_user_id'])!,
+    );
+  }
+
+  @override
+  $CloudAthleteProfilesTable createAlias(String alias) {
+    return $CloudAthleteProfilesTable(attachedDatabase, alias);
+  }
+}
+
+class CloudAthleteProfile extends DataClass
+    implements Insertable<CloudAthleteProfile> {
+  final String id;
+  final String workspaceId;
+  final String name;
+  final String? dateOfBirth;
+  final String? notes;
+  final int createdAt;
+  final String createdByUserId;
+  const CloudAthleteProfile(
+      {required this.id,
+      required this.workspaceId,
+      required this.name,
+      this.dateOfBirth,
+      this.notes,
+      required this.createdAt,
+      required this.createdByUserId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || dateOfBirth != null) {
+      map['date_of_birth'] = Variable<String>(dateOfBirth);
+    }
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['created_at'] = Variable<int>(createdAt);
+    map['created_by_user_id'] = Variable<String>(createdByUserId);
+    return map;
+  }
+
+  CloudAthleteProfilesCompanion toCompanion(bool nullToAbsent) {
+    return CloudAthleteProfilesCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      name: Value(name),
+      dateOfBirth: dateOfBirth == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dateOfBirth),
+      notes:
+          notes == null && nullToAbsent ? const Value.absent() : Value(notes),
+      createdAt: Value(createdAt),
+      createdByUserId: Value(createdByUserId),
+    );
+  }
+
+  factory CloudAthleteProfile.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CloudAthleteProfile(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      name: serializer.fromJson<String>(json['name']),
+      dateOfBirth: serializer.fromJson<String?>(json['dateOfBirth']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      createdByUserId: serializer.fromJson<String>(json['createdByUserId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'name': serializer.toJson<String>(name),
+      'dateOfBirth': serializer.toJson<String?>(dateOfBirth),
+      'notes': serializer.toJson<String?>(notes),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'createdByUserId': serializer.toJson<String>(createdByUserId),
+    };
+  }
+
+  CloudAthleteProfile copyWith(
+          {String? id,
+          String? workspaceId,
+          String? name,
+          Value<String?> dateOfBirth = const Value.absent(),
+          Value<String?> notes = const Value.absent(),
+          int? createdAt,
+          String? createdByUserId}) =>
+      CloudAthleteProfile(
+        id: id ?? this.id,
+        workspaceId: workspaceId ?? this.workspaceId,
+        name: name ?? this.name,
+        dateOfBirth: dateOfBirth.present ? dateOfBirth.value : this.dateOfBirth,
+        notes: notes.present ? notes.value : this.notes,
+        createdAt: createdAt ?? this.createdAt,
+        createdByUserId: createdByUserId ?? this.createdByUserId,
+      );
+  CloudAthleteProfile copyWithCompanion(CloudAthleteProfilesCompanion data) {
+    return CloudAthleteProfile(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId:
+          data.workspaceId.present ? data.workspaceId.value : this.workspaceId,
+      name: data.name.present ? data.name.value : this.name,
+      dateOfBirth:
+          data.dateOfBirth.present ? data.dateOfBirth.value : this.dateOfBirth,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      createdByUserId: data.createdByUserId.present
+          ? data.createdByUserId.value
+          : this.createdByUserId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudAthleteProfile(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('name: $name, ')
+          ..write('dateOfBirth: $dateOfBirth, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('createdByUserId: $createdByUserId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id, workspaceId, name, dateOfBirth, notes, createdAt, createdByUserId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CloudAthleteProfile &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.name == this.name &&
+          other.dateOfBirth == this.dateOfBirth &&
+          other.notes == this.notes &&
+          other.createdAt == this.createdAt &&
+          other.createdByUserId == this.createdByUserId);
+}
+
+class CloudAthleteProfilesCompanion
+    extends UpdateCompanion<CloudAthleteProfile> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<String> name;
+  final Value<String?> dateOfBirth;
+  final Value<String?> notes;
+  final Value<int> createdAt;
+  final Value<String> createdByUserId;
+  final Value<int> rowid;
+  const CloudAthleteProfilesCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.dateOfBirth = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.createdByUserId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CloudAthleteProfilesCompanion.insert({
+    required String id,
+    required String workspaceId,
+    required String name,
+    this.dateOfBirth = const Value.absent(),
+    this.notes = const Value.absent(),
+    required int createdAt,
+    required String createdByUserId,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        workspaceId = Value(workspaceId),
+        name = Value(name),
+        createdAt = Value(createdAt),
+        createdByUserId = Value(createdByUserId);
+  static Insertable<CloudAthleteProfile> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<String>? name,
+    Expression<String>? dateOfBirth,
+    Expression<String>? notes,
+    Expression<int>? createdAt,
+    Expression<String>? createdByUserId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (name != null) 'name': name,
+      if (dateOfBirth != null) 'date_of_birth': dateOfBirth,
+      if (notes != null) 'notes': notes,
+      if (createdAt != null) 'created_at': createdAt,
+      if (createdByUserId != null) 'created_by_user_id': createdByUserId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CloudAthleteProfilesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? workspaceId,
+      Value<String>? name,
+      Value<String?>? dateOfBirth,
+      Value<String?>? notes,
+      Value<int>? createdAt,
+      Value<String>? createdByUserId,
+      Value<int>? rowid}) {
+    return CloudAthleteProfilesCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      name: name ?? this.name,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      notes: notes ?? this.notes,
+      createdAt: createdAt ?? this.createdAt,
+      createdByUserId: createdByUserId ?? this.createdByUserId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (dateOfBirth.present) {
+      map['date_of_birth'] = Variable<String>(dateOfBirth.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (createdByUserId.present) {
+      map['created_by_user_id'] = Variable<String>(createdByUserId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudAthleteProfilesCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('name: $name, ')
+          ..write('dateOfBirth: $dateOfBirth, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('createdByUserId: $createdByUserId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CloudAthleteProfileAssignmentsTable
+    extends CloudAthleteProfileAssignments
+    with
+        TableInfo<$CloudAthleteProfileAssignmentsTable,
+            CloudAthleteProfileAssignment> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CloudAthleteProfileAssignmentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _workspaceIdMeta =
+      const VerificationMeta('workspaceId');
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+      'workspace_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _athleteProfileIdMeta =
+      const VerificationMeta('athleteProfileId');
+  @override
+  late final GeneratedColumn<String> athleteProfileId = GeneratedColumn<String>(
+      'athlete_profile_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+      'user_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _canViewMeta =
+      const VerificationMeta('canView');
+  @override
+  late final GeneratedColumn<bool> canView = GeneratedColumn<bool>(
+      'can_view', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("can_view" IN (0, 1))'),
+      defaultValue: const Constant(true));
+  static const VerificationMeta _canEditMeta =
+      const VerificationMeta('canEdit');
+  @override
+  late final GeneratedColumn<bool> canEdit = GeneratedColumn<bool>(
+      'can_edit', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("can_edit" IN (0, 1))'),
+      defaultValue: const Constant(true));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _createdByUserIdMeta =
+      const VerificationMeta('createdByUserId');
+  @override
+  late final GeneratedColumn<String> createdByUserId = GeneratedColumn<String>(
+      'created_by_user_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        workspaceId,
+        athleteProfileId,
+        userId,
+        canView,
+        canEdit,
+        createdAt,
+        createdByUserId
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cloud_athlete_profile_assignments';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<CloudAthleteProfileAssignment> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+          _workspaceIdMeta,
+          workspaceId.isAcceptableOrUnknown(
+              data['workspace_id']!, _workspaceIdMeta));
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('athlete_profile_id')) {
+      context.handle(
+          _athleteProfileIdMeta,
+          athleteProfileId.isAcceptableOrUnknown(
+              data['athlete_profile_id']!, _athleteProfileIdMeta));
+    } else if (isInserting) {
+      context.missing(_athleteProfileIdMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('can_view')) {
+      context.handle(_canViewMeta,
+          canView.isAcceptableOrUnknown(data['can_view']!, _canViewMeta));
+    }
+    if (data.containsKey('can_edit')) {
+      context.handle(_canEditMeta,
+          canEdit.isAcceptableOrUnknown(data['can_edit']!, _canEditMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('created_by_user_id')) {
+      context.handle(
+          _createdByUserIdMeta,
+          createdByUserId.isAcceptableOrUnknown(
+              data['created_by_user_id']!, _createdByUserIdMeta));
+    } else if (isInserting) {
+      context.missing(_createdByUserIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CloudAthleteProfileAssignment map(Map<String, dynamic> data,
+      {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CloudAthleteProfileAssignment(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      workspaceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}workspace_id'])!,
+      athleteProfileId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}athlete_profile_id'])!,
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}user_id'])!,
+      canView: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}can_view'])!,
+      canEdit: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}can_edit'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+      createdByUserId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}created_by_user_id'])!,
+    );
+  }
+
+  @override
+  $CloudAthleteProfileAssignmentsTable createAlias(String alias) {
+    return $CloudAthleteProfileAssignmentsTable(attachedDatabase, alias);
+  }
+}
+
+class CloudAthleteProfileAssignment extends DataClass
+    implements Insertable<CloudAthleteProfileAssignment> {
+  final String id;
+  final String workspaceId;
+  final String athleteProfileId;
+  final String userId;
+  final bool canView;
+  final bool canEdit;
+  final int createdAt;
+  final String createdByUserId;
+  const CloudAthleteProfileAssignment(
+      {required this.id,
+      required this.workspaceId,
+      required this.athleteProfileId,
+      required this.userId,
+      required this.canView,
+      required this.canEdit,
+      required this.createdAt,
+      required this.createdByUserId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['athlete_profile_id'] = Variable<String>(athleteProfileId);
+    map['user_id'] = Variable<String>(userId);
+    map['can_view'] = Variable<bool>(canView);
+    map['can_edit'] = Variable<bool>(canEdit);
+    map['created_at'] = Variable<int>(createdAt);
+    map['created_by_user_id'] = Variable<String>(createdByUserId);
+    return map;
+  }
+
+  CloudAthleteProfileAssignmentsCompanion toCompanion(bool nullToAbsent) {
+    return CloudAthleteProfileAssignmentsCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      athleteProfileId: Value(athleteProfileId),
+      userId: Value(userId),
+      canView: Value(canView),
+      canEdit: Value(canEdit),
+      createdAt: Value(createdAt),
+      createdByUserId: Value(createdByUserId),
+    );
+  }
+
+  factory CloudAthleteProfileAssignment.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CloudAthleteProfileAssignment(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      athleteProfileId: serializer.fromJson<String>(json['athleteProfileId']),
+      userId: serializer.fromJson<String>(json['userId']),
+      canView: serializer.fromJson<bool>(json['canView']),
+      canEdit: serializer.fromJson<bool>(json['canEdit']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      createdByUserId: serializer.fromJson<String>(json['createdByUserId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'athleteProfileId': serializer.toJson<String>(athleteProfileId),
+      'userId': serializer.toJson<String>(userId),
+      'canView': serializer.toJson<bool>(canView),
+      'canEdit': serializer.toJson<bool>(canEdit),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'createdByUserId': serializer.toJson<String>(createdByUserId),
+    };
+  }
+
+  CloudAthleteProfileAssignment copyWith(
+          {String? id,
+          String? workspaceId,
+          String? athleteProfileId,
+          String? userId,
+          bool? canView,
+          bool? canEdit,
+          int? createdAt,
+          String? createdByUserId}) =>
+      CloudAthleteProfileAssignment(
+        id: id ?? this.id,
+        workspaceId: workspaceId ?? this.workspaceId,
+        athleteProfileId: athleteProfileId ?? this.athleteProfileId,
+        userId: userId ?? this.userId,
+        canView: canView ?? this.canView,
+        canEdit: canEdit ?? this.canEdit,
+        createdAt: createdAt ?? this.createdAt,
+        createdByUserId: createdByUserId ?? this.createdByUserId,
+      );
+  CloudAthleteProfileAssignment copyWithCompanion(
+      CloudAthleteProfileAssignmentsCompanion data) {
+    return CloudAthleteProfileAssignment(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId:
+          data.workspaceId.present ? data.workspaceId.value : this.workspaceId,
+      athleteProfileId: data.athleteProfileId.present
+          ? data.athleteProfileId.value
+          : this.athleteProfileId,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      canView: data.canView.present ? data.canView.value : this.canView,
+      canEdit: data.canEdit.present ? data.canEdit.value : this.canEdit,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      createdByUserId: data.createdByUserId.present
+          ? data.createdByUserId.value
+          : this.createdByUserId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudAthleteProfileAssignment(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('athleteProfileId: $athleteProfileId, ')
+          ..write('userId: $userId, ')
+          ..write('canView: $canView, ')
+          ..write('canEdit: $canEdit, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('createdByUserId: $createdByUserId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, workspaceId, athleteProfileId, userId,
+      canView, canEdit, createdAt, createdByUserId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CloudAthleteProfileAssignment &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.athleteProfileId == this.athleteProfileId &&
+          other.userId == this.userId &&
+          other.canView == this.canView &&
+          other.canEdit == this.canEdit &&
+          other.createdAt == this.createdAt &&
+          other.createdByUserId == this.createdByUserId);
+}
+
+class CloudAthleteProfileAssignmentsCompanion
+    extends UpdateCompanion<CloudAthleteProfileAssignment> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<String> athleteProfileId;
+  final Value<String> userId;
+  final Value<bool> canView;
+  final Value<bool> canEdit;
+  final Value<int> createdAt;
+  final Value<String> createdByUserId;
+  final Value<int> rowid;
+  const CloudAthleteProfileAssignmentsCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.athleteProfileId = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.canView = const Value.absent(),
+    this.canEdit = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.createdByUserId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CloudAthleteProfileAssignmentsCompanion.insert({
+    required String id,
+    required String workspaceId,
+    required String athleteProfileId,
+    required String userId,
+    this.canView = const Value.absent(),
+    this.canEdit = const Value.absent(),
+    required int createdAt,
+    required String createdByUserId,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        workspaceId = Value(workspaceId),
+        athleteProfileId = Value(athleteProfileId),
+        userId = Value(userId),
+        createdAt = Value(createdAt),
+        createdByUserId = Value(createdByUserId);
+  static Insertable<CloudAthleteProfileAssignment> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<String>? athleteProfileId,
+    Expression<String>? userId,
+    Expression<bool>? canView,
+    Expression<bool>? canEdit,
+    Expression<int>? createdAt,
+    Expression<String>? createdByUserId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (athleteProfileId != null) 'athlete_profile_id': athleteProfileId,
+      if (userId != null) 'user_id': userId,
+      if (canView != null) 'can_view': canView,
+      if (canEdit != null) 'can_edit': canEdit,
+      if (createdAt != null) 'created_at': createdAt,
+      if (createdByUserId != null) 'created_by_user_id': createdByUserId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CloudAthleteProfileAssignmentsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? workspaceId,
+      Value<String>? athleteProfileId,
+      Value<String>? userId,
+      Value<bool>? canView,
+      Value<bool>? canEdit,
+      Value<int>? createdAt,
+      Value<String>? createdByUserId,
+      Value<int>? rowid}) {
+    return CloudAthleteProfileAssignmentsCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      athleteProfileId: athleteProfileId ?? this.athleteProfileId,
+      userId: userId ?? this.userId,
+      canView: canView ?? this.canView,
+      canEdit: canEdit ?? this.canEdit,
+      createdAt: createdAt ?? this.createdAt,
+      createdByUserId: createdByUserId ?? this.createdByUserId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (athleteProfileId.present) {
+      map['athlete_profile_id'] = Variable<String>(athleteProfileId.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (canView.present) {
+      map['can_view'] = Variable<bool>(canView.value);
+    }
+    if (canEdit.present) {
+      map['can_edit'] = Variable<bool>(canEdit.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (createdByUserId.present) {
+      map['created_by_user_id'] = Variable<String>(createdByUserId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudAthleteProfileAssignmentsCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('athleteProfileId: $athleteProfileId, ')
+          ..write('userId: $userId, ')
+          ..write('canView: $canView, ')
+          ..write('canEdit: $canEdit, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('createdByUserId: $createdByUserId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CloudWorkspaceInvitesTable extends CloudWorkspaceInvites
+    with TableInfo<$CloudWorkspaceInvitesTable, CloudWorkspaceInvite> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CloudWorkspaceInvitesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _workspaceIdMeta =
+      const VerificationMeta('workspaceId');
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+      'workspace_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _emailMeta = const VerificationMeta('email');
+  @override
+  late final GeneratedColumn<String> email = GeneratedColumn<String>(
+      'email', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _roleMeta = const VerificationMeta('role');
+  @override
+  late final GeneratedColumn<String> role = GeneratedColumn<String>(
+      'role', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _displayNameMeta =
+      const VerificationMeta('displayName');
+  @override
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+      'display_name', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _expiresAtMeta =
+      const VerificationMeta('expiresAt');
+  @override
+  late final GeneratedColumn<int> expiresAt = GeneratedColumn<int>(
+      'expires_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _assignedProfileIdsJsonMeta =
+      const VerificationMeta('assignedProfileIdsJson');
+  @override
+  late final GeneratedColumn<String> assignedProfileIdsJson =
+      GeneratedColumn<String>('assigned_profile_ids_json', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _createdByUserIdMeta =
+      const VerificationMeta('createdByUserId');
+  @override
+  late final GeneratedColumn<String> createdByUserId = GeneratedColumn<String>(
+      'created_by_user_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        workspaceId,
+        email,
+        role,
+        displayName,
+        expiresAt,
+        status,
+        assignedProfileIdsJson,
+        createdAt,
+        createdByUserId
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cloud_workspace_invites';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<CloudWorkspaceInvite> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+          _workspaceIdMeta,
+          workspaceId.isAcceptableOrUnknown(
+              data['workspace_id']!, _workspaceIdMeta));
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('email')) {
+      context.handle(
+          _emailMeta, email.isAcceptableOrUnknown(data['email']!, _emailMeta));
+    } else if (isInserting) {
+      context.missing(_emailMeta);
+    }
+    if (data.containsKey('role')) {
+      context.handle(
+          _roleMeta, role.isAcceptableOrUnknown(data['role']!, _roleMeta));
+    } else if (isInserting) {
+      context.missing(_roleMeta);
+    }
+    if (data.containsKey('display_name')) {
+      context.handle(
+          _displayNameMeta,
+          displayName.isAcceptableOrUnknown(
+              data['display_name']!, _displayNameMeta));
+    }
+    if (data.containsKey('expires_at')) {
+      context.handle(_expiresAtMeta,
+          expiresAt.isAcceptableOrUnknown(data['expires_at']!, _expiresAtMeta));
+    } else if (isInserting) {
+      context.missing(_expiresAtMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('assigned_profile_ids_json')) {
+      context.handle(
+          _assignedProfileIdsJsonMeta,
+          assignedProfileIdsJson.isAcceptableOrUnknown(
+              data['assigned_profile_ids_json']!, _assignedProfileIdsJsonMeta));
+    } else if (isInserting) {
+      context.missing(_assignedProfileIdsJsonMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('created_by_user_id')) {
+      context.handle(
+          _createdByUserIdMeta,
+          createdByUserId.isAcceptableOrUnknown(
+              data['created_by_user_id']!, _createdByUserIdMeta));
+    } else if (isInserting) {
+      context.missing(_createdByUserIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CloudWorkspaceInvite map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CloudWorkspaceInvite(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      workspaceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}workspace_id'])!,
+      email: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}email'])!,
+      role: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}role'])!,
+      displayName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}display_name']),
+      expiresAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}expires_at'])!,
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      assignedProfileIdsJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}assigned_profile_ids_json'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+      createdByUserId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}created_by_user_id'])!,
+    );
+  }
+
+  @override
+  $CloudWorkspaceInvitesTable createAlias(String alias) {
+    return $CloudWorkspaceInvitesTable(attachedDatabase, alias);
+  }
+}
+
+class CloudWorkspaceInvite extends DataClass
+    implements Insertable<CloudWorkspaceInvite> {
+  final String id;
+  final String workspaceId;
+  final String email;
+  final String role;
+  final String? displayName;
+  final int expiresAt;
+  final String status;
+  final String assignedProfileIdsJson;
+  final int createdAt;
+  final String createdByUserId;
+  const CloudWorkspaceInvite(
+      {required this.id,
+      required this.workspaceId,
+      required this.email,
+      required this.role,
+      this.displayName,
+      required this.expiresAt,
+      required this.status,
+      required this.assignedProfileIdsJson,
+      required this.createdAt,
+      required this.createdByUserId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['email'] = Variable<String>(email);
+    map['role'] = Variable<String>(role);
+    if (!nullToAbsent || displayName != null) {
+      map['display_name'] = Variable<String>(displayName);
+    }
+    map['expires_at'] = Variable<int>(expiresAt);
+    map['status'] = Variable<String>(status);
+    map['assigned_profile_ids_json'] = Variable<String>(assignedProfileIdsJson);
+    map['created_at'] = Variable<int>(createdAt);
+    map['created_by_user_id'] = Variable<String>(createdByUserId);
+    return map;
+  }
+
+  CloudWorkspaceInvitesCompanion toCompanion(bool nullToAbsent) {
+    return CloudWorkspaceInvitesCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      email: Value(email),
+      role: Value(role),
+      displayName: displayName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(displayName),
+      expiresAt: Value(expiresAt),
+      status: Value(status),
+      assignedProfileIdsJson: Value(assignedProfileIdsJson),
+      createdAt: Value(createdAt),
+      createdByUserId: Value(createdByUserId),
+    );
+  }
+
+  factory CloudWorkspaceInvite.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CloudWorkspaceInvite(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      email: serializer.fromJson<String>(json['email']),
+      role: serializer.fromJson<String>(json['role']),
+      displayName: serializer.fromJson<String?>(json['displayName']),
+      expiresAt: serializer.fromJson<int>(json['expiresAt']),
+      status: serializer.fromJson<String>(json['status']),
+      assignedProfileIdsJson:
+          serializer.fromJson<String>(json['assignedProfileIdsJson']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      createdByUserId: serializer.fromJson<String>(json['createdByUserId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'email': serializer.toJson<String>(email),
+      'role': serializer.toJson<String>(role),
+      'displayName': serializer.toJson<String?>(displayName),
+      'expiresAt': serializer.toJson<int>(expiresAt),
+      'status': serializer.toJson<String>(status),
+      'assignedProfileIdsJson':
+          serializer.toJson<String>(assignedProfileIdsJson),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'createdByUserId': serializer.toJson<String>(createdByUserId),
+    };
+  }
+
+  CloudWorkspaceInvite copyWith(
+          {String? id,
+          String? workspaceId,
+          String? email,
+          String? role,
+          Value<String?> displayName = const Value.absent(),
+          int? expiresAt,
+          String? status,
+          String? assignedProfileIdsJson,
+          int? createdAt,
+          String? createdByUserId}) =>
+      CloudWorkspaceInvite(
+        id: id ?? this.id,
+        workspaceId: workspaceId ?? this.workspaceId,
+        email: email ?? this.email,
+        role: role ?? this.role,
+        displayName: displayName.present ? displayName.value : this.displayName,
+        expiresAt: expiresAt ?? this.expiresAt,
+        status: status ?? this.status,
+        assignedProfileIdsJson:
+            assignedProfileIdsJson ?? this.assignedProfileIdsJson,
+        createdAt: createdAt ?? this.createdAt,
+        createdByUserId: createdByUserId ?? this.createdByUserId,
+      );
+  CloudWorkspaceInvite copyWithCompanion(CloudWorkspaceInvitesCompanion data) {
+    return CloudWorkspaceInvite(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId:
+          data.workspaceId.present ? data.workspaceId.value : this.workspaceId,
+      email: data.email.present ? data.email.value : this.email,
+      role: data.role.present ? data.role.value : this.role,
+      displayName:
+          data.displayName.present ? data.displayName.value : this.displayName,
+      expiresAt: data.expiresAt.present ? data.expiresAt.value : this.expiresAt,
+      status: data.status.present ? data.status.value : this.status,
+      assignedProfileIdsJson: data.assignedProfileIdsJson.present
+          ? data.assignedProfileIdsJson.value
+          : this.assignedProfileIdsJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      createdByUserId: data.createdByUserId.present
+          ? data.createdByUserId.value
+          : this.createdByUserId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudWorkspaceInvite(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('email: $email, ')
+          ..write('role: $role, ')
+          ..write('displayName: $displayName, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('status: $status, ')
+          ..write('assignedProfileIdsJson: $assignedProfileIdsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('createdByUserId: $createdByUserId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, workspaceId, email, role, displayName,
+      expiresAt, status, assignedProfileIdsJson, createdAt, createdByUserId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CloudWorkspaceInvite &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.email == this.email &&
+          other.role == this.role &&
+          other.displayName == this.displayName &&
+          other.expiresAt == this.expiresAt &&
+          other.status == this.status &&
+          other.assignedProfileIdsJson == this.assignedProfileIdsJson &&
+          other.createdAt == this.createdAt &&
+          other.createdByUserId == this.createdByUserId);
+}
+
+class CloudWorkspaceInvitesCompanion
+    extends UpdateCompanion<CloudWorkspaceInvite> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<String> email;
+  final Value<String> role;
+  final Value<String?> displayName;
+  final Value<int> expiresAt;
+  final Value<String> status;
+  final Value<String> assignedProfileIdsJson;
+  final Value<int> createdAt;
+  final Value<String> createdByUserId;
+  final Value<int> rowid;
+  const CloudWorkspaceInvitesCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.email = const Value.absent(),
+    this.role = const Value.absent(),
+    this.displayName = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.status = const Value.absent(),
+    this.assignedProfileIdsJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.createdByUserId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CloudWorkspaceInvitesCompanion.insert({
+    required String id,
+    required String workspaceId,
+    required String email,
+    required String role,
+    this.displayName = const Value.absent(),
+    required int expiresAt,
+    required String status,
+    required String assignedProfileIdsJson,
+    required int createdAt,
+    required String createdByUserId,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        workspaceId = Value(workspaceId),
+        email = Value(email),
+        role = Value(role),
+        expiresAt = Value(expiresAt),
+        status = Value(status),
+        assignedProfileIdsJson = Value(assignedProfileIdsJson),
+        createdAt = Value(createdAt),
+        createdByUserId = Value(createdByUserId);
+  static Insertable<CloudWorkspaceInvite> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<String>? email,
+    Expression<String>? role,
+    Expression<String>? displayName,
+    Expression<int>? expiresAt,
+    Expression<String>? status,
+    Expression<String>? assignedProfileIdsJson,
+    Expression<int>? createdAt,
+    Expression<String>? createdByUserId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (email != null) 'email': email,
+      if (role != null) 'role': role,
+      if (displayName != null) 'display_name': displayName,
+      if (expiresAt != null) 'expires_at': expiresAt,
+      if (status != null) 'status': status,
+      if (assignedProfileIdsJson != null)
+        'assigned_profile_ids_json': assignedProfileIdsJson,
+      if (createdAt != null) 'created_at': createdAt,
+      if (createdByUserId != null) 'created_by_user_id': createdByUserId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CloudWorkspaceInvitesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? workspaceId,
+      Value<String>? email,
+      Value<String>? role,
+      Value<String?>? displayName,
+      Value<int>? expiresAt,
+      Value<String>? status,
+      Value<String>? assignedProfileIdsJson,
+      Value<int>? createdAt,
+      Value<String>? createdByUserId,
+      Value<int>? rowid}) {
+    return CloudWorkspaceInvitesCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      email: email ?? this.email,
+      role: role ?? this.role,
+      displayName: displayName ?? this.displayName,
+      expiresAt: expiresAt ?? this.expiresAt,
+      status: status ?? this.status,
+      assignedProfileIdsJson:
+          assignedProfileIdsJson ?? this.assignedProfileIdsJson,
+      createdAt: createdAt ?? this.createdAt,
+      createdByUserId: createdByUserId ?? this.createdByUserId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (email.present) {
+      map['email'] = Variable<String>(email.value);
+    }
+    if (role.present) {
+      map['role'] = Variable<String>(role.value);
+    }
+    if (displayName.present) {
+      map['display_name'] = Variable<String>(displayName.value);
+    }
+    if (expiresAt.present) {
+      map['expires_at'] = Variable<int>(expiresAt.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (assignedProfileIdsJson.present) {
+      map['assigned_profile_ids_json'] =
+          Variable<String>(assignedProfileIdsJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (createdByUserId.present) {
+      map['created_by_user_id'] = Variable<String>(createdByUserId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudWorkspaceInvitesCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('email: $email, ')
+          ..write('role: $role, ')
+          ..write('displayName: $displayName, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('status: $status, ')
+          ..write('assignedProfileIdsJson: $assignedProfileIdsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('createdByUserId: $createdByUserId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AppContextStateTable extends AppContextState
+    with TableInfo<$AppContextStateTable, AppContextStateData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AppContextStateTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('default'));
+  static const VerificationMeta _activeWorkspaceIdMeta =
+      const VerificationMeta('activeWorkspaceId');
+  @override
+  late final GeneratedColumn<String> activeWorkspaceId =
+      GeneratedColumn<String>('active_workspace_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _activeProfileIdMeta =
+      const VerificationMeta('activeProfileId');
+  @override
+  late final GeneratedColumn<String> activeProfileId = GeneratedColumn<String>(
+      'active_profile_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _activeRoleMeta =
+      const VerificationMeta('activeRole');
+  @override
+  late final GeneratedColumn<String> activeRole = GeneratedColumn<String>(
+      'active_role', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _lastAuthUserIdMeta =
+      const VerificationMeta('lastAuthUserId');
+  @override
+  late final GeneratedColumn<String> lastAuthUserId = GeneratedColumn<String>(
+      'last_auth_user_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _needsCloudClaimMeta =
+      const VerificationMeta('needsCloudClaim');
+  @override
+  late final GeneratedColumn<bool> needsCloudClaim = GeneratedColumn<bool>(
+      'needs_cloud_claim', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("needs_cloud_claim" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _pendingInviteTokenMeta =
+      const VerificationMeta('pendingInviteToken');
+  @override
+  late final GeneratedColumn<String> pendingInviteToken =
+      GeneratedColumn<String>('pending_invite_token', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+      'updated_at', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        activeWorkspaceId,
+        activeProfileId,
+        activeRole,
+        lastAuthUserId,
+        needsCloudClaim,
+        pendingInviteToken,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'app_context_state';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<AppContextStateData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('active_workspace_id')) {
+      context.handle(
+          _activeWorkspaceIdMeta,
+          activeWorkspaceId.isAcceptableOrUnknown(
+              data['active_workspace_id']!, _activeWorkspaceIdMeta));
+    }
+    if (data.containsKey('active_profile_id')) {
+      context.handle(
+          _activeProfileIdMeta,
+          activeProfileId.isAcceptableOrUnknown(
+              data['active_profile_id']!, _activeProfileIdMeta));
+    }
+    if (data.containsKey('active_role')) {
+      context.handle(
+          _activeRoleMeta,
+          activeRole.isAcceptableOrUnknown(
+              data['active_role']!, _activeRoleMeta));
+    }
+    if (data.containsKey('last_auth_user_id')) {
+      context.handle(
+          _lastAuthUserIdMeta,
+          lastAuthUserId.isAcceptableOrUnknown(
+              data['last_auth_user_id']!, _lastAuthUserIdMeta));
+    }
+    if (data.containsKey('needs_cloud_claim')) {
+      context.handle(
+          _needsCloudClaimMeta,
+          needsCloudClaim.isAcceptableOrUnknown(
+              data['needs_cloud_claim']!, _needsCloudClaimMeta));
+    }
+    if (data.containsKey('pending_invite_token')) {
+      context.handle(
+          _pendingInviteTokenMeta,
+          pendingInviteToken.isAcceptableOrUnknown(
+              data['pending_invite_token']!, _pendingInviteTokenMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AppContextStateData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AppContextStateData(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      activeWorkspaceId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}active_workspace_id']),
+      activeProfileId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}active_profile_id']),
+      activeRole: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}active_role']),
+      lastAuthUserId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}last_auth_user_id']),
+      needsCloudClaim: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}needs_cloud_claim'])!,
+      pendingInviteToken: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}pending_invite_token']),
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}updated_at']),
+    );
+  }
+
+  @override
+  $AppContextStateTable createAlias(String alias) {
+    return $AppContextStateTable(attachedDatabase, alias);
+  }
+}
+
+class AppContextStateData extends DataClass
+    implements Insertable<AppContextStateData> {
+  final String id;
+  final String? activeWorkspaceId;
+  final String? activeProfileId;
+  final String? activeRole;
+  final String? lastAuthUserId;
+  final bool needsCloudClaim;
+  final String? pendingInviteToken;
+  final int? updatedAt;
+  const AppContextStateData(
+      {required this.id,
+      this.activeWorkspaceId,
+      this.activeProfileId,
+      this.activeRole,
+      this.lastAuthUserId,
+      required this.needsCloudClaim,
+      this.pendingInviteToken,
+      this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || activeWorkspaceId != null) {
+      map['active_workspace_id'] = Variable<String>(activeWorkspaceId);
+    }
+    if (!nullToAbsent || activeProfileId != null) {
+      map['active_profile_id'] = Variable<String>(activeProfileId);
+    }
+    if (!nullToAbsent || activeRole != null) {
+      map['active_role'] = Variable<String>(activeRole);
+    }
+    if (!nullToAbsent || lastAuthUserId != null) {
+      map['last_auth_user_id'] = Variable<String>(lastAuthUserId);
+    }
+    map['needs_cloud_claim'] = Variable<bool>(needsCloudClaim);
+    if (!nullToAbsent || pendingInviteToken != null) {
+      map['pending_invite_token'] = Variable<String>(pendingInviteToken);
+    }
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<int>(updatedAt);
+    }
+    return map;
+  }
+
+  AppContextStateCompanion toCompanion(bool nullToAbsent) {
+    return AppContextStateCompanion(
+      id: Value(id),
+      activeWorkspaceId: activeWorkspaceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(activeWorkspaceId),
+      activeProfileId: activeProfileId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(activeProfileId),
+      activeRole: activeRole == null && nullToAbsent
+          ? const Value.absent()
+          : Value(activeRole),
+      lastAuthUserId: lastAuthUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAuthUserId),
+      needsCloudClaim: Value(needsCloudClaim),
+      pendingInviteToken: pendingInviteToken == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pendingInviteToken),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
+    );
+  }
+
+  factory AppContextStateData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AppContextStateData(
+      id: serializer.fromJson<String>(json['id']),
+      activeWorkspaceId:
+          serializer.fromJson<String?>(json['activeWorkspaceId']),
+      activeProfileId: serializer.fromJson<String?>(json['activeProfileId']),
+      activeRole: serializer.fromJson<String?>(json['activeRole']),
+      lastAuthUserId: serializer.fromJson<String?>(json['lastAuthUserId']),
+      needsCloudClaim: serializer.fromJson<bool>(json['needsCloudClaim']),
+      pendingInviteToken:
+          serializer.fromJson<String?>(json['pendingInviteToken']),
+      updatedAt: serializer.fromJson<int?>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'activeWorkspaceId': serializer.toJson<String?>(activeWorkspaceId),
+      'activeProfileId': serializer.toJson<String?>(activeProfileId),
+      'activeRole': serializer.toJson<String?>(activeRole),
+      'lastAuthUserId': serializer.toJson<String?>(lastAuthUserId),
+      'needsCloudClaim': serializer.toJson<bool>(needsCloudClaim),
+      'pendingInviteToken': serializer.toJson<String?>(pendingInviteToken),
+      'updatedAt': serializer.toJson<int?>(updatedAt),
+    };
+  }
+
+  AppContextStateData copyWith(
+          {String? id,
+          Value<String?> activeWorkspaceId = const Value.absent(),
+          Value<String?> activeProfileId = const Value.absent(),
+          Value<String?> activeRole = const Value.absent(),
+          Value<String?> lastAuthUserId = const Value.absent(),
+          bool? needsCloudClaim,
+          Value<String?> pendingInviteToken = const Value.absent(),
+          Value<int?> updatedAt = const Value.absent()}) =>
+      AppContextStateData(
+        id: id ?? this.id,
+        activeWorkspaceId: activeWorkspaceId.present
+            ? activeWorkspaceId.value
+            : this.activeWorkspaceId,
+        activeProfileId: activeProfileId.present
+            ? activeProfileId.value
+            : this.activeProfileId,
+        activeRole: activeRole.present ? activeRole.value : this.activeRole,
+        lastAuthUserId:
+            lastAuthUserId.present ? lastAuthUserId.value : this.lastAuthUserId,
+        needsCloudClaim: needsCloudClaim ?? this.needsCloudClaim,
+        pendingInviteToken: pendingInviteToken.present
+            ? pendingInviteToken.value
+            : this.pendingInviteToken,
+        updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+      );
+  AppContextStateData copyWithCompanion(AppContextStateCompanion data) {
+    return AppContextStateData(
+      id: data.id.present ? data.id.value : this.id,
+      activeWorkspaceId: data.activeWorkspaceId.present
+          ? data.activeWorkspaceId.value
+          : this.activeWorkspaceId,
+      activeProfileId: data.activeProfileId.present
+          ? data.activeProfileId.value
+          : this.activeProfileId,
+      activeRole:
+          data.activeRole.present ? data.activeRole.value : this.activeRole,
+      lastAuthUserId: data.lastAuthUserId.present
+          ? data.lastAuthUserId.value
+          : this.lastAuthUserId,
+      needsCloudClaim: data.needsCloudClaim.present
+          ? data.needsCloudClaim.value
+          : this.needsCloudClaim,
+      pendingInviteToken: data.pendingInviteToken.present
+          ? data.pendingInviteToken.value
+          : this.pendingInviteToken,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppContextStateData(')
+          ..write('id: $id, ')
+          ..write('activeWorkspaceId: $activeWorkspaceId, ')
+          ..write('activeProfileId: $activeProfileId, ')
+          ..write('activeRole: $activeRole, ')
+          ..write('lastAuthUserId: $lastAuthUserId, ')
+          ..write('needsCloudClaim: $needsCloudClaim, ')
+          ..write('pendingInviteToken: $pendingInviteToken, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      activeWorkspaceId,
+      activeProfileId,
+      activeRole,
+      lastAuthUserId,
+      needsCloudClaim,
+      pendingInviteToken,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AppContextStateData &&
+          other.id == this.id &&
+          other.activeWorkspaceId == this.activeWorkspaceId &&
+          other.activeProfileId == this.activeProfileId &&
+          other.activeRole == this.activeRole &&
+          other.lastAuthUserId == this.lastAuthUserId &&
+          other.needsCloudClaim == this.needsCloudClaim &&
+          other.pendingInviteToken == this.pendingInviteToken &&
+          other.updatedAt == this.updatedAt);
+}
+
+class AppContextStateCompanion extends UpdateCompanion<AppContextStateData> {
+  final Value<String> id;
+  final Value<String?> activeWorkspaceId;
+  final Value<String?> activeProfileId;
+  final Value<String?> activeRole;
+  final Value<String?> lastAuthUserId;
+  final Value<bool> needsCloudClaim;
+  final Value<String?> pendingInviteToken;
+  final Value<int?> updatedAt;
+  final Value<int> rowid;
+  const AppContextStateCompanion({
+    this.id = const Value.absent(),
+    this.activeWorkspaceId = const Value.absent(),
+    this.activeProfileId = const Value.absent(),
+    this.activeRole = const Value.absent(),
+    this.lastAuthUserId = const Value.absent(),
+    this.needsCloudClaim = const Value.absent(),
+    this.pendingInviteToken = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AppContextStateCompanion.insert({
+    this.id = const Value.absent(),
+    this.activeWorkspaceId = const Value.absent(),
+    this.activeProfileId = const Value.absent(),
+    this.activeRole = const Value.absent(),
+    this.lastAuthUserId = const Value.absent(),
+    this.needsCloudClaim = const Value.absent(),
+    this.pendingInviteToken = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  static Insertable<AppContextStateData> custom({
+    Expression<String>? id,
+    Expression<String>? activeWorkspaceId,
+    Expression<String>? activeProfileId,
+    Expression<String>? activeRole,
+    Expression<String>? lastAuthUserId,
+    Expression<bool>? needsCloudClaim,
+    Expression<String>? pendingInviteToken,
+    Expression<int>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (activeWorkspaceId != null) 'active_workspace_id': activeWorkspaceId,
+      if (activeProfileId != null) 'active_profile_id': activeProfileId,
+      if (activeRole != null) 'active_role': activeRole,
+      if (lastAuthUserId != null) 'last_auth_user_id': lastAuthUserId,
+      if (needsCloudClaim != null) 'needs_cloud_claim': needsCloudClaim,
+      if (pendingInviteToken != null)
+        'pending_invite_token': pendingInviteToken,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AppContextStateCompanion copyWith(
+      {Value<String>? id,
+      Value<String?>? activeWorkspaceId,
+      Value<String?>? activeProfileId,
+      Value<String?>? activeRole,
+      Value<String?>? lastAuthUserId,
+      Value<bool>? needsCloudClaim,
+      Value<String?>? pendingInviteToken,
+      Value<int?>? updatedAt,
+      Value<int>? rowid}) {
+    return AppContextStateCompanion(
+      id: id ?? this.id,
+      activeWorkspaceId: activeWorkspaceId ?? this.activeWorkspaceId,
+      activeProfileId: activeProfileId ?? this.activeProfileId,
+      activeRole: activeRole ?? this.activeRole,
+      lastAuthUserId: lastAuthUserId ?? this.lastAuthUserId,
+      needsCloudClaim: needsCloudClaim ?? this.needsCloudClaim,
+      pendingInviteToken: pendingInviteToken ?? this.pendingInviteToken,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (activeWorkspaceId.present) {
+      map['active_workspace_id'] = Variable<String>(activeWorkspaceId.value);
+    }
+    if (activeProfileId.present) {
+      map['active_profile_id'] = Variable<String>(activeProfileId.value);
+    }
+    if (activeRole.present) {
+      map['active_role'] = Variable<String>(activeRole.value);
+    }
+    if (lastAuthUserId.present) {
+      map['last_auth_user_id'] = Variable<String>(lastAuthUserId.value);
+    }
+    if (needsCloudClaim.present) {
+      map['needs_cloud_claim'] = Variable<bool>(needsCloudClaim.value);
+    }
+    if (pendingInviteToken.present) {
+      map['pending_invite_token'] = Variable<String>(pendingInviteToken.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppContextStateCompanion(')
+          ..write('id: $id, ')
+          ..write('activeWorkspaceId: $activeWorkspaceId, ')
+          ..write('activeProfileId: $activeProfileId, ')
+          ..write('activeRole: $activeRole, ')
+          ..write('lastAuthUserId: $lastAuthUserId, ')
+          ..write('needsCloudClaim: $needsCloudClaim, ')
+          ..write('pendingInviteToken: $pendingInviteToken, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDb extends GeneratedDatabase {
   _$AppDb(QueryExecutor e) : super(e);
   $AppDbManager get managers => $AppDbManager(this);
@@ -11562,6 +14166,19 @@ abstract class _$AppDb extends GeneratedDatabase {
       $PlanSummarySnapshotsTable(this);
   late final $PlanImportAuditTable planImportAudit =
       $PlanImportAuditTable(this);
+  late final $CloudWorkspacesTable cloudWorkspaces =
+      $CloudWorkspacesTable(this);
+  late final $CloudWorkspaceMembershipsTable cloudWorkspaceMemberships =
+      $CloudWorkspaceMembershipsTable(this);
+  late final $CloudAthleteProfilesTable cloudAthleteProfiles =
+      $CloudAthleteProfilesTable(this);
+  late final $CloudAthleteProfileAssignmentsTable
+      cloudAthleteProfileAssignments =
+      $CloudAthleteProfileAssignmentsTable(this);
+  late final $CloudWorkspaceInvitesTable cloudWorkspaceInvites =
+      $CloudWorkspaceInvitesTable(this);
+  late final $AppContextStateTable appContextState =
+      $AppContextStateTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -11587,7 +14204,13 @@ abstract class _$AppDb extends GeneratedDatabase {
         planLongRangeWeeks,
         planLongRangeWeekPerformance,
         planSummarySnapshots,
-        planImportAudit
+        planImportAudit,
+        cloudWorkspaces,
+        cloudWorkspaceMemberships,
+        cloudAthleteProfiles,
+        cloudAthleteProfileAssignments,
+        cloudWorkspaceInvites,
+        appContextState
       ];
 }
 
@@ -16998,6 +19621,1334 @@ typedef $$PlanImportAuditTableProcessedTableManager = ProcessedTableManager<
     ),
     PlanImportAuditData,
     PrefetchHooks Function()>;
+typedef $$CloudWorkspacesTableCreateCompanionBuilder = CloudWorkspacesCompanion
+    Function({
+  required String id,
+  required String name,
+  required int createdAt,
+  required String createdByUserId,
+  Value<int> rowid,
+});
+typedef $$CloudWorkspacesTableUpdateCompanionBuilder = CloudWorkspacesCompanion
+    Function({
+  Value<String> id,
+  Value<String> name,
+  Value<int> createdAt,
+  Value<String> createdByUserId,
+  Value<int> rowid,
+});
+
+class $$CloudWorkspacesTableFilterComposer
+    extends Composer<_$AppDb, $CloudWorkspacesTable> {
+  $$CloudWorkspacesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId,
+      builder: (column) => ColumnFilters(column));
+}
+
+class $$CloudWorkspacesTableOrderingComposer
+    extends Composer<_$AppDb, $CloudWorkspacesTable> {
+  $$CloudWorkspacesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$CloudWorkspacesTableAnnotationComposer
+    extends Composer<_$AppDb, $CloudWorkspacesTable> {
+  $$CloudWorkspacesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId, builder: (column) => column);
+}
+
+class $$CloudWorkspacesTableTableManager extends RootTableManager<
+    _$AppDb,
+    $CloudWorkspacesTable,
+    CloudWorkspace,
+    $$CloudWorkspacesTableFilterComposer,
+    $$CloudWorkspacesTableOrderingComposer,
+    $$CloudWorkspacesTableAnnotationComposer,
+    $$CloudWorkspacesTableCreateCompanionBuilder,
+    $$CloudWorkspacesTableUpdateCompanionBuilder,
+    (
+      CloudWorkspace,
+      BaseReferences<_$AppDb, $CloudWorkspacesTable, CloudWorkspace>
+    ),
+    CloudWorkspace,
+    PrefetchHooks Function()> {
+  $$CloudWorkspacesTableTableManager(_$AppDb db, $CloudWorkspacesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CloudWorkspacesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CloudWorkspacesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CloudWorkspacesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<String> createdByUserId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CloudWorkspacesCompanion(
+            id: id,
+            name: name,
+            createdAt: createdAt,
+            createdByUserId: createdByUserId,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String name,
+            required int createdAt,
+            required String createdByUserId,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CloudWorkspacesCompanion.insert(
+            id: id,
+            name: name,
+            createdAt: createdAt,
+            createdByUserId: createdByUserId,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$CloudWorkspacesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDb,
+    $CloudWorkspacesTable,
+    CloudWorkspace,
+    $$CloudWorkspacesTableFilterComposer,
+    $$CloudWorkspacesTableOrderingComposer,
+    $$CloudWorkspacesTableAnnotationComposer,
+    $$CloudWorkspacesTableCreateCompanionBuilder,
+    $$CloudWorkspacesTableUpdateCompanionBuilder,
+    (
+      CloudWorkspace,
+      BaseReferences<_$AppDb, $CloudWorkspacesTable, CloudWorkspace>
+    ),
+    CloudWorkspace,
+    PrefetchHooks Function()>;
+typedef $$CloudWorkspaceMembershipsTableCreateCompanionBuilder
+    = CloudWorkspaceMembershipsCompanion Function({
+  required String id,
+  required String workspaceId,
+  required String userId,
+  required String userEmail,
+  Value<String?> displayName,
+  required String role,
+  required String status,
+  required int createdAt,
+  required String createdByUserId,
+  Value<int> rowid,
+});
+typedef $$CloudWorkspaceMembershipsTableUpdateCompanionBuilder
+    = CloudWorkspaceMembershipsCompanion Function({
+  Value<String> id,
+  Value<String> workspaceId,
+  Value<String> userId,
+  Value<String> userEmail,
+  Value<String?> displayName,
+  Value<String> role,
+  Value<String> status,
+  Value<int> createdAt,
+  Value<String> createdByUserId,
+  Value<int> rowid,
+});
+
+class $$CloudWorkspaceMembershipsTableFilterComposer
+    extends Composer<_$AppDb, $CloudWorkspaceMembershipsTable> {
+  $$CloudWorkspaceMembershipsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get userEmail => $composableBuilder(
+      column: $table.userEmail, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get displayName => $composableBuilder(
+      column: $table.displayName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get role => $composableBuilder(
+      column: $table.role, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId,
+      builder: (column) => ColumnFilters(column));
+}
+
+class $$CloudWorkspaceMembershipsTableOrderingComposer
+    extends Composer<_$AppDb, $CloudWorkspaceMembershipsTable> {
+  $$CloudWorkspaceMembershipsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get userEmail => $composableBuilder(
+      column: $table.userEmail, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get displayName => $composableBuilder(
+      column: $table.displayName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get role => $composableBuilder(
+      column: $table.role, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$CloudWorkspaceMembershipsTableAnnotationComposer
+    extends Composer<_$AppDb, $CloudWorkspaceMembershipsTable> {
+  $$CloudWorkspaceMembershipsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => column);
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get userEmail =>
+      $composableBuilder(column: $table.userEmail, builder: (column) => column);
+
+  GeneratedColumn<String> get displayName => $composableBuilder(
+      column: $table.displayName, builder: (column) => column);
+
+  GeneratedColumn<String> get role =>
+      $composableBuilder(column: $table.role, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId, builder: (column) => column);
+}
+
+class $$CloudWorkspaceMembershipsTableTableManager extends RootTableManager<
+    _$AppDb,
+    $CloudWorkspaceMembershipsTable,
+    CloudWorkspaceMembership,
+    $$CloudWorkspaceMembershipsTableFilterComposer,
+    $$CloudWorkspaceMembershipsTableOrderingComposer,
+    $$CloudWorkspaceMembershipsTableAnnotationComposer,
+    $$CloudWorkspaceMembershipsTableCreateCompanionBuilder,
+    $$CloudWorkspaceMembershipsTableUpdateCompanionBuilder,
+    (
+      CloudWorkspaceMembership,
+      BaseReferences<_$AppDb, $CloudWorkspaceMembershipsTable,
+          CloudWorkspaceMembership>
+    ),
+    CloudWorkspaceMembership,
+    PrefetchHooks Function()> {
+  $$CloudWorkspaceMembershipsTableTableManager(
+      _$AppDb db, $CloudWorkspaceMembershipsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CloudWorkspaceMembershipsTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CloudWorkspaceMembershipsTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CloudWorkspaceMembershipsTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> workspaceId = const Value.absent(),
+            Value<String> userId = const Value.absent(),
+            Value<String> userEmail = const Value.absent(),
+            Value<String?> displayName = const Value.absent(),
+            Value<String> role = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<String> createdByUserId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CloudWorkspaceMembershipsCompanion(
+            id: id,
+            workspaceId: workspaceId,
+            userId: userId,
+            userEmail: userEmail,
+            displayName: displayName,
+            role: role,
+            status: status,
+            createdAt: createdAt,
+            createdByUserId: createdByUserId,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String workspaceId,
+            required String userId,
+            required String userEmail,
+            Value<String?> displayName = const Value.absent(),
+            required String role,
+            required String status,
+            required int createdAt,
+            required String createdByUserId,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CloudWorkspaceMembershipsCompanion.insert(
+            id: id,
+            workspaceId: workspaceId,
+            userId: userId,
+            userEmail: userEmail,
+            displayName: displayName,
+            role: role,
+            status: status,
+            createdAt: createdAt,
+            createdByUserId: createdByUserId,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$CloudWorkspaceMembershipsTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDb,
+        $CloudWorkspaceMembershipsTable,
+        CloudWorkspaceMembership,
+        $$CloudWorkspaceMembershipsTableFilterComposer,
+        $$CloudWorkspaceMembershipsTableOrderingComposer,
+        $$CloudWorkspaceMembershipsTableAnnotationComposer,
+        $$CloudWorkspaceMembershipsTableCreateCompanionBuilder,
+        $$CloudWorkspaceMembershipsTableUpdateCompanionBuilder,
+        (
+          CloudWorkspaceMembership,
+          BaseReferences<_$AppDb, $CloudWorkspaceMembershipsTable,
+              CloudWorkspaceMembership>
+        ),
+        CloudWorkspaceMembership,
+        PrefetchHooks Function()>;
+typedef $$CloudAthleteProfilesTableCreateCompanionBuilder
+    = CloudAthleteProfilesCompanion Function({
+  required String id,
+  required String workspaceId,
+  required String name,
+  Value<String?> dateOfBirth,
+  Value<String?> notes,
+  required int createdAt,
+  required String createdByUserId,
+  Value<int> rowid,
+});
+typedef $$CloudAthleteProfilesTableUpdateCompanionBuilder
+    = CloudAthleteProfilesCompanion Function({
+  Value<String> id,
+  Value<String> workspaceId,
+  Value<String> name,
+  Value<String?> dateOfBirth,
+  Value<String?> notes,
+  Value<int> createdAt,
+  Value<String> createdByUserId,
+  Value<int> rowid,
+});
+
+class $$CloudAthleteProfilesTableFilterComposer
+    extends Composer<_$AppDb, $CloudAthleteProfilesTable> {
+  $$CloudAthleteProfilesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get dateOfBirth => $composableBuilder(
+      column: $table.dateOfBirth, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notes => $composableBuilder(
+      column: $table.notes, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId,
+      builder: (column) => ColumnFilters(column));
+}
+
+class $$CloudAthleteProfilesTableOrderingComposer
+    extends Composer<_$AppDb, $CloudAthleteProfilesTable> {
+  $$CloudAthleteProfilesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get dateOfBirth => $composableBuilder(
+      column: $table.dateOfBirth, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+      column: $table.notes, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$CloudAthleteProfilesTableAnnotationComposer
+    extends Composer<_$AppDb, $CloudAthleteProfilesTable> {
+  $$CloudAthleteProfilesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get dateOfBirth => $composableBuilder(
+      column: $table.dateOfBirth, builder: (column) => column);
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId, builder: (column) => column);
+}
+
+class $$CloudAthleteProfilesTableTableManager extends RootTableManager<
+    _$AppDb,
+    $CloudAthleteProfilesTable,
+    CloudAthleteProfile,
+    $$CloudAthleteProfilesTableFilterComposer,
+    $$CloudAthleteProfilesTableOrderingComposer,
+    $$CloudAthleteProfilesTableAnnotationComposer,
+    $$CloudAthleteProfilesTableCreateCompanionBuilder,
+    $$CloudAthleteProfilesTableUpdateCompanionBuilder,
+    (
+      CloudAthleteProfile,
+      BaseReferences<_$AppDb, $CloudAthleteProfilesTable, CloudAthleteProfile>
+    ),
+    CloudAthleteProfile,
+    PrefetchHooks Function()> {
+  $$CloudAthleteProfilesTableTableManager(
+      _$AppDb db, $CloudAthleteProfilesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CloudAthleteProfilesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CloudAthleteProfilesTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CloudAthleteProfilesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> workspaceId = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<String?> dateOfBirth = const Value.absent(),
+            Value<String?> notes = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<String> createdByUserId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CloudAthleteProfilesCompanion(
+            id: id,
+            workspaceId: workspaceId,
+            name: name,
+            dateOfBirth: dateOfBirth,
+            notes: notes,
+            createdAt: createdAt,
+            createdByUserId: createdByUserId,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String workspaceId,
+            required String name,
+            Value<String?> dateOfBirth = const Value.absent(),
+            Value<String?> notes = const Value.absent(),
+            required int createdAt,
+            required String createdByUserId,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CloudAthleteProfilesCompanion.insert(
+            id: id,
+            workspaceId: workspaceId,
+            name: name,
+            dateOfBirth: dateOfBirth,
+            notes: notes,
+            createdAt: createdAt,
+            createdByUserId: createdByUserId,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$CloudAthleteProfilesTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDb,
+        $CloudAthleteProfilesTable,
+        CloudAthleteProfile,
+        $$CloudAthleteProfilesTableFilterComposer,
+        $$CloudAthleteProfilesTableOrderingComposer,
+        $$CloudAthleteProfilesTableAnnotationComposer,
+        $$CloudAthleteProfilesTableCreateCompanionBuilder,
+        $$CloudAthleteProfilesTableUpdateCompanionBuilder,
+        (
+          CloudAthleteProfile,
+          BaseReferences<_$AppDb, $CloudAthleteProfilesTable,
+              CloudAthleteProfile>
+        ),
+        CloudAthleteProfile,
+        PrefetchHooks Function()>;
+typedef $$CloudAthleteProfileAssignmentsTableCreateCompanionBuilder
+    = CloudAthleteProfileAssignmentsCompanion Function({
+  required String id,
+  required String workspaceId,
+  required String athleteProfileId,
+  required String userId,
+  Value<bool> canView,
+  Value<bool> canEdit,
+  required int createdAt,
+  required String createdByUserId,
+  Value<int> rowid,
+});
+typedef $$CloudAthleteProfileAssignmentsTableUpdateCompanionBuilder
+    = CloudAthleteProfileAssignmentsCompanion Function({
+  Value<String> id,
+  Value<String> workspaceId,
+  Value<String> athleteProfileId,
+  Value<String> userId,
+  Value<bool> canView,
+  Value<bool> canEdit,
+  Value<int> createdAt,
+  Value<String> createdByUserId,
+  Value<int> rowid,
+});
+
+class $$CloudAthleteProfileAssignmentsTableFilterComposer
+    extends Composer<_$AppDb, $CloudAthleteProfileAssignmentsTable> {
+  $$CloudAthleteProfileAssignmentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get athleteProfileId => $composableBuilder(
+      column: $table.athleteProfileId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get canView => $composableBuilder(
+      column: $table.canView, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get canEdit => $composableBuilder(
+      column: $table.canEdit, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId,
+      builder: (column) => ColumnFilters(column));
+}
+
+class $$CloudAthleteProfileAssignmentsTableOrderingComposer
+    extends Composer<_$AppDb, $CloudAthleteProfileAssignmentsTable> {
+  $$CloudAthleteProfileAssignmentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get athleteProfileId => $composableBuilder(
+      column: $table.athleteProfileId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get canView => $composableBuilder(
+      column: $table.canView, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get canEdit => $composableBuilder(
+      column: $table.canEdit, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$CloudAthleteProfileAssignmentsTableAnnotationComposer
+    extends Composer<_$AppDb, $CloudAthleteProfileAssignmentsTable> {
+  $$CloudAthleteProfileAssignmentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => column);
+
+  GeneratedColumn<String> get athleteProfileId => $composableBuilder(
+      column: $table.athleteProfileId, builder: (column) => column);
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<bool> get canView =>
+      $composableBuilder(column: $table.canView, builder: (column) => column);
+
+  GeneratedColumn<bool> get canEdit =>
+      $composableBuilder(column: $table.canEdit, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId, builder: (column) => column);
+}
+
+class $$CloudAthleteProfileAssignmentsTableTableManager
+    extends RootTableManager<
+        _$AppDb,
+        $CloudAthleteProfileAssignmentsTable,
+        CloudAthleteProfileAssignment,
+        $$CloudAthleteProfileAssignmentsTableFilterComposer,
+        $$CloudAthleteProfileAssignmentsTableOrderingComposer,
+        $$CloudAthleteProfileAssignmentsTableAnnotationComposer,
+        $$CloudAthleteProfileAssignmentsTableCreateCompanionBuilder,
+        $$CloudAthleteProfileAssignmentsTableUpdateCompanionBuilder,
+        (
+          CloudAthleteProfileAssignment,
+          BaseReferences<_$AppDb, $CloudAthleteProfileAssignmentsTable,
+              CloudAthleteProfileAssignment>
+        ),
+        CloudAthleteProfileAssignment,
+        PrefetchHooks Function()> {
+  $$CloudAthleteProfileAssignmentsTableTableManager(
+      _$AppDb db, $CloudAthleteProfileAssignmentsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CloudAthleteProfileAssignmentsTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CloudAthleteProfileAssignmentsTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CloudAthleteProfileAssignmentsTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> workspaceId = const Value.absent(),
+            Value<String> athleteProfileId = const Value.absent(),
+            Value<String> userId = const Value.absent(),
+            Value<bool> canView = const Value.absent(),
+            Value<bool> canEdit = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<String> createdByUserId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CloudAthleteProfileAssignmentsCompanion(
+            id: id,
+            workspaceId: workspaceId,
+            athleteProfileId: athleteProfileId,
+            userId: userId,
+            canView: canView,
+            canEdit: canEdit,
+            createdAt: createdAt,
+            createdByUserId: createdByUserId,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String workspaceId,
+            required String athleteProfileId,
+            required String userId,
+            Value<bool> canView = const Value.absent(),
+            Value<bool> canEdit = const Value.absent(),
+            required int createdAt,
+            required String createdByUserId,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CloudAthleteProfileAssignmentsCompanion.insert(
+            id: id,
+            workspaceId: workspaceId,
+            athleteProfileId: athleteProfileId,
+            userId: userId,
+            canView: canView,
+            canEdit: canEdit,
+            createdAt: createdAt,
+            createdByUserId: createdByUserId,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$CloudAthleteProfileAssignmentsTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDb,
+        $CloudAthleteProfileAssignmentsTable,
+        CloudAthleteProfileAssignment,
+        $$CloudAthleteProfileAssignmentsTableFilterComposer,
+        $$CloudAthleteProfileAssignmentsTableOrderingComposer,
+        $$CloudAthleteProfileAssignmentsTableAnnotationComposer,
+        $$CloudAthleteProfileAssignmentsTableCreateCompanionBuilder,
+        $$CloudAthleteProfileAssignmentsTableUpdateCompanionBuilder,
+        (
+          CloudAthleteProfileAssignment,
+          BaseReferences<_$AppDb, $CloudAthleteProfileAssignmentsTable,
+              CloudAthleteProfileAssignment>
+        ),
+        CloudAthleteProfileAssignment,
+        PrefetchHooks Function()>;
+typedef $$CloudWorkspaceInvitesTableCreateCompanionBuilder
+    = CloudWorkspaceInvitesCompanion Function({
+  required String id,
+  required String workspaceId,
+  required String email,
+  required String role,
+  Value<String?> displayName,
+  required int expiresAt,
+  required String status,
+  required String assignedProfileIdsJson,
+  required int createdAt,
+  required String createdByUserId,
+  Value<int> rowid,
+});
+typedef $$CloudWorkspaceInvitesTableUpdateCompanionBuilder
+    = CloudWorkspaceInvitesCompanion Function({
+  Value<String> id,
+  Value<String> workspaceId,
+  Value<String> email,
+  Value<String> role,
+  Value<String?> displayName,
+  Value<int> expiresAt,
+  Value<String> status,
+  Value<String> assignedProfileIdsJson,
+  Value<int> createdAt,
+  Value<String> createdByUserId,
+  Value<int> rowid,
+});
+
+class $$CloudWorkspaceInvitesTableFilterComposer
+    extends Composer<_$AppDb, $CloudWorkspaceInvitesTable> {
+  $$CloudWorkspaceInvitesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get email => $composableBuilder(
+      column: $table.email, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get role => $composableBuilder(
+      column: $table.role, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get displayName => $composableBuilder(
+      column: $table.displayName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get expiresAt => $composableBuilder(
+      column: $table.expiresAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get assignedProfileIdsJson => $composableBuilder(
+      column: $table.assignedProfileIdsJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId,
+      builder: (column) => ColumnFilters(column));
+}
+
+class $$CloudWorkspaceInvitesTableOrderingComposer
+    extends Composer<_$AppDb, $CloudWorkspaceInvitesTable> {
+  $$CloudWorkspaceInvitesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get email => $composableBuilder(
+      column: $table.email, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get role => $composableBuilder(
+      column: $table.role, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get displayName => $composableBuilder(
+      column: $table.displayName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get expiresAt => $composableBuilder(
+      column: $table.expiresAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get assignedProfileIdsJson => $composableBuilder(
+      column: $table.assignedProfileIdsJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$CloudWorkspaceInvitesTableAnnotationComposer
+    extends Composer<_$AppDb, $CloudWorkspaceInvitesTable> {
+  $$CloudWorkspaceInvitesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => column);
+
+  GeneratedColumn<String> get email =>
+      $composableBuilder(column: $table.email, builder: (column) => column);
+
+  GeneratedColumn<String> get role =>
+      $composableBuilder(column: $table.role, builder: (column) => column);
+
+  GeneratedColumn<String> get displayName => $composableBuilder(
+      column: $table.displayName, builder: (column) => column);
+
+  GeneratedColumn<int> get expiresAt =>
+      $composableBuilder(column: $table.expiresAt, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get assignedProfileIdsJson => $composableBuilder(
+      column: $table.assignedProfileIdsJson, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get createdByUserId => $composableBuilder(
+      column: $table.createdByUserId, builder: (column) => column);
+}
+
+class $$CloudWorkspaceInvitesTableTableManager extends RootTableManager<
+    _$AppDb,
+    $CloudWorkspaceInvitesTable,
+    CloudWorkspaceInvite,
+    $$CloudWorkspaceInvitesTableFilterComposer,
+    $$CloudWorkspaceInvitesTableOrderingComposer,
+    $$CloudWorkspaceInvitesTableAnnotationComposer,
+    $$CloudWorkspaceInvitesTableCreateCompanionBuilder,
+    $$CloudWorkspaceInvitesTableUpdateCompanionBuilder,
+    (
+      CloudWorkspaceInvite,
+      BaseReferences<_$AppDb, $CloudWorkspaceInvitesTable, CloudWorkspaceInvite>
+    ),
+    CloudWorkspaceInvite,
+    PrefetchHooks Function()> {
+  $$CloudWorkspaceInvitesTableTableManager(
+      _$AppDb db, $CloudWorkspaceInvitesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CloudWorkspaceInvitesTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CloudWorkspaceInvitesTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CloudWorkspaceInvitesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> workspaceId = const Value.absent(),
+            Value<String> email = const Value.absent(),
+            Value<String> role = const Value.absent(),
+            Value<String?> displayName = const Value.absent(),
+            Value<int> expiresAt = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String> assignedProfileIdsJson = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<String> createdByUserId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CloudWorkspaceInvitesCompanion(
+            id: id,
+            workspaceId: workspaceId,
+            email: email,
+            role: role,
+            displayName: displayName,
+            expiresAt: expiresAt,
+            status: status,
+            assignedProfileIdsJson: assignedProfileIdsJson,
+            createdAt: createdAt,
+            createdByUserId: createdByUserId,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String workspaceId,
+            required String email,
+            required String role,
+            Value<String?> displayName = const Value.absent(),
+            required int expiresAt,
+            required String status,
+            required String assignedProfileIdsJson,
+            required int createdAt,
+            required String createdByUserId,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CloudWorkspaceInvitesCompanion.insert(
+            id: id,
+            workspaceId: workspaceId,
+            email: email,
+            role: role,
+            displayName: displayName,
+            expiresAt: expiresAt,
+            status: status,
+            assignedProfileIdsJson: assignedProfileIdsJson,
+            createdAt: createdAt,
+            createdByUserId: createdByUserId,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$CloudWorkspaceInvitesTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDb,
+        $CloudWorkspaceInvitesTable,
+        CloudWorkspaceInvite,
+        $$CloudWorkspaceInvitesTableFilterComposer,
+        $$CloudWorkspaceInvitesTableOrderingComposer,
+        $$CloudWorkspaceInvitesTableAnnotationComposer,
+        $$CloudWorkspaceInvitesTableCreateCompanionBuilder,
+        $$CloudWorkspaceInvitesTableUpdateCompanionBuilder,
+        (
+          CloudWorkspaceInvite,
+          BaseReferences<_$AppDb, $CloudWorkspaceInvitesTable,
+              CloudWorkspaceInvite>
+        ),
+        CloudWorkspaceInvite,
+        PrefetchHooks Function()>;
+typedef $$AppContextStateTableCreateCompanionBuilder = AppContextStateCompanion
+    Function({
+  Value<String> id,
+  Value<String?> activeWorkspaceId,
+  Value<String?> activeProfileId,
+  Value<String?> activeRole,
+  Value<String?> lastAuthUserId,
+  Value<bool> needsCloudClaim,
+  Value<String?> pendingInviteToken,
+  Value<int?> updatedAt,
+  Value<int> rowid,
+});
+typedef $$AppContextStateTableUpdateCompanionBuilder = AppContextStateCompanion
+    Function({
+  Value<String> id,
+  Value<String?> activeWorkspaceId,
+  Value<String?> activeProfileId,
+  Value<String?> activeRole,
+  Value<String?> lastAuthUserId,
+  Value<bool> needsCloudClaim,
+  Value<String?> pendingInviteToken,
+  Value<int?> updatedAt,
+  Value<int> rowid,
+});
+
+class $$AppContextStateTableFilterComposer
+    extends Composer<_$AppDb, $AppContextStateTable> {
+  $$AppContextStateTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get activeWorkspaceId => $composableBuilder(
+      column: $table.activeWorkspaceId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get activeProfileId => $composableBuilder(
+      column: $table.activeProfileId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get activeRole => $composableBuilder(
+      column: $table.activeRole, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get lastAuthUserId => $composableBuilder(
+      column: $table.lastAuthUserId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get needsCloudClaim => $composableBuilder(
+      column: $table.needsCloudClaim,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get pendingInviteToken => $composableBuilder(
+      column: $table.pendingInviteToken,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$AppContextStateTableOrderingComposer
+    extends Composer<_$AppDb, $AppContextStateTable> {
+  $$AppContextStateTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get activeWorkspaceId => $composableBuilder(
+      column: $table.activeWorkspaceId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get activeProfileId => $composableBuilder(
+      column: $table.activeProfileId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get activeRole => $composableBuilder(
+      column: $table.activeRole, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get lastAuthUserId => $composableBuilder(
+      column: $table.lastAuthUserId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get needsCloudClaim => $composableBuilder(
+      column: $table.needsCloudClaim,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get pendingInviteToken => $composableBuilder(
+      column: $table.pendingInviteToken,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$AppContextStateTableAnnotationComposer
+    extends Composer<_$AppDb, $AppContextStateTable> {
+  $$AppContextStateTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get activeWorkspaceId => $composableBuilder(
+      column: $table.activeWorkspaceId, builder: (column) => column);
+
+  GeneratedColumn<String> get activeProfileId => $composableBuilder(
+      column: $table.activeProfileId, builder: (column) => column);
+
+  GeneratedColumn<String> get activeRole => $composableBuilder(
+      column: $table.activeRole, builder: (column) => column);
+
+  GeneratedColumn<String> get lastAuthUserId => $composableBuilder(
+      column: $table.lastAuthUserId, builder: (column) => column);
+
+  GeneratedColumn<bool> get needsCloudClaim => $composableBuilder(
+      column: $table.needsCloudClaim, builder: (column) => column);
+
+  GeneratedColumn<String> get pendingInviteToken => $composableBuilder(
+      column: $table.pendingInviteToken, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$AppContextStateTableTableManager extends RootTableManager<
+    _$AppDb,
+    $AppContextStateTable,
+    AppContextStateData,
+    $$AppContextStateTableFilterComposer,
+    $$AppContextStateTableOrderingComposer,
+    $$AppContextStateTableAnnotationComposer,
+    $$AppContextStateTableCreateCompanionBuilder,
+    $$AppContextStateTableUpdateCompanionBuilder,
+    (
+      AppContextStateData,
+      BaseReferences<_$AppDb, $AppContextStateTable, AppContextStateData>
+    ),
+    AppContextStateData,
+    PrefetchHooks Function()> {
+  $$AppContextStateTableTableManager(_$AppDb db, $AppContextStateTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AppContextStateTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AppContextStateTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AppContextStateTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String?> activeWorkspaceId = const Value.absent(),
+            Value<String?> activeProfileId = const Value.absent(),
+            Value<String?> activeRole = const Value.absent(),
+            Value<String?> lastAuthUserId = const Value.absent(),
+            Value<bool> needsCloudClaim = const Value.absent(),
+            Value<String?> pendingInviteToken = const Value.absent(),
+            Value<int?> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AppContextStateCompanion(
+            id: id,
+            activeWorkspaceId: activeWorkspaceId,
+            activeProfileId: activeProfileId,
+            activeRole: activeRole,
+            lastAuthUserId: lastAuthUserId,
+            needsCloudClaim: needsCloudClaim,
+            pendingInviteToken: pendingInviteToken,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String?> activeWorkspaceId = const Value.absent(),
+            Value<String?> activeProfileId = const Value.absent(),
+            Value<String?> activeRole = const Value.absent(),
+            Value<String?> lastAuthUserId = const Value.absent(),
+            Value<bool> needsCloudClaim = const Value.absent(),
+            Value<String?> pendingInviteToken = const Value.absent(),
+            Value<int?> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AppContextStateCompanion.insert(
+            id: id,
+            activeWorkspaceId: activeWorkspaceId,
+            activeProfileId: activeProfileId,
+            activeRole: activeRole,
+            lastAuthUserId: lastAuthUserId,
+            needsCloudClaim: needsCloudClaim,
+            pendingInviteToken: pendingInviteToken,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$AppContextStateTableProcessedTableManager = ProcessedTableManager<
+    _$AppDb,
+    $AppContextStateTable,
+    AppContextStateData,
+    $$AppContextStateTableFilterComposer,
+    $$AppContextStateTableOrderingComposer,
+    $$AppContextStateTableAnnotationComposer,
+    $$AppContextStateTableCreateCompanionBuilder,
+    $$AppContextStateTableUpdateCompanionBuilder,
+    (
+      AppContextStateData,
+      BaseReferences<_$AppDb, $AppContextStateTable, AppContextStateData>
+    ),
+    AppContextStateData,
+    PrefetchHooks Function()>;
 
 class $AppDbManager {
   final _$AppDb _db;
@@ -17050,4 +21001,19 @@ class $AppDbManager {
       $$PlanSummarySnapshotsTableTableManager(_db, _db.planSummarySnapshots);
   $$PlanImportAuditTableTableManager get planImportAudit =>
       $$PlanImportAuditTableTableManager(_db, _db.planImportAudit);
+  $$CloudWorkspacesTableTableManager get cloudWorkspaces =>
+      $$CloudWorkspacesTableTableManager(_db, _db.cloudWorkspaces);
+  $$CloudWorkspaceMembershipsTableTableManager get cloudWorkspaceMemberships =>
+      $$CloudWorkspaceMembershipsTableTableManager(
+          _db, _db.cloudWorkspaceMemberships);
+  $$CloudAthleteProfilesTableTableManager get cloudAthleteProfiles =>
+      $$CloudAthleteProfilesTableTableManager(_db, _db.cloudAthleteProfiles);
+  $$CloudAthleteProfileAssignmentsTableTableManager
+      get cloudAthleteProfileAssignments =>
+          $$CloudAthleteProfileAssignmentsTableTableManager(
+              _db, _db.cloudAthleteProfileAssignments);
+  $$CloudWorkspaceInvitesTableTableManager get cloudWorkspaceInvites =>
+      $$CloudWorkspaceInvitesTableTableManager(_db, _db.cloudWorkspaceInvites);
+  $$AppContextStateTableTableManager get appContextState =>
+      $$AppContextStateTableTableManager(_db, _db.appContextState);
 }

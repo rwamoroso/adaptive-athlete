@@ -17,7 +17,13 @@ import '../features/training/garmin_csv_import_service.dart';
 import '../features/training/strength_history_import_service.dart';
 import 'tables/actual_strength_sets.dart';
 import 'tables/app_prompt_templates.dart';
+import 'tables/app_context_state.dart';
 import 'tables/ai_audit.dart';
+import 'tables/cloud_athlete_profile_assignments.dart';
+import 'tables/cloud_athlete_profiles.dart';
+import 'tables/cloud_workspace_invites.dart';
+import 'tables/cloud_workspace_memberships.dart';
+import 'tables/cloud_workspaces.dart';
 import 'tables/exercise_substitutions.dart';
 import 'tables/plan_cycles.dart';
 import 'tables/plan_days.dart';
@@ -590,6 +596,12 @@ class ManualRunSegmentInput {
     PlanLongRangeWeekPerformance,
     PlanSummarySnapshots,
     PlanImportAudit,
+    CloudWorkspaces,
+    CloudWorkspaceMemberships,
+    CloudAthleteProfiles,
+    CloudAthleteProfileAssignments,
+    CloudWorkspaceInvites,
+    AppContextState,
   ],
 )
 class AppDb extends _$AppDb {
@@ -600,7 +612,7 @@ class AppDb extends _$AppDb {
   final Uuid _uuid = const Uuid();
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -676,6 +688,14 @@ class AppDb extends _$AppDb {
               planLongRangeWeekPerformance.strengthProgressionEvaluation,
             );
           }
+          if (from < 10) {
+            await m.createTable(cloudWorkspaces);
+            await m.createTable(cloudWorkspaceMemberships);
+            await m.createTable(cloudAthleteProfiles);
+            await m.createTable(cloudAthleteProfileAssignments);
+            await m.createTable(cloudWorkspaceInvites);
+            await m.createTable(appContextState);
+          }
         },
         beforeOpen: (details) async {
           await _ensurePlanDaysSessionTypeColumn();
@@ -687,6 +707,12 @@ class AppDb extends _$AppDb {
           await _ensurePlanLongRangeWeeksColumns();
           await _ensurePlanLongRangeWeekPerformanceTable();
           await _ensurePlanLongRangeWeekPerformanceColumns();
+          await _ensureCloudWorkspacesTable();
+          await _ensureCloudWorkspaceMembershipsTable();
+          await _ensureCloudAthleteProfilesTable();
+          await _ensureCloudAthleteProfileAssignmentsTable();
+          await _ensureCloudWorkspaceInvitesTable();
+          await _ensureAppContextStateTable();
         },
       );
 
@@ -1060,6 +1086,132 @@ class AppDb extends _$AppDb {
         'ADD COLUMN strength_progression_evaluation TEXT',
       );
     }
+  }
+
+  Future<void> _ensureCloudWorkspacesTable() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cloud_workspaces' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists != null) {
+      return;
+    }
+    await customStatement('''
+      CREATE TABLE cloud_workspaces (
+        id TEXT NOT NULL PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        created_by_user_id TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _ensureCloudWorkspaceMembershipsTable() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cloud_workspace_memberships' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists != null) {
+      return;
+    }
+    await customStatement('''
+      CREATE TABLE cloud_workspace_memberships (
+        id TEXT NOT NULL PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        user_email TEXT NOT NULL,
+        display_name TEXT NULL,
+        role TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        created_by_user_id TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _ensureCloudAthleteProfilesTable() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cloud_athlete_profiles' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists != null) {
+      return;
+    }
+    await customStatement('''
+      CREATE TABLE cloud_athlete_profiles (
+        id TEXT NOT NULL PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        date_of_birth TEXT NULL,
+        notes TEXT NULL,
+        created_at INTEGER NOT NULL,
+        created_by_user_id TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _ensureCloudAthleteProfileAssignmentsTable() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cloud_athlete_profile_assignments' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists != null) {
+      return;
+    }
+    await customStatement('''
+      CREATE TABLE cloud_athlete_profile_assignments (
+        id TEXT NOT NULL PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        athlete_profile_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        can_view INTEGER NOT NULL DEFAULT 1,
+        can_edit INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        created_by_user_id TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _ensureCloudWorkspaceInvitesTable() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cloud_workspace_invites' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists != null) {
+      return;
+    }
+    await customStatement('''
+      CREATE TABLE cloud_workspace_invites (
+        id TEXT NOT NULL PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        email TEXT NOT NULL,
+        role TEXT NOT NULL,
+        display_name TEXT NULL,
+        expires_at INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        assigned_profile_ids_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        created_by_user_id TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _ensureAppContextStateTable() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_context_state' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists != null) {
+      return;
+    }
+    await customStatement('''
+      CREATE TABLE app_context_state (
+        id TEXT NOT NULL PRIMARY KEY DEFAULT 'default',
+        active_workspace_id TEXT NULL,
+        active_profile_id TEXT NULL,
+        active_role TEXT NULL,
+        last_auth_user_id TEXT NULL,
+        needs_cloud_claim INTEGER NOT NULL DEFAULT 0,
+        pending_invite_token TEXT NULL,
+        updated_at INTEGER NULL
+      )
+    ''');
+    await customStatement(
+        "INSERT OR IGNORE INTO app_context_state(id) VALUES ('default')");
   }
 
   String _startOfWeekYmd(String ymd) {
@@ -6965,6 +7117,120 @@ class AppDb extends _$AppDb {
       }
     }
     return rows;
+  }
+
+  Future<void> clearLocalDomainData() async {
+    await transaction(() async {
+      await delete(runSegments).go();
+      await delete(runSessionDetails).go();
+      await delete(runSessions).go();
+      await delete(runOverrideAudit).go();
+      await delete(actualStrengthSets).go();
+      await delete(prescribedStrengthSets).go();
+      await delete(exerciseSubstitutions).go();
+      await delete(planPrescribedStrengthSets).go();
+      await delete(planPrescribedRuns).go();
+      await delete(planExerciseAlternatives).go();
+      await delete(planSummarySnapshots).go();
+      await delete(planImportAudit).go();
+      await delete(planDays).go();
+      await delete(planCycles).go();
+      await delete(ruleTriggers).go();
+      await delete(aiAudit).go();
+      await delete(sleepNights).go();
+      await delete(workoutDays).go();
+      await delete(planLongRangeWeekPerformance).go();
+      await delete(planLongRangeWeeks).go();
+    });
+  }
+
+  Future<void> replaceWorkspaceMetadata({
+    required Iterable<CloudWorkspace> workspaces,
+    required Iterable<CloudWorkspaceMembership> memberships,
+    required Iterable<CloudAthleteProfile> profiles,
+    required Iterable<CloudAthleteProfileAssignment> assignments,
+    required Iterable<CloudWorkspaceInvite> invites,
+  }) async {
+    await transaction(() async {
+      await delete(cloudWorkspaceInvites).go();
+      await delete(cloudAthleteProfileAssignments).go();
+      await delete(cloudAthleteProfiles).go();
+      await delete(cloudWorkspaceMemberships).go();
+      await delete(cloudWorkspaces).go();
+
+      await batch((batch) {
+        batch.insertAll(cloudWorkspaces, workspaces);
+        batch.insertAll(cloudWorkspaceMemberships, memberships);
+        batch.insertAll(cloudAthleteProfiles, profiles);
+        batch.insertAll(cloudAthleteProfileAssignments, assignments);
+        batch.insertAll(cloudWorkspaceInvites, invites);
+      });
+    });
+  }
+
+  Future<AppContextStateData?> getAppContextStateRow() {
+    return (select(appContextState)..where((t) => t.id.equals('default')))
+        .getSingleOrNull();
+  }
+
+  Future<void> upsertAppContextState({
+    String? activeWorkspaceId,
+    String? activeProfileId,
+    String? activeRole,
+    String? lastAuthUserId,
+    bool? needsCloudClaim,
+    String? pendingInviteToken,
+  }) async {
+    final current = await getAppContextStateRow();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await into(appContextState).insertOnConflictUpdate(
+      AppContextStateCompanion(
+        id: const Value('default'),
+        activeWorkspaceId:
+            Value(activeWorkspaceId ?? current?.activeWorkspaceId),
+        activeProfileId: Value(activeProfileId ?? current?.activeProfileId),
+        activeRole: Value(activeRole ?? current?.activeRole),
+        lastAuthUserId: Value(lastAuthUserId ?? current?.lastAuthUserId),
+        needsCloudClaim:
+            Value(needsCloudClaim ?? current?.needsCloudClaim ?? false),
+        pendingInviteToken:
+            Value(pendingInviteToken ?? current?.pendingInviteToken),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
+  Future<void> clearAppContextState() async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await into(appContextState).insertOnConflictUpdate(
+      AppContextStateCompanion(
+        id: const Value('default'),
+        activeWorkspaceId: const Value(null),
+        activeProfileId: const Value(null),
+        activeRole: const Value(null),
+        lastAuthUserId: const Value(null),
+        needsCloudClaim: const Value(false),
+        pendingInviteToken: const Value(null),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
+  Future<void> setPendingInviteToken(String? token) async {
+    final current = await getAppContextStateRow();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await into(appContextState).insertOnConflictUpdate(
+      AppContextStateCompanion(
+        id: const Value('default'),
+        activeWorkspaceId: Value(current?.activeWorkspaceId),
+        activeProfileId: Value(current?.activeProfileId),
+        activeRole: Value(current?.activeRole),
+        lastAuthUserId: Value(current?.lastAuthUserId),
+        needsCloudClaim: Value(current?.needsCloudClaim ?? false),
+        pendingInviteToken: Value(token),
+        updatedAt: Value(now),
+      ),
+    );
   }
 
   List<List<dynamic>> _generateRunSummaryRows(
