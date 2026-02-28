@@ -146,9 +146,44 @@ class _WorkoutDayDetailScreenState
 
   String _setKey(String exercise, int setIndex) => '$exercise::$setIndex';
 
+  bool _needsSetIndexNormalization(List<PlannedStrengthSetView> sets) {
+    final seen = <int>{};
+    for (final set in sets) {
+      if (set.setIndex <= 0) {
+        return true;
+      }
+      if (!seen.add(set.setIndex)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  List<PlannedStrengthSetView> _effectivePrescribedSets(
+      List<PlannedStrengthSetView> rawSets) {
+    final sorted = [...rawSets]
+      ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
+    if (!_needsSetIndexNormalization(sorted)) {
+      return sorted;
+    }
+    var next = 1;
+    return sorted
+        .map(
+          (s) => PlannedStrengthSetView(
+            setIndex: next++,
+            weight: s.weight,
+            reps: s.reps,
+            rir: s.rir,
+            unit: s.unit,
+          ),
+        )
+        .toList();
+  }
+
   void _ensureEditableRows(WorkoutDayDetail detail) {
     for (final group in detail.groups) {
-      for (final set in group.prescribed) {
+      final sets = _effectivePrescribedSets(group.prescribed);
+      for (final set in sets) {
         final key = _setKey(group.exercise, set.setIndex);
         _editedByKey.putIfAbsent(key, () {
           final unit = set.unit.toLowerCase();
@@ -217,10 +252,14 @@ class _WorkoutDayDetailScreenState
     required bool advanceCard,
   }) async {
     final key = _setKey(prescribedExerciseCanonical, prescribed.setIndex);
-    final edited = _editedByKey[key];
-    if (edited == null) {
-      return;
-    }
+    final fallbackWeight = prescribed.weight ?? 0.0;
+    final edited = _editedByKey[key] ??
+        _EditableSetState(
+          weight: fallbackWeight,
+          reps: prescribed.reps,
+          rir: prescribed.rir,
+        );
+    _editedByKey[key] = edited;
 
     setState(() => _savingKeys.add(key));
     try {
@@ -574,8 +613,10 @@ class _WorkoutDayDetailScreenState
                       ...detail.groups.asMap().entries.map((entry) {
                         final index = entry.key;
                         final group = entry.value;
-                        final prescribedSets = [...group.prescribed]
-                          ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
+                        final prescribedSets =
+                            _effectivePrescribedSets(group.prescribed);
+                        final normalizedSetIndexes =
+                            _needsSetIndexNormalization(group.prescribed);
                         final actualSets = [...group.actual]
                           ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
                         final skippingExercise =
@@ -700,6 +741,15 @@ class _WorkoutDayDetailScreenState
                                 ),
                               ],
                               const SizedBox(height: 8),
+                              if (normalizedSetIndexes) ...[
+                                const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Set indexes were normalized for this exercise.',
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                              ],
                               if (prescribedSets.isEmpty)
                                 const Align(
                                   alignment: Alignment.centerLeft,

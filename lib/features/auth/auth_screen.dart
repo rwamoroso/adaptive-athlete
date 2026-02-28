@@ -195,6 +195,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     onPressed: _loading ? null : _sendPasswordReset,
                     child: const Text('Forgot password?'),
                   ),
+                  TextButton(
+                    onPressed: _loading
+                        ? null
+                        : () {
+                            context.go('/join');
+                          },
+                    child: const Text('Have an invite link?'),
+                  ),
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: () {

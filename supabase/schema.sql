@@ -1011,8 +1011,10 @@ begin
     and lower(email) = v_email
     and status = 'pending';
 
-  v_token := encode(gen_random_bytes(24), 'hex');
-  v_token_hash := encode(digest(v_token, 'sha256'), 'hex');
+  -- Avoid extension-schema dependency for pgcrypto helpers.
+  -- Two UUIDs provide a high-entropy invite token, md5 is used for lookup hash.
+  v_token := replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '');
+  v_token_hash := md5(v_token);
   v_expires_at := now() + interval '7 days';
 
   insert into public.workspace_invites(
@@ -1076,7 +1078,7 @@ begin
     raise exception 'Invite token is required';
   end if;
 
-  v_token_hash := encode(digest(p_token, 'sha256'), 'hex');
+  v_token_hash := md5(p_token);
 
   select *
   into v_invite

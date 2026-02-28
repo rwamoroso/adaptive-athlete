@@ -1,8 +1,11 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:drift/drift.dart' show OrderingMode, OrderingTerm;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/utils/app_providers.dart';
 import '../../core/utils/date_utils.dart';
@@ -38,6 +41,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   String? _selectedStrengthPath;
   String? _selectedStandardWorkbookPath;
   DateTime _standardSplitStartDate = DateTime.now();
+  bool get _usesShareSheetForExport =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   Future<void> _pickExportDirectory() async {
     try {
@@ -56,6 +61,9 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   }
 
   Future<String?> _ensureExportDirectory() async {
+    if (_usesShareSheetForExport) {
+      return null;
+    }
     if (_exportDirectoryPath != null && _exportDirectoryPath!.isNotEmpty) {
       return _exportDirectoryPath;
     }
@@ -63,26 +71,63 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     return _exportDirectoryPath;
   }
 
+  Future<void> _shareExportedFiles({
+    required List<String> paths,
+    required String title,
+  }) async {
+    if (!_usesShareSheetForExport || paths.isEmpty) {
+      return;
+    }
+    final files = paths
+        .where((path) => path.trim().isNotEmpty)
+        .map((path) => XFile(path))
+        .toList();
+    if (files.isEmpty) {
+      return;
+    }
+    final box = context.findRenderObject() as RenderBox?;
+    await Share.shareXFiles(
+      files,
+      subject: title,
+      sharePositionOrigin: box == null
+          ? null
+          : box.localToGlobal(Offset.zero) & box.size,
+    );
+  }
+
   Future<void> _export() async {
     final dir = await _ensureExportDirectory();
-    if (dir == null) {
+    if (!_usesShareSheetForExport && dir == null) {
       _showMessage('Export cancelled. No folder selected.');
       return;
     }
     setState(() => _exporting = true);
-    final db = ref.read(appDbProvider);
-    final paths = await db.exportCsvs(outputDirectoryPath: dir);
-    if (mounted) {
-      setState(() {
-        _paths = paths;
-        _exporting = false;
-      });
+    try {
+      final db = ref.read(appDbProvider);
+      final paths = await db.exportCsvs(outputDirectoryPath: dir);
+      if (!mounted) {
+        return;
+      }
+      setState(() => _paths = paths);
+      if (_usesShareSheetForExport && paths.isNotEmpty) {
+        await _shareExportedFiles(
+          paths: paths.values.toList(),
+          title: 'Adaptive Athlete CSV Export',
+        );
+        _showMessage('CSV export ready. Use Save to Files in the share sheet.');
+      }
+    } catch (e) {
+      _showMessage('CSV export failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _exporting = false);
+      }
     }
   }
 
   Future<void> _exportStandardWorkbook() async {
     final dir = await _ensureExportDirectory();
-    if (dir == null) {
+    if (!_usesShareSheetForExport && dir == null) {
       _showMessage('Export cancelled. No folder selected.');
       return;
     }
@@ -95,6 +140,19 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         return;
       }
       setState(() => _weeklyWorkbookPath = path);
+      if (_usesShareSheetForExport) {
+        await _shareExportedFiles(
+          paths: [path],
+          title: 'Adaptive Athlete Standard Workbook',
+        );
+        if (!mounted) {
+          return;
+        }
+        _showMessage(
+          'Workbook exported. Use Save to Files in the share sheet.',
+        );
+        return;
+      }
       _showMessage('Standard workbook exported.');
     } catch (e) {
       _showMessage('Standard workbook export failed: $e');
@@ -683,7 +741,10 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        _exportDirectoryPath ?? 'No export folder selected',
+                        _usesShareSheetForExport
+                            ? 'iPhone: export opens iOS share sheet (Save to Files).'
+                            : (_exportDirectoryPath ??
+                                'No export folder selected'),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -692,9 +753,13 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                     SizedBox(
                       width: 136,
                       child: PrimaryPillButton(
-                        text: 'Choose Folder',
+                        text: _usesShareSheetForExport
+                            ? 'Share Mode'
+                            : 'Choose Folder',
                         variant: PillButtonVariant.outlined,
-                        onPressed: _pickExportDirectory,
+                        onPressed: _usesShareSheetForExport
+                            ? null
+                            : _pickExportDirectory,
                       ),
                     ),
                   ],

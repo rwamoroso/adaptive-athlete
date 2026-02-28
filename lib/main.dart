@@ -64,10 +64,53 @@ final routerProvider = Provider<GoRouter>((ref) {
       : GoRouterRefreshStream(Stream<void>.empty());
   ref.onDispose(refresh.dispose);
 
+  String? normalizeDeepLink(Uri uri) {
+    final scheme = uri.scheme.toLowerCase();
+    final host = uri.host.toLowerCase();
+    final path = uri.path.toLowerCase();
+
+    final isJoinDeepLink = (scheme == 'adaptiveathlete') &&
+        (host == 'join' || path == '/join' || path == '/join/');
+    if (isJoinDeepLink) {
+      final token = uri.queryParameters['token'];
+      if (token == null || token.trim().isEmpty) {
+        return '/join';
+      }
+      return '/join?token=${Uri.encodeQueryComponent(token)}';
+    }
+
+    final isResetPasswordDeepLink = (scheme == 'adaptiveathlete') &&
+        (host == 'reset-password' ||
+            path == '/reset-password' ||
+            path == '/reset-password/');
+    if (isResetPasswordDeepLink) {
+      return '/reset-password';
+    }
+
+    final needsJoinCanonicalization = path == '/join/';
+    if (needsJoinCanonicalization) {
+      final token = uri.queryParameters['token'];
+      if (token == null || token.trim().isEmpty) {
+        return '/join';
+      }
+      return '/join?token=${Uri.encodeQueryComponent(token)}';
+    }
+
+    final needsResetCanonicalization = path == '/reset-password/';
+    if (needsResetCanonicalization) {
+      return '/reset-password';
+    }
+
+    return null;
+  }
+
   return GoRouter(
     initialLocation: '/home',
     refreshListenable: refresh,
     routes: [
+      GoRoute(
+          path: '/',
+          builder: (context, state) => const Scaffold(body: SizedBox.shrink())),
       GoRoute(
           path: '/auth',
           builder: (context, state) => const Scaffold(body: AuthScreen())),
@@ -86,6 +129,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/home', builder: (context, state) => const HomeShell()),
     ],
     redirect: (context, state) {
+      final normalizedDeepLink = normalizeDeepLink(state.uri);
+      if (normalizedDeepLink != null) {
+        final currentWithQuery = state.uri.hasQuery
+            ? '${state.matchedLocation}?${state.uri.query}'
+            : state.matchedLocation;
+        if (normalizedDeepLink != currentWithQuery) {
+          return normalizedDeepLink;
+        }
+      }
+
       if (settings.localOnly) {
         return state.matchedLocation == '/auth' ? '/home' : null;
       }
@@ -93,9 +146,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       final session = bootstrap.initialized
           ? Supabase.instance.client.auth.currentSession
           : null;
+      final onRoot = state.matchedLocation == '/';
       final onAuth = state.matchedLocation == '/auth';
       final onResetPassword = state.matchedLocation == '/reset-password';
       final onJoin = state.matchedLocation == '/join';
+
+      if (onRoot) {
+        return session == null ? '/auth' : '/home';
+      }
 
       if (session == null && !onAuth && !onResetPassword && !onJoin) {
         return '/auth';

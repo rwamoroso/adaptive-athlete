@@ -19,8 +19,11 @@ class JoinWorkspaceScreen extends ConsumerStatefulWidget {
 }
 
 class _JoinWorkspaceScreenState extends ConsumerState<JoinWorkspaceScreen> {
+  final _tokenController = TextEditingController();
   String _message = 'Preparing invite...';
   bool _busy = true;
+  bool _needsAccountSwitch = false;
+  bool _tokenInputMode = false;
 
   @override
   void initState() {
@@ -30,39 +33,41 @@ class _JoinWorkspaceScreenState extends ConsumerState<JoinWorkspaceScreen> {
     });
   }
 
-  Future<void> _processInvite() async {
-    final bootstrap = ref.read(supabaseBootstrapProvider);
-    if (!bootstrap.initialized) {
-      setState(() {
-        _busy = false;
-        _message = 'Supabase is not initialized. Configure cloud first.';
-      });
-      return;
+  @override
+  void dispose() {
+    _tokenController.dispose();
+    super.dispose();
+  }
+
+  String? _extractToken(String? raw) {
+    final trimmed = raw?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return null;
     }
 
-    final workspaceService = ref.read(workspaceServiceProvider);
-    final inviteToken = widget.inviteToken?.trim().isNotEmpty == true
-        ? widget.inviteToken!
-        : null;
-    final token = inviteToken ?? await workspaceService.getPendingInviteToken();
-    if (token == null || token.trim().isEmpty) {
-      setState(() {
-        _busy = false;
-        _message = 'Missing invite token.';
-      });
-      return;
+    // Accept either the full deep link or the bare token.
+    if (trimmed.contains('://') || trimmed.startsWith('/')) {
+      final uri = Uri.tryParse(trimmed);
+      final tokenFromQuery = uri?.queryParameters['token']?.trim();
+      if (tokenFromQuery != null && tokenFromQuery.isNotEmpty) {
+        return tokenFromQuery;
+      }
     }
+    return trimmed;
+  }
 
-    if (Supabase.instance.client.auth.currentSession == null) {
-      await workspaceService.setPendingInviteToken(token);
-      setState(() {
-        _busy = false;
-        _message = 'Sign in to accept this workspace invite.';
-      });
-      return;
-    }
+  bool _isEmailMismatchError(Object error) {
+    final lower = error.toString().toLowerCase();
+    return lower.contains('invite email does not match signed-in user email');
+  }
 
+  Future<void> _acceptToken(String token) async {
     try {
+      setState(() {
+        _busy = true;
+        _message = 'Accepting invite...';
+        _needsAccountSwitch = false;
+      });
       await ref.read(inviteServiceProvider).acceptInvite(token);
       ref.invalidate(activeWorkspaceContextProvider);
       if (!mounted) {
@@ -77,11 +82,77 @@ class _JoinWorkspaceScreenState extends ConsumerState<JoinWorkspaceScreen> {
       if (!mounted) {
         return;
       }
+      final emailMismatch = _isEmailMismatchError(e);
       setState(() {
         _busy = false;
-        _message = 'Failed to accept invite: $e';
+        _needsAccountSwitch = emailMismatch;
+        _message = emailMismatch
+            ? 'This invite belongs to a different email. Sign out and sign in with the invited account.'
+            : 'Failed to accept invite: $e';
       });
     }
+  }
+
+  Future<void> _submitManuallyEnteredToken() async {
+    final token = _extractToken(_tokenController.text);
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _message = 'Enter a valid invite link or token.';
+      });
+      return;
+    }
+    await ref.read(workspaceServiceProvider).setPendingInviteToken(token);
+    if (!mounted) {
+      return;
+    }
+    await _processInvite();
+  }
+
+  Future<void> _signOutAndSwitchAccount() async {
+    final token = _extractToken(_tokenController.text);
+    if (token != null && token.isNotEmpty) {
+      await ref.read(workspaceServiceProvider).setPendingInviteToken(token);
+    }
+    await Supabase.instance.client.auth.signOut();
+    if (!mounted) {
+      return;
+    }
+    context.go('/auth');
+  }
+
+  Future<void> _processInvite() async {
+    final bootstrap = ref.read(supabaseBootstrapProvider);
+    if (!bootstrap.initialized) {
+      setState(() {
+        _busy = false;
+        _message = 'Supabase is not initialized. Configure cloud first.';
+      });
+      return;
+    }
+
+    final workspaceService = ref.read(workspaceServiceProvider);
+    final inviteToken = _extractToken(widget.inviteToken);
+    final token = inviteToken ?? await workspaceService.getPendingInviteToken();
+    if (token == null || token.trim().isEmpty) {
+      setState(() {
+        _busy = false;
+        _tokenInputMode = true;
+        _message = 'Paste an invite link or token to continue.';
+      });
+      return;
+    }
+    _tokenController.text = token;
+
+    if (Supabase.instance.client.auth.currentSession == null) {
+      await workspaceService.setPendingInviteToken(token);
+      setState(() {
+        _busy = false;
+        _message = 'Sign in to accept this workspace invite.';
+      });
+      return;
+    }
+
+    await _acceptToken(token);
   }
 
   @override
@@ -108,6 +179,27 @@ class _JoinWorkspaceScreenState extends ConsumerState<JoinWorkspaceScreen> {
                     const SizedBox(height: 12),
                   ],
                   Text(_message),
+                  if (_tokenInputMode) ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _tokenController,
+                      decoration: const InputDecoration(
+                        labelText: 'Invite link or token',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: _busy ? null : _submitManuallyEnteredToken,
+                      child: const Text('Continue'),
+                    ),
+                  ],
+                  if (_needsAccountSwitch) ...[
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: _busy ? null : _signOutAndSwitchAccount,
+                      child: const Text('Sign out and switch account'),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   FilledButton(
                     onPressed: _busy

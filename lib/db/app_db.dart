@@ -5718,13 +5718,19 @@ class AppDb extends _$AppDb {
     required List<ActualStrengthSet> actualRows,
     required List<ExerciseSubstitution> substitutions,
   }) {
+    String normalizedKey(String exercise) =>
+        ExerciseNormalizer.normalize(exercise);
+
     final byExercise = <String, ExerciseSetGroup>{};
     final substitutionByPrescribed = <String, ExerciseSubstitutionView>{
       for (final row in substitutions)
-        row.prescribedExerciseCanonical: ExerciseSubstitutionView(
+        normalizedKey(row.prescribedExerciseCanonical):
+            ExerciseSubstitutionView(
           id: row.id,
-          prescribedExerciseCanonical: row.prescribedExerciseCanonical,
-          substituteExerciseCanonical: row.substituteExerciseCanonical,
+          prescribedExerciseCanonical:
+              normalizedKey(row.prescribedExerciseCanonical),
+          substituteExerciseCanonical:
+              normalizedKey(row.substituteExerciseCanonical),
           reasonCode: row.reasonCode,
           reasonNotes: row.reasonNotes,
           matchScore: row.matchScore,
@@ -5736,17 +5742,18 @@ class AppDb extends _$AppDb {
 
     if (plannedRows.isNotEmpty) {
       for (final row in plannedRows) {
-        final current = byExercise[row.exerciseCanonical] ??
+        final exerciseKey = normalizedKey(row.exerciseCanonical);
+        final current = byExercise[exerciseKey] ??
             ExerciseSetGroup(
-              exercise: row.exerciseCanonical,
-              displayExercise: substitutionByPrescribed[row.exerciseCanonical]
+              exercise: exerciseKey,
+              displayExercise: substitutionByPrescribed[exerciseKey]
                       ?.substituteExerciseCanonical ??
-                  row.exerciseCanonical,
+                  exerciseKey,
               prescribed: const <PlannedStrengthSetView>[],
-              substitution: substitutionByPrescribed[row.exerciseCanonical],
+              substitution: substitutionByPrescribed[exerciseKey],
               actual: const <ActualStrengthSet>[],
             );
-        byExercise[row.exerciseCanonical] = ExerciseSetGroup(
+        byExercise[exerciseKey] = ExerciseSetGroup(
           exercise: current.exercise,
           displayExercise: current.displayExercise,
           prescribed: [
@@ -5765,17 +5772,18 @@ class AppDb extends _$AppDb {
       }
     } else {
       for (final row in legacyRows) {
-        final current = byExercise[row.exerciseCanonical] ??
+        final exerciseKey = normalizedKey(row.exerciseCanonical);
+        final current = byExercise[exerciseKey] ??
             ExerciseSetGroup(
-              exercise: row.exerciseCanonical,
-              displayExercise: substitutionByPrescribed[row.exerciseCanonical]
+              exercise: exerciseKey,
+              displayExercise: substitutionByPrescribed[exerciseKey]
                       ?.substituteExerciseCanonical ??
-                  row.exerciseCanonical,
+                  exerciseKey,
               prescribed: const <PlannedStrengthSetView>[],
-              substitution: substitutionByPrescribed[row.exerciseCanonical],
+              substitution: substitutionByPrescribed[exerciseKey],
               actual: const <ActualStrengthSet>[],
             );
-        byExercise[row.exerciseCanonical] = ExerciseSetGroup(
+        byExercise[exerciseKey] = ExerciseSetGroup(
           exercise: current.exercise,
           displayExercise: current.displayExercise,
           prescribed: [
@@ -5795,7 +5803,8 @@ class AppDb extends _$AppDb {
     }
 
     for (final row in actualRows) {
-      final key = row.prescribedExerciseCanonical ?? row.exerciseCanonical;
+      final key = normalizedKey(
+          row.prescribedExerciseCanonical ?? row.exerciseCanonical);
       final current = byExercise[key] ??
           ExerciseSetGroup(
             exercise: key,
@@ -6597,11 +6606,24 @@ class AppDb extends _$AppDb {
 
   Future<Directory> _resolveExportDirectory(String? outputDirectoryPath) async {
     if (outputDirectoryPath != null && outputDirectoryPath.trim().isNotEmpty) {
-      final dir = Directory(outputDirectoryPath);
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
+      final dir = Directory(outputDirectoryPath.trim());
+      try {
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+        final probe = File(
+          p.join(
+            dir.path,
+            '.adaptive_athlete_write_probe_${DateTime.now().microsecondsSinceEpoch}',
+          ),
+        );
+        await probe.writeAsString('ok', flush: true);
+        await probe.delete();
+        return dir;
+      } catch (_) {
+        // iOS can return security-scoped paths that are not writable directly.
+        // Fall back to app documents so export still succeeds.
       }
-      return dir;
     }
 
     final docs = await getApplicationDocumentsDirectory();
