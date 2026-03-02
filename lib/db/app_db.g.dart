@@ -14129,6 +14129,1404 @@ class AppContextStateCompanion extends UpdateCompanion<AppContextStateData> {
   }
 }
 
+class $AthletePlanningProfilesTable extends AthletePlanningProfiles
+    with TableInfo<$AthletePlanningProfilesTable, AthletePlanningProfile> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AthletePlanningProfilesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _workspaceIdMeta =
+      const VerificationMeta('workspaceId');
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+      'workspace_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _athleteProfileIdMeta =
+      const VerificationMeta('athleteProfileId');
+  @override
+  late final GeneratedColumn<String> athleteProfileId = GeneratedColumn<String>(
+      'athlete_profile_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _primaryGoalMeta =
+      const VerificationMeta('primaryGoal');
+  @override
+  late final GeneratedColumn<String> primaryGoal = GeneratedColumn<String>(
+      'primary_goal', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _goalTargetJsonMeta =
+      const VerificationMeta('goalTargetJson');
+  @override
+  late final GeneratedColumn<String> goalTargetJson = GeneratedColumn<String>(
+      'goal_target_json', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _experienceLevelMeta =
+      const VerificationMeta('experienceLevel');
+  @override
+  late final GeneratedColumn<String> experienceLevel = GeneratedColumn<String>(
+      'experience_level', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _preferredSplitMeta =
+      const VerificationMeta('preferredSplit');
+  @override
+  late final GeneratedColumn<String> preferredSplit = GeneratedColumn<String>(
+      'preferred_split', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _daysPerWeekMeta =
+      const VerificationMeta('daysPerWeek');
+  @override
+  late final GeneratedColumn<int> daysPerWeek = GeneratedColumn<int>(
+      'days_per_week', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _availableEquipmentJsonMeta =
+      const VerificationMeta('availableEquipmentJson');
+  @override
+  late final GeneratedColumn<String> availableEquipmentJson =
+      GeneratedColumn<String>('available_equipment_json', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _contraindicationsJsonMeta =
+      const VerificationMeta('contraindicationsJson');
+  @override
+  late final GeneratedColumn<String> contraindicationsJson =
+      GeneratedColumn<String>('contraindications_json', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _scheduleConstraintsJsonMeta =
+      const VerificationMeta('scheduleConstraintsJson');
+  @override
+  late final GeneratedColumn<String> scheduleConstraintsJson =
+      GeneratedColumn<String>('schedule_constraints_json', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        workspaceId,
+        athleteProfileId,
+        primaryGoal,
+        goalTargetJson,
+        experienceLevel,
+        preferredSplit,
+        daysPerWeek,
+        availableEquipmentJson,
+        contraindicationsJson,
+        scheduleConstraintsJson,
+        createdAt,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'athlete_planning_profiles';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<AthletePlanningProfile> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+          _workspaceIdMeta,
+          workspaceId.isAcceptableOrUnknown(
+              data['workspace_id']!, _workspaceIdMeta));
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('athlete_profile_id')) {
+      context.handle(
+          _athleteProfileIdMeta,
+          athleteProfileId.isAcceptableOrUnknown(
+              data['athlete_profile_id']!, _athleteProfileIdMeta));
+    } else if (isInserting) {
+      context.missing(_athleteProfileIdMeta);
+    }
+    if (data.containsKey('primary_goal')) {
+      context.handle(
+          _primaryGoalMeta,
+          primaryGoal.isAcceptableOrUnknown(
+              data['primary_goal']!, _primaryGoalMeta));
+    } else if (isInserting) {
+      context.missing(_primaryGoalMeta);
+    }
+    if (data.containsKey('goal_target_json')) {
+      context.handle(
+          _goalTargetJsonMeta,
+          goalTargetJson.isAcceptableOrUnknown(
+              data['goal_target_json']!, _goalTargetJsonMeta));
+    } else if (isInserting) {
+      context.missing(_goalTargetJsonMeta);
+    }
+    if (data.containsKey('experience_level')) {
+      context.handle(
+          _experienceLevelMeta,
+          experienceLevel.isAcceptableOrUnknown(
+              data['experience_level']!, _experienceLevelMeta));
+    } else if (isInserting) {
+      context.missing(_experienceLevelMeta);
+    }
+    if (data.containsKey('preferred_split')) {
+      context.handle(
+          _preferredSplitMeta,
+          preferredSplit.isAcceptableOrUnknown(
+              data['preferred_split']!, _preferredSplitMeta));
+    } else if (isInserting) {
+      context.missing(_preferredSplitMeta);
+    }
+    if (data.containsKey('days_per_week')) {
+      context.handle(
+          _daysPerWeekMeta,
+          daysPerWeek.isAcceptableOrUnknown(
+              data['days_per_week']!, _daysPerWeekMeta));
+    } else if (isInserting) {
+      context.missing(_daysPerWeekMeta);
+    }
+    if (data.containsKey('available_equipment_json')) {
+      context.handle(
+          _availableEquipmentJsonMeta,
+          availableEquipmentJson.isAcceptableOrUnknown(
+              data['available_equipment_json']!, _availableEquipmentJsonMeta));
+    } else if (isInserting) {
+      context.missing(_availableEquipmentJsonMeta);
+    }
+    if (data.containsKey('contraindications_json')) {
+      context.handle(
+          _contraindicationsJsonMeta,
+          contraindicationsJson.isAcceptableOrUnknown(
+              data['contraindications_json']!, _contraindicationsJsonMeta));
+    } else if (isInserting) {
+      context.missing(_contraindicationsJsonMeta);
+    }
+    if (data.containsKey('schedule_constraints_json')) {
+      context.handle(
+          _scheduleConstraintsJsonMeta,
+          scheduleConstraintsJson.isAcceptableOrUnknown(
+              data['schedule_constraints_json']!,
+              _scheduleConstraintsJsonMeta));
+    } else if (isInserting) {
+      context.missing(_scheduleConstraintsJsonMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AthletePlanningProfile map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AthletePlanningProfile(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      workspaceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}workspace_id'])!,
+      athleteProfileId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}athlete_profile_id'])!,
+      primaryGoal: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}primary_goal'])!,
+      goalTargetJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}goal_target_json'])!,
+      experienceLevel: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}experience_level'])!,
+      preferredSplit: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}preferred_split'])!,
+      daysPerWeek: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}days_per_week'])!,
+      availableEquipmentJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}available_equipment_json'])!,
+      contraindicationsJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}contraindications_json'])!,
+      scheduleConstraintsJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}schedule_constraints_json'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $AthletePlanningProfilesTable createAlias(String alias) {
+    return $AthletePlanningProfilesTable(attachedDatabase, alias);
+  }
+}
+
+class AthletePlanningProfile extends DataClass
+    implements Insertable<AthletePlanningProfile> {
+  final String id;
+  final String workspaceId;
+  final String athleteProfileId;
+  final String primaryGoal;
+  final String goalTargetJson;
+  final String experienceLevel;
+  final String preferredSplit;
+  final int daysPerWeek;
+  final String availableEquipmentJson;
+  final String contraindicationsJson;
+  final String scheduleConstraintsJson;
+  final int createdAt;
+  final int updatedAt;
+  const AthletePlanningProfile(
+      {required this.id,
+      required this.workspaceId,
+      required this.athleteProfileId,
+      required this.primaryGoal,
+      required this.goalTargetJson,
+      required this.experienceLevel,
+      required this.preferredSplit,
+      required this.daysPerWeek,
+      required this.availableEquipmentJson,
+      required this.contraindicationsJson,
+      required this.scheduleConstraintsJson,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['athlete_profile_id'] = Variable<String>(athleteProfileId);
+    map['primary_goal'] = Variable<String>(primaryGoal);
+    map['goal_target_json'] = Variable<String>(goalTargetJson);
+    map['experience_level'] = Variable<String>(experienceLevel);
+    map['preferred_split'] = Variable<String>(preferredSplit);
+    map['days_per_week'] = Variable<int>(daysPerWeek);
+    map['available_equipment_json'] = Variable<String>(availableEquipmentJson);
+    map['contraindications_json'] = Variable<String>(contraindicationsJson);
+    map['schedule_constraints_json'] =
+        Variable<String>(scheduleConstraintsJson);
+    map['created_at'] = Variable<int>(createdAt);
+    map['updated_at'] = Variable<int>(updatedAt);
+    return map;
+  }
+
+  AthletePlanningProfilesCompanion toCompanion(bool nullToAbsent) {
+    return AthletePlanningProfilesCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      athleteProfileId: Value(athleteProfileId),
+      primaryGoal: Value(primaryGoal),
+      goalTargetJson: Value(goalTargetJson),
+      experienceLevel: Value(experienceLevel),
+      preferredSplit: Value(preferredSplit),
+      daysPerWeek: Value(daysPerWeek),
+      availableEquipmentJson: Value(availableEquipmentJson),
+      contraindicationsJson: Value(contraindicationsJson),
+      scheduleConstraintsJson: Value(scheduleConstraintsJson),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory AthletePlanningProfile.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AthletePlanningProfile(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      athleteProfileId: serializer.fromJson<String>(json['athleteProfileId']),
+      primaryGoal: serializer.fromJson<String>(json['primaryGoal']),
+      goalTargetJson: serializer.fromJson<String>(json['goalTargetJson']),
+      experienceLevel: serializer.fromJson<String>(json['experienceLevel']),
+      preferredSplit: serializer.fromJson<String>(json['preferredSplit']),
+      daysPerWeek: serializer.fromJson<int>(json['daysPerWeek']),
+      availableEquipmentJson:
+          serializer.fromJson<String>(json['availableEquipmentJson']),
+      contraindicationsJson:
+          serializer.fromJson<String>(json['contraindicationsJson']),
+      scheduleConstraintsJson:
+          serializer.fromJson<String>(json['scheduleConstraintsJson']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'athleteProfileId': serializer.toJson<String>(athleteProfileId),
+      'primaryGoal': serializer.toJson<String>(primaryGoal),
+      'goalTargetJson': serializer.toJson<String>(goalTargetJson),
+      'experienceLevel': serializer.toJson<String>(experienceLevel),
+      'preferredSplit': serializer.toJson<String>(preferredSplit),
+      'daysPerWeek': serializer.toJson<int>(daysPerWeek),
+      'availableEquipmentJson':
+          serializer.toJson<String>(availableEquipmentJson),
+      'contraindicationsJson': serializer.toJson<String>(contraindicationsJson),
+      'scheduleConstraintsJson':
+          serializer.toJson<String>(scheduleConstraintsJson),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+    };
+  }
+
+  AthletePlanningProfile copyWith(
+          {String? id,
+          String? workspaceId,
+          String? athleteProfileId,
+          String? primaryGoal,
+          String? goalTargetJson,
+          String? experienceLevel,
+          String? preferredSplit,
+          int? daysPerWeek,
+          String? availableEquipmentJson,
+          String? contraindicationsJson,
+          String? scheduleConstraintsJson,
+          int? createdAt,
+          int? updatedAt}) =>
+      AthletePlanningProfile(
+        id: id ?? this.id,
+        workspaceId: workspaceId ?? this.workspaceId,
+        athleteProfileId: athleteProfileId ?? this.athleteProfileId,
+        primaryGoal: primaryGoal ?? this.primaryGoal,
+        goalTargetJson: goalTargetJson ?? this.goalTargetJson,
+        experienceLevel: experienceLevel ?? this.experienceLevel,
+        preferredSplit: preferredSplit ?? this.preferredSplit,
+        daysPerWeek: daysPerWeek ?? this.daysPerWeek,
+        availableEquipmentJson:
+            availableEquipmentJson ?? this.availableEquipmentJson,
+        contraindicationsJson:
+            contraindicationsJson ?? this.contraindicationsJson,
+        scheduleConstraintsJson:
+            scheduleConstraintsJson ?? this.scheduleConstraintsJson,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  AthletePlanningProfile copyWithCompanion(
+      AthletePlanningProfilesCompanion data) {
+    return AthletePlanningProfile(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId:
+          data.workspaceId.present ? data.workspaceId.value : this.workspaceId,
+      athleteProfileId: data.athleteProfileId.present
+          ? data.athleteProfileId.value
+          : this.athleteProfileId,
+      primaryGoal:
+          data.primaryGoal.present ? data.primaryGoal.value : this.primaryGoal,
+      goalTargetJson: data.goalTargetJson.present
+          ? data.goalTargetJson.value
+          : this.goalTargetJson,
+      experienceLevel: data.experienceLevel.present
+          ? data.experienceLevel.value
+          : this.experienceLevel,
+      preferredSplit: data.preferredSplit.present
+          ? data.preferredSplit.value
+          : this.preferredSplit,
+      daysPerWeek:
+          data.daysPerWeek.present ? data.daysPerWeek.value : this.daysPerWeek,
+      availableEquipmentJson: data.availableEquipmentJson.present
+          ? data.availableEquipmentJson.value
+          : this.availableEquipmentJson,
+      contraindicationsJson: data.contraindicationsJson.present
+          ? data.contraindicationsJson.value
+          : this.contraindicationsJson,
+      scheduleConstraintsJson: data.scheduleConstraintsJson.present
+          ? data.scheduleConstraintsJson.value
+          : this.scheduleConstraintsJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AthletePlanningProfile(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('athleteProfileId: $athleteProfileId, ')
+          ..write('primaryGoal: $primaryGoal, ')
+          ..write('goalTargetJson: $goalTargetJson, ')
+          ..write('experienceLevel: $experienceLevel, ')
+          ..write('preferredSplit: $preferredSplit, ')
+          ..write('daysPerWeek: $daysPerWeek, ')
+          ..write('availableEquipmentJson: $availableEquipmentJson, ')
+          ..write('contraindicationsJson: $contraindicationsJson, ')
+          ..write('scheduleConstraintsJson: $scheduleConstraintsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      workspaceId,
+      athleteProfileId,
+      primaryGoal,
+      goalTargetJson,
+      experienceLevel,
+      preferredSplit,
+      daysPerWeek,
+      availableEquipmentJson,
+      contraindicationsJson,
+      scheduleConstraintsJson,
+      createdAt,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AthletePlanningProfile &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.athleteProfileId == this.athleteProfileId &&
+          other.primaryGoal == this.primaryGoal &&
+          other.goalTargetJson == this.goalTargetJson &&
+          other.experienceLevel == this.experienceLevel &&
+          other.preferredSplit == this.preferredSplit &&
+          other.daysPerWeek == this.daysPerWeek &&
+          other.availableEquipmentJson == this.availableEquipmentJson &&
+          other.contraindicationsJson == this.contraindicationsJson &&
+          other.scheduleConstraintsJson == this.scheduleConstraintsJson &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class AthletePlanningProfilesCompanion
+    extends UpdateCompanion<AthletePlanningProfile> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<String> athleteProfileId;
+  final Value<String> primaryGoal;
+  final Value<String> goalTargetJson;
+  final Value<String> experienceLevel;
+  final Value<String> preferredSplit;
+  final Value<int> daysPerWeek;
+  final Value<String> availableEquipmentJson;
+  final Value<String> contraindicationsJson;
+  final Value<String> scheduleConstraintsJson;
+  final Value<int> createdAt;
+  final Value<int> updatedAt;
+  final Value<int> rowid;
+  const AthletePlanningProfilesCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.athleteProfileId = const Value.absent(),
+    this.primaryGoal = const Value.absent(),
+    this.goalTargetJson = const Value.absent(),
+    this.experienceLevel = const Value.absent(),
+    this.preferredSplit = const Value.absent(),
+    this.daysPerWeek = const Value.absent(),
+    this.availableEquipmentJson = const Value.absent(),
+    this.contraindicationsJson = const Value.absent(),
+    this.scheduleConstraintsJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AthletePlanningProfilesCompanion.insert({
+    required String id,
+    required String workspaceId,
+    required String athleteProfileId,
+    required String primaryGoal,
+    required String goalTargetJson,
+    required String experienceLevel,
+    required String preferredSplit,
+    required int daysPerWeek,
+    required String availableEquipmentJson,
+    required String contraindicationsJson,
+    required String scheduleConstraintsJson,
+    required int createdAt,
+    required int updatedAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        workspaceId = Value(workspaceId),
+        athleteProfileId = Value(athleteProfileId),
+        primaryGoal = Value(primaryGoal),
+        goalTargetJson = Value(goalTargetJson),
+        experienceLevel = Value(experienceLevel),
+        preferredSplit = Value(preferredSplit),
+        daysPerWeek = Value(daysPerWeek),
+        availableEquipmentJson = Value(availableEquipmentJson),
+        contraindicationsJson = Value(contraindicationsJson),
+        scheduleConstraintsJson = Value(scheduleConstraintsJson),
+        createdAt = Value(createdAt),
+        updatedAt = Value(updatedAt);
+  static Insertable<AthletePlanningProfile> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<String>? athleteProfileId,
+    Expression<String>? primaryGoal,
+    Expression<String>? goalTargetJson,
+    Expression<String>? experienceLevel,
+    Expression<String>? preferredSplit,
+    Expression<int>? daysPerWeek,
+    Expression<String>? availableEquipmentJson,
+    Expression<String>? contraindicationsJson,
+    Expression<String>? scheduleConstraintsJson,
+    Expression<int>? createdAt,
+    Expression<int>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (athleteProfileId != null) 'athlete_profile_id': athleteProfileId,
+      if (primaryGoal != null) 'primary_goal': primaryGoal,
+      if (goalTargetJson != null) 'goal_target_json': goalTargetJson,
+      if (experienceLevel != null) 'experience_level': experienceLevel,
+      if (preferredSplit != null) 'preferred_split': preferredSplit,
+      if (daysPerWeek != null) 'days_per_week': daysPerWeek,
+      if (availableEquipmentJson != null)
+        'available_equipment_json': availableEquipmentJson,
+      if (contraindicationsJson != null)
+        'contraindications_json': contraindicationsJson,
+      if (scheduleConstraintsJson != null)
+        'schedule_constraints_json': scheduleConstraintsJson,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AthletePlanningProfilesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? workspaceId,
+      Value<String>? athleteProfileId,
+      Value<String>? primaryGoal,
+      Value<String>? goalTargetJson,
+      Value<String>? experienceLevel,
+      Value<String>? preferredSplit,
+      Value<int>? daysPerWeek,
+      Value<String>? availableEquipmentJson,
+      Value<String>? contraindicationsJson,
+      Value<String>? scheduleConstraintsJson,
+      Value<int>? createdAt,
+      Value<int>? updatedAt,
+      Value<int>? rowid}) {
+    return AthletePlanningProfilesCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      athleteProfileId: athleteProfileId ?? this.athleteProfileId,
+      primaryGoal: primaryGoal ?? this.primaryGoal,
+      goalTargetJson: goalTargetJson ?? this.goalTargetJson,
+      experienceLevel: experienceLevel ?? this.experienceLevel,
+      preferredSplit: preferredSplit ?? this.preferredSplit,
+      daysPerWeek: daysPerWeek ?? this.daysPerWeek,
+      availableEquipmentJson:
+          availableEquipmentJson ?? this.availableEquipmentJson,
+      contraindicationsJson:
+          contraindicationsJson ?? this.contraindicationsJson,
+      scheduleConstraintsJson:
+          scheduleConstraintsJson ?? this.scheduleConstraintsJson,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (athleteProfileId.present) {
+      map['athlete_profile_id'] = Variable<String>(athleteProfileId.value);
+    }
+    if (primaryGoal.present) {
+      map['primary_goal'] = Variable<String>(primaryGoal.value);
+    }
+    if (goalTargetJson.present) {
+      map['goal_target_json'] = Variable<String>(goalTargetJson.value);
+    }
+    if (experienceLevel.present) {
+      map['experience_level'] = Variable<String>(experienceLevel.value);
+    }
+    if (preferredSplit.present) {
+      map['preferred_split'] = Variable<String>(preferredSplit.value);
+    }
+    if (daysPerWeek.present) {
+      map['days_per_week'] = Variable<int>(daysPerWeek.value);
+    }
+    if (availableEquipmentJson.present) {
+      map['available_equipment_json'] =
+          Variable<String>(availableEquipmentJson.value);
+    }
+    if (contraindicationsJson.present) {
+      map['contraindications_json'] =
+          Variable<String>(contraindicationsJson.value);
+    }
+    if (scheduleConstraintsJson.present) {
+      map['schedule_constraints_json'] =
+          Variable<String>(scheduleConstraintsJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AthletePlanningProfilesCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('athleteProfileId: $athleteProfileId, ')
+          ..write('primaryGoal: $primaryGoal, ')
+          ..write('goalTargetJson: $goalTargetJson, ')
+          ..write('experienceLevel: $experienceLevel, ')
+          ..write('preferredSplit: $preferredSplit, ')
+          ..write('daysPerWeek: $daysPerWeek, ')
+          ..write('availableEquipmentJson: $availableEquipmentJson, ')
+          ..write('contraindicationsJson: $contraindicationsJson, ')
+          ..write('scheduleConstraintsJson: $scheduleConstraintsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $WeeklyPlanBuildRequestsTable extends WeeklyPlanBuildRequests
+    with TableInfo<$WeeklyPlanBuildRequestsTable, WeeklyPlanBuildRequest> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WeeklyPlanBuildRequestsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _workspaceIdMeta =
+      const VerificationMeta('workspaceId');
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+      'workspace_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _athleteProfileIdMeta =
+      const VerificationMeta('athleteProfileId');
+  @override
+  late final GeneratedColumn<String> athleteProfileId = GeneratedColumn<String>(
+      'athlete_profile_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _weekStartMeta =
+      const VerificationMeta('weekStart');
+  @override
+  late final GeneratedColumn<String> weekStart = GeneratedColumn<String>(
+      'week_start', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _weekEndMeta =
+      const VerificationMeta('weekEnd');
+  @override
+  late final GeneratedColumn<String> weekEnd = GeneratedColumn<String>(
+      'week_end', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _splitTypeMeta =
+      const VerificationMeta('splitType');
+  @override
+  late final GeneratedColumn<String> splitType = GeneratedColumn<String>(
+      'split_type', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _modifierMeta =
+      const VerificationMeta('modifier');
+  @override
+  late final GeneratedColumn<String> modifier = GeneratedColumn<String>(
+      'modifier', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _modeMeta = const VerificationMeta('mode');
+  @override
+  late final GeneratedColumn<String> mode = GeneratedColumn<String>(
+      'mode', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _promptSnapshotMeta =
+      const VerificationMeta('promptSnapshot');
+  @override
+  late final GeneratedColumn<String> promptSnapshot = GeneratedColumn<String>(
+      'prompt_snapshot', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _requestPayloadJsonMeta =
+      const VerificationMeta('requestPayloadJson');
+  @override
+  late final GeneratedColumn<String> requestPayloadJson =
+      GeneratedColumn<String>('request_payload_json', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _responsePayloadJsonMeta =
+      const VerificationMeta('responsePayloadJson');
+  @override
+  late final GeneratedColumn<String> responsePayloadJson =
+      GeneratedColumn<String>('response_payload_json', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _successMeta =
+      const VerificationMeta('success');
+  @override
+  late final GeneratedColumn<bool> success = GeneratedColumn<bool>(
+      'success', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("success" IN (0, 1))'));
+  static const VerificationMeta _errorTextMeta =
+      const VerificationMeta('errorText');
+  @override
+  late final GeneratedColumn<String> errorText = GeneratedColumn<String>(
+      'error_text', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        workspaceId,
+        athleteProfileId,
+        weekStart,
+        weekEnd,
+        splitType,
+        modifier,
+        mode,
+        promptSnapshot,
+        requestPayloadJson,
+        responsePayloadJson,
+        success,
+        errorText,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'weekly_plan_build_requests';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<WeeklyPlanBuildRequest> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+          _workspaceIdMeta,
+          workspaceId.isAcceptableOrUnknown(
+              data['workspace_id']!, _workspaceIdMeta));
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('athlete_profile_id')) {
+      context.handle(
+          _athleteProfileIdMeta,
+          athleteProfileId.isAcceptableOrUnknown(
+              data['athlete_profile_id']!, _athleteProfileIdMeta));
+    } else if (isInserting) {
+      context.missing(_athleteProfileIdMeta);
+    }
+    if (data.containsKey('week_start')) {
+      context.handle(_weekStartMeta,
+          weekStart.isAcceptableOrUnknown(data['week_start']!, _weekStartMeta));
+    } else if (isInserting) {
+      context.missing(_weekStartMeta);
+    }
+    if (data.containsKey('week_end')) {
+      context.handle(_weekEndMeta,
+          weekEnd.isAcceptableOrUnknown(data['week_end']!, _weekEndMeta));
+    } else if (isInserting) {
+      context.missing(_weekEndMeta);
+    }
+    if (data.containsKey('split_type')) {
+      context.handle(_splitTypeMeta,
+          splitType.isAcceptableOrUnknown(data['split_type']!, _splitTypeMeta));
+    } else if (isInserting) {
+      context.missing(_splitTypeMeta);
+    }
+    if (data.containsKey('modifier')) {
+      context.handle(_modifierMeta,
+          modifier.isAcceptableOrUnknown(data['modifier']!, _modifierMeta));
+    } else if (isInserting) {
+      context.missing(_modifierMeta);
+    }
+    if (data.containsKey('mode')) {
+      context.handle(
+          _modeMeta, mode.isAcceptableOrUnknown(data['mode']!, _modeMeta));
+    } else if (isInserting) {
+      context.missing(_modeMeta);
+    }
+    if (data.containsKey('prompt_snapshot')) {
+      context.handle(
+          _promptSnapshotMeta,
+          promptSnapshot.isAcceptableOrUnknown(
+              data['prompt_snapshot']!, _promptSnapshotMeta));
+    } else if (isInserting) {
+      context.missing(_promptSnapshotMeta);
+    }
+    if (data.containsKey('request_payload_json')) {
+      context.handle(
+          _requestPayloadJsonMeta,
+          requestPayloadJson.isAcceptableOrUnknown(
+              data['request_payload_json']!, _requestPayloadJsonMeta));
+    } else if (isInserting) {
+      context.missing(_requestPayloadJsonMeta);
+    }
+    if (data.containsKey('response_payload_json')) {
+      context.handle(
+          _responsePayloadJsonMeta,
+          responsePayloadJson.isAcceptableOrUnknown(
+              data['response_payload_json']!, _responsePayloadJsonMeta));
+    }
+    if (data.containsKey('success')) {
+      context.handle(_successMeta,
+          success.isAcceptableOrUnknown(data['success']!, _successMeta));
+    } else if (isInserting) {
+      context.missing(_successMeta);
+    }
+    if (data.containsKey('error_text')) {
+      context.handle(_errorTextMeta,
+          errorText.isAcceptableOrUnknown(data['error_text']!, _errorTextMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  WeeklyPlanBuildRequest map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WeeklyPlanBuildRequest(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      workspaceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}workspace_id'])!,
+      athleteProfileId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}athlete_profile_id'])!,
+      weekStart: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}week_start'])!,
+      weekEnd: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}week_end'])!,
+      splitType: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}split_type'])!,
+      modifier: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}modifier'])!,
+      mode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}mode'])!,
+      promptSnapshot: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}prompt_snapshot'])!,
+      requestPayloadJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}request_payload_json'])!,
+      responsePayloadJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}response_payload_json']),
+      success: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}success'])!,
+      errorText: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}error_text']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $WeeklyPlanBuildRequestsTable createAlias(String alias) {
+    return $WeeklyPlanBuildRequestsTable(attachedDatabase, alias);
+  }
+}
+
+class WeeklyPlanBuildRequest extends DataClass
+    implements Insertable<WeeklyPlanBuildRequest> {
+  final String id;
+  final String workspaceId;
+  final String athleteProfileId;
+  final String weekStart;
+  final String weekEnd;
+  final String splitType;
+  final String modifier;
+  final String mode;
+  final String promptSnapshot;
+  final String requestPayloadJson;
+  final String? responsePayloadJson;
+  final bool success;
+  final String? errorText;
+  final int createdAt;
+  const WeeklyPlanBuildRequest(
+      {required this.id,
+      required this.workspaceId,
+      required this.athleteProfileId,
+      required this.weekStart,
+      required this.weekEnd,
+      required this.splitType,
+      required this.modifier,
+      required this.mode,
+      required this.promptSnapshot,
+      required this.requestPayloadJson,
+      this.responsePayloadJson,
+      required this.success,
+      this.errorText,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['athlete_profile_id'] = Variable<String>(athleteProfileId);
+    map['week_start'] = Variable<String>(weekStart);
+    map['week_end'] = Variable<String>(weekEnd);
+    map['split_type'] = Variable<String>(splitType);
+    map['modifier'] = Variable<String>(modifier);
+    map['mode'] = Variable<String>(mode);
+    map['prompt_snapshot'] = Variable<String>(promptSnapshot);
+    map['request_payload_json'] = Variable<String>(requestPayloadJson);
+    if (!nullToAbsent || responsePayloadJson != null) {
+      map['response_payload_json'] = Variable<String>(responsePayloadJson);
+    }
+    map['success'] = Variable<bool>(success);
+    if (!nullToAbsent || errorText != null) {
+      map['error_text'] = Variable<String>(errorText);
+    }
+    map['created_at'] = Variable<int>(createdAt);
+    return map;
+  }
+
+  WeeklyPlanBuildRequestsCompanion toCompanion(bool nullToAbsent) {
+    return WeeklyPlanBuildRequestsCompanion(
+      id: Value(id),
+      workspaceId: Value(workspaceId),
+      athleteProfileId: Value(athleteProfileId),
+      weekStart: Value(weekStart),
+      weekEnd: Value(weekEnd),
+      splitType: Value(splitType),
+      modifier: Value(modifier),
+      mode: Value(mode),
+      promptSnapshot: Value(promptSnapshot),
+      requestPayloadJson: Value(requestPayloadJson),
+      responsePayloadJson: responsePayloadJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(responsePayloadJson),
+      success: Value(success),
+      errorText: errorText == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorText),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory WeeklyPlanBuildRequest.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WeeklyPlanBuildRequest(
+      id: serializer.fromJson<String>(json['id']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      athleteProfileId: serializer.fromJson<String>(json['athleteProfileId']),
+      weekStart: serializer.fromJson<String>(json['weekStart']),
+      weekEnd: serializer.fromJson<String>(json['weekEnd']),
+      splitType: serializer.fromJson<String>(json['splitType']),
+      modifier: serializer.fromJson<String>(json['modifier']),
+      mode: serializer.fromJson<String>(json['mode']),
+      promptSnapshot: serializer.fromJson<String>(json['promptSnapshot']),
+      requestPayloadJson:
+          serializer.fromJson<String>(json['requestPayloadJson']),
+      responsePayloadJson:
+          serializer.fromJson<String?>(json['responsePayloadJson']),
+      success: serializer.fromJson<bool>(json['success']),
+      errorText: serializer.fromJson<String?>(json['errorText']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'athleteProfileId': serializer.toJson<String>(athleteProfileId),
+      'weekStart': serializer.toJson<String>(weekStart),
+      'weekEnd': serializer.toJson<String>(weekEnd),
+      'splitType': serializer.toJson<String>(splitType),
+      'modifier': serializer.toJson<String>(modifier),
+      'mode': serializer.toJson<String>(mode),
+      'promptSnapshot': serializer.toJson<String>(promptSnapshot),
+      'requestPayloadJson': serializer.toJson<String>(requestPayloadJson),
+      'responsePayloadJson': serializer.toJson<String?>(responsePayloadJson),
+      'success': serializer.toJson<bool>(success),
+      'errorText': serializer.toJson<String?>(errorText),
+      'createdAt': serializer.toJson<int>(createdAt),
+    };
+  }
+
+  WeeklyPlanBuildRequest copyWith(
+          {String? id,
+          String? workspaceId,
+          String? athleteProfileId,
+          String? weekStart,
+          String? weekEnd,
+          String? splitType,
+          String? modifier,
+          String? mode,
+          String? promptSnapshot,
+          String? requestPayloadJson,
+          Value<String?> responsePayloadJson = const Value.absent(),
+          bool? success,
+          Value<String?> errorText = const Value.absent(),
+          int? createdAt}) =>
+      WeeklyPlanBuildRequest(
+        id: id ?? this.id,
+        workspaceId: workspaceId ?? this.workspaceId,
+        athleteProfileId: athleteProfileId ?? this.athleteProfileId,
+        weekStart: weekStart ?? this.weekStart,
+        weekEnd: weekEnd ?? this.weekEnd,
+        splitType: splitType ?? this.splitType,
+        modifier: modifier ?? this.modifier,
+        mode: mode ?? this.mode,
+        promptSnapshot: promptSnapshot ?? this.promptSnapshot,
+        requestPayloadJson: requestPayloadJson ?? this.requestPayloadJson,
+        responsePayloadJson: responsePayloadJson.present
+            ? responsePayloadJson.value
+            : this.responsePayloadJson,
+        success: success ?? this.success,
+        errorText: errorText.present ? errorText.value : this.errorText,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  WeeklyPlanBuildRequest copyWithCompanion(
+      WeeklyPlanBuildRequestsCompanion data) {
+    return WeeklyPlanBuildRequest(
+      id: data.id.present ? data.id.value : this.id,
+      workspaceId:
+          data.workspaceId.present ? data.workspaceId.value : this.workspaceId,
+      athleteProfileId: data.athleteProfileId.present
+          ? data.athleteProfileId.value
+          : this.athleteProfileId,
+      weekStart: data.weekStart.present ? data.weekStart.value : this.weekStart,
+      weekEnd: data.weekEnd.present ? data.weekEnd.value : this.weekEnd,
+      splitType: data.splitType.present ? data.splitType.value : this.splitType,
+      modifier: data.modifier.present ? data.modifier.value : this.modifier,
+      mode: data.mode.present ? data.mode.value : this.mode,
+      promptSnapshot: data.promptSnapshot.present
+          ? data.promptSnapshot.value
+          : this.promptSnapshot,
+      requestPayloadJson: data.requestPayloadJson.present
+          ? data.requestPayloadJson.value
+          : this.requestPayloadJson,
+      responsePayloadJson: data.responsePayloadJson.present
+          ? data.responsePayloadJson.value
+          : this.responsePayloadJson,
+      success: data.success.present ? data.success.value : this.success,
+      errorText: data.errorText.present ? data.errorText.value : this.errorText,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WeeklyPlanBuildRequest(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('athleteProfileId: $athleteProfileId, ')
+          ..write('weekStart: $weekStart, ')
+          ..write('weekEnd: $weekEnd, ')
+          ..write('splitType: $splitType, ')
+          ..write('modifier: $modifier, ')
+          ..write('mode: $mode, ')
+          ..write('promptSnapshot: $promptSnapshot, ')
+          ..write('requestPayloadJson: $requestPayloadJson, ')
+          ..write('responsePayloadJson: $responsePayloadJson, ')
+          ..write('success: $success, ')
+          ..write('errorText: $errorText, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      workspaceId,
+      athleteProfileId,
+      weekStart,
+      weekEnd,
+      splitType,
+      modifier,
+      mode,
+      promptSnapshot,
+      requestPayloadJson,
+      responsePayloadJson,
+      success,
+      errorText,
+      createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WeeklyPlanBuildRequest &&
+          other.id == this.id &&
+          other.workspaceId == this.workspaceId &&
+          other.athleteProfileId == this.athleteProfileId &&
+          other.weekStart == this.weekStart &&
+          other.weekEnd == this.weekEnd &&
+          other.splitType == this.splitType &&
+          other.modifier == this.modifier &&
+          other.mode == this.mode &&
+          other.promptSnapshot == this.promptSnapshot &&
+          other.requestPayloadJson == this.requestPayloadJson &&
+          other.responsePayloadJson == this.responsePayloadJson &&
+          other.success == this.success &&
+          other.errorText == this.errorText &&
+          other.createdAt == this.createdAt);
+}
+
+class WeeklyPlanBuildRequestsCompanion
+    extends UpdateCompanion<WeeklyPlanBuildRequest> {
+  final Value<String> id;
+  final Value<String> workspaceId;
+  final Value<String> athleteProfileId;
+  final Value<String> weekStart;
+  final Value<String> weekEnd;
+  final Value<String> splitType;
+  final Value<String> modifier;
+  final Value<String> mode;
+  final Value<String> promptSnapshot;
+  final Value<String> requestPayloadJson;
+  final Value<String?> responsePayloadJson;
+  final Value<bool> success;
+  final Value<String?> errorText;
+  final Value<int> createdAt;
+  final Value<int> rowid;
+  const WeeklyPlanBuildRequestsCompanion({
+    this.id = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.athleteProfileId = const Value.absent(),
+    this.weekStart = const Value.absent(),
+    this.weekEnd = const Value.absent(),
+    this.splitType = const Value.absent(),
+    this.modifier = const Value.absent(),
+    this.mode = const Value.absent(),
+    this.promptSnapshot = const Value.absent(),
+    this.requestPayloadJson = const Value.absent(),
+    this.responsePayloadJson = const Value.absent(),
+    this.success = const Value.absent(),
+    this.errorText = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WeeklyPlanBuildRequestsCompanion.insert({
+    required String id,
+    required String workspaceId,
+    required String athleteProfileId,
+    required String weekStart,
+    required String weekEnd,
+    required String splitType,
+    required String modifier,
+    required String mode,
+    required String promptSnapshot,
+    required String requestPayloadJson,
+    this.responsePayloadJson = const Value.absent(),
+    required bool success,
+    this.errorText = const Value.absent(),
+    required int createdAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        workspaceId = Value(workspaceId),
+        athleteProfileId = Value(athleteProfileId),
+        weekStart = Value(weekStart),
+        weekEnd = Value(weekEnd),
+        splitType = Value(splitType),
+        modifier = Value(modifier),
+        mode = Value(mode),
+        promptSnapshot = Value(promptSnapshot),
+        requestPayloadJson = Value(requestPayloadJson),
+        success = Value(success),
+        createdAt = Value(createdAt);
+  static Insertable<WeeklyPlanBuildRequest> custom({
+    Expression<String>? id,
+    Expression<String>? workspaceId,
+    Expression<String>? athleteProfileId,
+    Expression<String>? weekStart,
+    Expression<String>? weekEnd,
+    Expression<String>? splitType,
+    Expression<String>? modifier,
+    Expression<String>? mode,
+    Expression<String>? promptSnapshot,
+    Expression<String>? requestPayloadJson,
+    Expression<String>? responsePayloadJson,
+    Expression<bool>? success,
+    Expression<String>? errorText,
+    Expression<int>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (athleteProfileId != null) 'athlete_profile_id': athleteProfileId,
+      if (weekStart != null) 'week_start': weekStart,
+      if (weekEnd != null) 'week_end': weekEnd,
+      if (splitType != null) 'split_type': splitType,
+      if (modifier != null) 'modifier': modifier,
+      if (mode != null) 'mode': mode,
+      if (promptSnapshot != null) 'prompt_snapshot': promptSnapshot,
+      if (requestPayloadJson != null)
+        'request_payload_json': requestPayloadJson,
+      if (responsePayloadJson != null)
+        'response_payload_json': responsePayloadJson,
+      if (success != null) 'success': success,
+      if (errorText != null) 'error_text': errorText,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WeeklyPlanBuildRequestsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? workspaceId,
+      Value<String>? athleteProfileId,
+      Value<String>? weekStart,
+      Value<String>? weekEnd,
+      Value<String>? splitType,
+      Value<String>? modifier,
+      Value<String>? mode,
+      Value<String>? promptSnapshot,
+      Value<String>? requestPayloadJson,
+      Value<String?>? responsePayloadJson,
+      Value<bool>? success,
+      Value<String?>? errorText,
+      Value<int>? createdAt,
+      Value<int>? rowid}) {
+    return WeeklyPlanBuildRequestsCompanion(
+      id: id ?? this.id,
+      workspaceId: workspaceId ?? this.workspaceId,
+      athleteProfileId: athleteProfileId ?? this.athleteProfileId,
+      weekStart: weekStart ?? this.weekStart,
+      weekEnd: weekEnd ?? this.weekEnd,
+      splitType: splitType ?? this.splitType,
+      modifier: modifier ?? this.modifier,
+      mode: mode ?? this.mode,
+      promptSnapshot: promptSnapshot ?? this.promptSnapshot,
+      requestPayloadJson: requestPayloadJson ?? this.requestPayloadJson,
+      responsePayloadJson: responsePayloadJson ?? this.responsePayloadJson,
+      success: success ?? this.success,
+      errorText: errorText ?? this.errorText,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (athleteProfileId.present) {
+      map['athlete_profile_id'] = Variable<String>(athleteProfileId.value);
+    }
+    if (weekStart.present) {
+      map['week_start'] = Variable<String>(weekStart.value);
+    }
+    if (weekEnd.present) {
+      map['week_end'] = Variable<String>(weekEnd.value);
+    }
+    if (splitType.present) {
+      map['split_type'] = Variable<String>(splitType.value);
+    }
+    if (modifier.present) {
+      map['modifier'] = Variable<String>(modifier.value);
+    }
+    if (mode.present) {
+      map['mode'] = Variable<String>(mode.value);
+    }
+    if (promptSnapshot.present) {
+      map['prompt_snapshot'] = Variable<String>(promptSnapshot.value);
+    }
+    if (requestPayloadJson.present) {
+      map['request_payload_json'] = Variable<String>(requestPayloadJson.value);
+    }
+    if (responsePayloadJson.present) {
+      map['response_payload_json'] =
+          Variable<String>(responsePayloadJson.value);
+    }
+    if (success.present) {
+      map['success'] = Variable<bool>(success.value);
+    }
+    if (errorText.present) {
+      map['error_text'] = Variable<String>(errorText.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WeeklyPlanBuildRequestsCompanion(')
+          ..write('id: $id, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('athleteProfileId: $athleteProfileId, ')
+          ..write('weekStart: $weekStart, ')
+          ..write('weekEnd: $weekEnd, ')
+          ..write('splitType: $splitType, ')
+          ..write('modifier: $modifier, ')
+          ..write('mode: $mode, ')
+          ..write('promptSnapshot: $promptSnapshot, ')
+          ..write('requestPayloadJson: $requestPayloadJson, ')
+          ..write('responsePayloadJson: $responsePayloadJson, ')
+          ..write('success: $success, ')
+          ..write('errorText: $errorText, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDb extends GeneratedDatabase {
   _$AppDb(QueryExecutor e) : super(e);
   $AppDbManager get managers => $AppDbManager(this);
@@ -14179,6 +15577,10 @@ abstract class _$AppDb extends GeneratedDatabase {
       $CloudWorkspaceInvitesTable(this);
   late final $AppContextStateTable appContextState =
       $AppContextStateTable(this);
+  late final $AthletePlanningProfilesTable athletePlanningProfiles =
+      $AthletePlanningProfilesTable(this);
+  late final $WeeklyPlanBuildRequestsTable weeklyPlanBuildRequests =
+      $WeeklyPlanBuildRequestsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -14210,7 +15612,9 @@ abstract class _$AppDb extends GeneratedDatabase {
         cloudAthleteProfiles,
         cloudAthleteProfileAssignments,
         cloudWorkspaceInvites,
-        appContextState
+        appContextState,
+        athletePlanningProfiles,
+        weeklyPlanBuildRequests
       ];
 }
 
@@ -20949,6 +22353,643 @@ typedef $$AppContextStateTableProcessedTableManager = ProcessedTableManager<
     ),
     AppContextStateData,
     PrefetchHooks Function()>;
+typedef $$AthletePlanningProfilesTableCreateCompanionBuilder
+    = AthletePlanningProfilesCompanion Function({
+  required String id,
+  required String workspaceId,
+  required String athleteProfileId,
+  required String primaryGoal,
+  required String goalTargetJson,
+  required String experienceLevel,
+  required String preferredSplit,
+  required int daysPerWeek,
+  required String availableEquipmentJson,
+  required String contraindicationsJson,
+  required String scheduleConstraintsJson,
+  required int createdAt,
+  required int updatedAt,
+  Value<int> rowid,
+});
+typedef $$AthletePlanningProfilesTableUpdateCompanionBuilder
+    = AthletePlanningProfilesCompanion Function({
+  Value<String> id,
+  Value<String> workspaceId,
+  Value<String> athleteProfileId,
+  Value<String> primaryGoal,
+  Value<String> goalTargetJson,
+  Value<String> experienceLevel,
+  Value<String> preferredSplit,
+  Value<int> daysPerWeek,
+  Value<String> availableEquipmentJson,
+  Value<String> contraindicationsJson,
+  Value<String> scheduleConstraintsJson,
+  Value<int> createdAt,
+  Value<int> updatedAt,
+  Value<int> rowid,
+});
+
+class $$AthletePlanningProfilesTableFilterComposer
+    extends Composer<_$AppDb, $AthletePlanningProfilesTable> {
+  $$AthletePlanningProfilesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get athleteProfileId => $composableBuilder(
+      column: $table.athleteProfileId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get primaryGoal => $composableBuilder(
+      column: $table.primaryGoal, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get goalTargetJson => $composableBuilder(
+      column: $table.goalTargetJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get experienceLevel => $composableBuilder(
+      column: $table.experienceLevel,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get preferredSplit => $composableBuilder(
+      column: $table.preferredSplit,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get daysPerWeek => $composableBuilder(
+      column: $table.daysPerWeek, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get availableEquipmentJson => $composableBuilder(
+      column: $table.availableEquipmentJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get contraindicationsJson => $composableBuilder(
+      column: $table.contraindicationsJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get scheduleConstraintsJson => $composableBuilder(
+      column: $table.scheduleConstraintsJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$AthletePlanningProfilesTableOrderingComposer
+    extends Composer<_$AppDb, $AthletePlanningProfilesTable> {
+  $$AthletePlanningProfilesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get athleteProfileId => $composableBuilder(
+      column: $table.athleteProfileId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get primaryGoal => $composableBuilder(
+      column: $table.primaryGoal, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get goalTargetJson => $composableBuilder(
+      column: $table.goalTargetJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get experienceLevel => $composableBuilder(
+      column: $table.experienceLevel,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get preferredSplit => $composableBuilder(
+      column: $table.preferredSplit,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get daysPerWeek => $composableBuilder(
+      column: $table.daysPerWeek, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get availableEquipmentJson => $composableBuilder(
+      column: $table.availableEquipmentJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get contraindicationsJson => $composableBuilder(
+      column: $table.contraindicationsJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get scheduleConstraintsJson => $composableBuilder(
+      column: $table.scheduleConstraintsJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$AthletePlanningProfilesTableAnnotationComposer
+    extends Composer<_$AppDb, $AthletePlanningProfilesTable> {
+  $$AthletePlanningProfilesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => column);
+
+  GeneratedColumn<String> get athleteProfileId => $composableBuilder(
+      column: $table.athleteProfileId, builder: (column) => column);
+
+  GeneratedColumn<String> get primaryGoal => $composableBuilder(
+      column: $table.primaryGoal, builder: (column) => column);
+
+  GeneratedColumn<String> get goalTargetJson => $composableBuilder(
+      column: $table.goalTargetJson, builder: (column) => column);
+
+  GeneratedColumn<String> get experienceLevel => $composableBuilder(
+      column: $table.experienceLevel, builder: (column) => column);
+
+  GeneratedColumn<String> get preferredSplit => $composableBuilder(
+      column: $table.preferredSplit, builder: (column) => column);
+
+  GeneratedColumn<int> get daysPerWeek => $composableBuilder(
+      column: $table.daysPerWeek, builder: (column) => column);
+
+  GeneratedColumn<String> get availableEquipmentJson => $composableBuilder(
+      column: $table.availableEquipmentJson, builder: (column) => column);
+
+  GeneratedColumn<String> get contraindicationsJson => $composableBuilder(
+      column: $table.contraindicationsJson, builder: (column) => column);
+
+  GeneratedColumn<String> get scheduleConstraintsJson => $composableBuilder(
+      column: $table.scheduleConstraintsJson, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$AthletePlanningProfilesTableTableManager extends RootTableManager<
+    _$AppDb,
+    $AthletePlanningProfilesTable,
+    AthletePlanningProfile,
+    $$AthletePlanningProfilesTableFilterComposer,
+    $$AthletePlanningProfilesTableOrderingComposer,
+    $$AthletePlanningProfilesTableAnnotationComposer,
+    $$AthletePlanningProfilesTableCreateCompanionBuilder,
+    $$AthletePlanningProfilesTableUpdateCompanionBuilder,
+    (
+      AthletePlanningProfile,
+      BaseReferences<_$AppDb, $AthletePlanningProfilesTable,
+          AthletePlanningProfile>
+    ),
+    AthletePlanningProfile,
+    PrefetchHooks Function()> {
+  $$AthletePlanningProfilesTableTableManager(
+      _$AppDb db, $AthletePlanningProfilesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AthletePlanningProfilesTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AthletePlanningProfilesTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AthletePlanningProfilesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> workspaceId = const Value.absent(),
+            Value<String> athleteProfileId = const Value.absent(),
+            Value<String> primaryGoal = const Value.absent(),
+            Value<String> goalTargetJson = const Value.absent(),
+            Value<String> experienceLevel = const Value.absent(),
+            Value<String> preferredSplit = const Value.absent(),
+            Value<int> daysPerWeek = const Value.absent(),
+            Value<String> availableEquipmentJson = const Value.absent(),
+            Value<String> contraindicationsJson = const Value.absent(),
+            Value<String> scheduleConstraintsJson = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<int> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AthletePlanningProfilesCompanion(
+            id: id,
+            workspaceId: workspaceId,
+            athleteProfileId: athleteProfileId,
+            primaryGoal: primaryGoal,
+            goalTargetJson: goalTargetJson,
+            experienceLevel: experienceLevel,
+            preferredSplit: preferredSplit,
+            daysPerWeek: daysPerWeek,
+            availableEquipmentJson: availableEquipmentJson,
+            contraindicationsJson: contraindicationsJson,
+            scheduleConstraintsJson: scheduleConstraintsJson,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String workspaceId,
+            required String athleteProfileId,
+            required String primaryGoal,
+            required String goalTargetJson,
+            required String experienceLevel,
+            required String preferredSplit,
+            required int daysPerWeek,
+            required String availableEquipmentJson,
+            required String contraindicationsJson,
+            required String scheduleConstraintsJson,
+            required int createdAt,
+            required int updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AthletePlanningProfilesCompanion.insert(
+            id: id,
+            workspaceId: workspaceId,
+            athleteProfileId: athleteProfileId,
+            primaryGoal: primaryGoal,
+            goalTargetJson: goalTargetJson,
+            experienceLevel: experienceLevel,
+            preferredSplit: preferredSplit,
+            daysPerWeek: daysPerWeek,
+            availableEquipmentJson: availableEquipmentJson,
+            contraindicationsJson: contraindicationsJson,
+            scheduleConstraintsJson: scheduleConstraintsJson,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$AthletePlanningProfilesTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDb,
+        $AthletePlanningProfilesTable,
+        AthletePlanningProfile,
+        $$AthletePlanningProfilesTableFilterComposer,
+        $$AthletePlanningProfilesTableOrderingComposer,
+        $$AthletePlanningProfilesTableAnnotationComposer,
+        $$AthletePlanningProfilesTableCreateCompanionBuilder,
+        $$AthletePlanningProfilesTableUpdateCompanionBuilder,
+        (
+          AthletePlanningProfile,
+          BaseReferences<_$AppDb, $AthletePlanningProfilesTable,
+              AthletePlanningProfile>
+        ),
+        AthletePlanningProfile,
+        PrefetchHooks Function()>;
+typedef $$WeeklyPlanBuildRequestsTableCreateCompanionBuilder
+    = WeeklyPlanBuildRequestsCompanion Function({
+  required String id,
+  required String workspaceId,
+  required String athleteProfileId,
+  required String weekStart,
+  required String weekEnd,
+  required String splitType,
+  required String modifier,
+  required String mode,
+  required String promptSnapshot,
+  required String requestPayloadJson,
+  Value<String?> responsePayloadJson,
+  required bool success,
+  Value<String?> errorText,
+  required int createdAt,
+  Value<int> rowid,
+});
+typedef $$WeeklyPlanBuildRequestsTableUpdateCompanionBuilder
+    = WeeklyPlanBuildRequestsCompanion Function({
+  Value<String> id,
+  Value<String> workspaceId,
+  Value<String> athleteProfileId,
+  Value<String> weekStart,
+  Value<String> weekEnd,
+  Value<String> splitType,
+  Value<String> modifier,
+  Value<String> mode,
+  Value<String> promptSnapshot,
+  Value<String> requestPayloadJson,
+  Value<String?> responsePayloadJson,
+  Value<bool> success,
+  Value<String?> errorText,
+  Value<int> createdAt,
+  Value<int> rowid,
+});
+
+class $$WeeklyPlanBuildRequestsTableFilterComposer
+    extends Composer<_$AppDb, $WeeklyPlanBuildRequestsTable> {
+  $$WeeklyPlanBuildRequestsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get athleteProfileId => $composableBuilder(
+      column: $table.athleteProfileId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get weekStart => $composableBuilder(
+      column: $table.weekStart, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get weekEnd => $composableBuilder(
+      column: $table.weekEnd, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get splitType => $composableBuilder(
+      column: $table.splitType, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get modifier => $composableBuilder(
+      column: $table.modifier, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get mode => $composableBuilder(
+      column: $table.mode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get promptSnapshot => $composableBuilder(
+      column: $table.promptSnapshot,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get requestPayloadJson => $composableBuilder(
+      column: $table.requestPayloadJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get responsePayloadJson => $composableBuilder(
+      column: $table.responsePayloadJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get success => $composableBuilder(
+      column: $table.success, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get errorText => $composableBuilder(
+      column: $table.errorText, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$WeeklyPlanBuildRequestsTableOrderingComposer
+    extends Composer<_$AppDb, $WeeklyPlanBuildRequestsTable> {
+  $$WeeklyPlanBuildRequestsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get athleteProfileId => $composableBuilder(
+      column: $table.athleteProfileId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get weekStart => $composableBuilder(
+      column: $table.weekStart, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get weekEnd => $composableBuilder(
+      column: $table.weekEnd, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get splitType => $composableBuilder(
+      column: $table.splitType, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get modifier => $composableBuilder(
+      column: $table.modifier, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get mode => $composableBuilder(
+      column: $table.mode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get promptSnapshot => $composableBuilder(
+      column: $table.promptSnapshot,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get requestPayloadJson => $composableBuilder(
+      column: $table.requestPayloadJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get responsePayloadJson => $composableBuilder(
+      column: $table.responsePayloadJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get success => $composableBuilder(
+      column: $table.success, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get errorText => $composableBuilder(
+      column: $table.errorText, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$WeeklyPlanBuildRequestsTableAnnotationComposer
+    extends Composer<_$AppDb, $WeeklyPlanBuildRequestsTable> {
+  $$WeeklyPlanBuildRequestsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get workspaceId => $composableBuilder(
+      column: $table.workspaceId, builder: (column) => column);
+
+  GeneratedColumn<String> get athleteProfileId => $composableBuilder(
+      column: $table.athleteProfileId, builder: (column) => column);
+
+  GeneratedColumn<String> get weekStart =>
+      $composableBuilder(column: $table.weekStart, builder: (column) => column);
+
+  GeneratedColumn<String> get weekEnd =>
+      $composableBuilder(column: $table.weekEnd, builder: (column) => column);
+
+  GeneratedColumn<String> get splitType =>
+      $composableBuilder(column: $table.splitType, builder: (column) => column);
+
+  GeneratedColumn<String> get modifier =>
+      $composableBuilder(column: $table.modifier, builder: (column) => column);
+
+  GeneratedColumn<String> get mode =>
+      $composableBuilder(column: $table.mode, builder: (column) => column);
+
+  GeneratedColumn<String> get promptSnapshot => $composableBuilder(
+      column: $table.promptSnapshot, builder: (column) => column);
+
+  GeneratedColumn<String> get requestPayloadJson => $composableBuilder(
+      column: $table.requestPayloadJson, builder: (column) => column);
+
+  GeneratedColumn<String> get responsePayloadJson => $composableBuilder(
+      column: $table.responsePayloadJson, builder: (column) => column);
+
+  GeneratedColumn<bool> get success =>
+      $composableBuilder(column: $table.success, builder: (column) => column);
+
+  GeneratedColumn<String> get errorText =>
+      $composableBuilder(column: $table.errorText, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$WeeklyPlanBuildRequestsTableTableManager extends RootTableManager<
+    _$AppDb,
+    $WeeklyPlanBuildRequestsTable,
+    WeeklyPlanBuildRequest,
+    $$WeeklyPlanBuildRequestsTableFilterComposer,
+    $$WeeklyPlanBuildRequestsTableOrderingComposer,
+    $$WeeklyPlanBuildRequestsTableAnnotationComposer,
+    $$WeeklyPlanBuildRequestsTableCreateCompanionBuilder,
+    $$WeeklyPlanBuildRequestsTableUpdateCompanionBuilder,
+    (
+      WeeklyPlanBuildRequest,
+      BaseReferences<_$AppDb, $WeeklyPlanBuildRequestsTable,
+          WeeklyPlanBuildRequest>
+    ),
+    WeeklyPlanBuildRequest,
+    PrefetchHooks Function()> {
+  $$WeeklyPlanBuildRequestsTableTableManager(
+      _$AppDb db, $WeeklyPlanBuildRequestsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WeeklyPlanBuildRequestsTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WeeklyPlanBuildRequestsTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WeeklyPlanBuildRequestsTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> workspaceId = const Value.absent(),
+            Value<String> athleteProfileId = const Value.absent(),
+            Value<String> weekStart = const Value.absent(),
+            Value<String> weekEnd = const Value.absent(),
+            Value<String> splitType = const Value.absent(),
+            Value<String> modifier = const Value.absent(),
+            Value<String> mode = const Value.absent(),
+            Value<String> promptSnapshot = const Value.absent(),
+            Value<String> requestPayloadJson = const Value.absent(),
+            Value<String?> responsePayloadJson = const Value.absent(),
+            Value<bool> success = const Value.absent(),
+            Value<String?> errorText = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              WeeklyPlanBuildRequestsCompanion(
+            id: id,
+            workspaceId: workspaceId,
+            athleteProfileId: athleteProfileId,
+            weekStart: weekStart,
+            weekEnd: weekEnd,
+            splitType: splitType,
+            modifier: modifier,
+            mode: mode,
+            promptSnapshot: promptSnapshot,
+            requestPayloadJson: requestPayloadJson,
+            responsePayloadJson: responsePayloadJson,
+            success: success,
+            errorText: errorText,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String workspaceId,
+            required String athleteProfileId,
+            required String weekStart,
+            required String weekEnd,
+            required String splitType,
+            required String modifier,
+            required String mode,
+            required String promptSnapshot,
+            required String requestPayloadJson,
+            Value<String?> responsePayloadJson = const Value.absent(),
+            required bool success,
+            Value<String?> errorText = const Value.absent(),
+            required int createdAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              WeeklyPlanBuildRequestsCompanion.insert(
+            id: id,
+            workspaceId: workspaceId,
+            athleteProfileId: athleteProfileId,
+            weekStart: weekStart,
+            weekEnd: weekEnd,
+            splitType: splitType,
+            modifier: modifier,
+            mode: mode,
+            promptSnapshot: promptSnapshot,
+            requestPayloadJson: requestPayloadJson,
+            responsePayloadJson: responsePayloadJson,
+            success: success,
+            errorText: errorText,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$WeeklyPlanBuildRequestsTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDb,
+        $WeeklyPlanBuildRequestsTable,
+        WeeklyPlanBuildRequest,
+        $$WeeklyPlanBuildRequestsTableFilterComposer,
+        $$WeeklyPlanBuildRequestsTableOrderingComposer,
+        $$WeeklyPlanBuildRequestsTableAnnotationComposer,
+        $$WeeklyPlanBuildRequestsTableCreateCompanionBuilder,
+        $$WeeklyPlanBuildRequestsTableUpdateCompanionBuilder,
+        (
+          WeeklyPlanBuildRequest,
+          BaseReferences<_$AppDb, $WeeklyPlanBuildRequestsTable,
+              WeeklyPlanBuildRequest>
+        ),
+        WeeklyPlanBuildRequest,
+        PrefetchHooks Function()>;
 
 class $AppDbManager {
   final _$AppDb _db;
@@ -21016,4 +23057,10 @@ class $AppDbManager {
       $$CloudWorkspaceInvitesTableTableManager(_db, _db.cloudWorkspaceInvites);
   $$AppContextStateTableTableManager get appContextState =>
       $$AppContextStateTableTableManager(_db, _db.appContextState);
+  $$AthletePlanningProfilesTableTableManager get athletePlanningProfiles =>
+      $$AthletePlanningProfilesTableTableManager(
+          _db, _db.athletePlanningProfiles);
+  $$WeeklyPlanBuildRequestsTableTableManager get weeklyPlanBuildRequests =>
+      $$WeeklyPlanBuildRequestsTableTableManager(
+          _db, _db.weeklyPlanBuildRequests);
 }

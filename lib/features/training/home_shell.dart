@@ -88,8 +88,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 NavigationDestination(
                     icon: Icon(Icons.event_note_outlined), label: 'Plan'),
                 NavigationDestination(
-                    icon: Icon(Icons.download_outlined),
-                    label: 'Export/Import'),
+                    icon: Icon(Icons.download_outlined), label: 'Advanced'),
                 NavigationDestination(
                     icon: Icon(Icons.settings_outlined), label: 'Settings'),
               ],

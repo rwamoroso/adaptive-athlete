@@ -108,7 +108,7 @@ WEEK_START: YYYY-MM-DD
 WEEK_END: YYYY-MM-DD
 
 DAY 1
-SESSION_TYPE: push|pull|legs|rest|unknown
+SESSION_TYPE: push|pull|legs|upper|lower|full_body|hybrid|conditioning|rest|unknown
 DAY_LABEL: <short label>
 LIFT_FOCUS: <text>
 RUN_TYPE: <text or blank>

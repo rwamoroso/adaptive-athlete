@@ -22,6 +22,7 @@ class SettingsScreen extends ConsumerWidget {
     final settingsNotifier = ref.read(settingsProvider.notifier);
     final bootstrap = ref.watch(supabaseBootstrapProvider);
     final workspaceContextAsync = ref.watch(activeWorkspaceContextProvider);
+    final plannerService = ref.watch(weeklyPlannerServiceProvider);
 
     String? userId;
     if (bootstrap.initialized) {
@@ -144,9 +145,31 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 12),
-        const SectionHeader(text: 'AI Weekly Plan Prompt'),
+        const SectionHeader(text: 'Advanced Prompt Defaults'),
         const SizedBox(height: 8),
         const _WeeklyPlanPromptCard(),
+        const SizedBox(height: 12),
+        const SectionHeader(text: 'Planner Backend'),
+        const SizedBox(height: 8),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                plannerService.isServerSideAiEnabled
+                    ? 'Server-side AI: enabled'
+                    : 'Server-side AI: disabled',
+              ),
+              const SizedBox(height: 6),
+              Text(
+                plannerService.isServerSideAiEnabled
+                    ? 'Edge function route: generate-weekly-plan'
+                    : 'Sign in and configure edge function to enable one-tap AI.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 12),
         const SectionHeader(text: 'Supabase'),
         const SizedBox(height: 8),
@@ -692,7 +715,7 @@ class _WeeklyPlanPromptCardState extends ConsumerState<_WeeklyPlanPromptCard> {
             children: [
               Expanded(
                 child: Text(
-                  'Weekly Plan Prompt (Workbook Text v1)',
+                  'Advanced Weekly Plan Prompt (Workbook Text v1)',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),

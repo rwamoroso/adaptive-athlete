@@ -89,9 +89,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     await Share.shareXFiles(
       files,
       subject: title,
-      sharePositionOrigin: box == null
-          ? null
-          : box.localToGlobal(Offset.zero) & box.size,
+      sharePositionOrigin:
+          box == null ? null : box.localToGlobal(Offset.zero) & box.size,
     );
   }
 
@@ -421,7 +420,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       children: [
         Text(
-          'DATA OPERATIONS & AUDIT',
+          'ADVANCED DATA TOOLS',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 letterSpacing: 1,
                 fontWeight: FontWeight.w800,
@@ -429,7 +428,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         ),
         const SizedBox(height: 12),
         const ClinicalBanner(
-          text: 'Clinical Focus: Clean Imports & Traceable Exports',
+          text:
+              'Weekly planning moved to Plan tab. Use this screen for advanced imports/exports.',
         ),
         const SizedBox(height: 12),
         GridView.count(
@@ -457,7 +457,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           ],
         ),
         const SizedBox(height: 14),
-        const SectionHeader(text: 'Import / Export'),
+        const SectionHeader(text: 'Advanced Import / Export'),
         const SizedBox(height: 8),
         GlassCard(
           child: Padding(
@@ -555,7 +555,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Import Standard Workbook (XLSX)',
+                  'Import Standard Workbook (XLSX) — Advanced',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 12),
@@ -643,9 +643,10 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                       children: [
                         Text(
                           'Last standard import failure',
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                         ),
                         const SizedBox(height: 6),
                         SelectableText(_standardImportFailureMessage!),
@@ -674,7 +675,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Import Strength History (XLSX)',
+                  'Import Strength History (XLSX) — Advanced',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 12),
@@ -733,7 +734,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Standard Split Workbook',
+                  'Standard Split Workbook Export — Advanced',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),

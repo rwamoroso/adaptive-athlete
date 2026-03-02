@@ -48,3 +48,4 @@ app.*.map.json
 lib/config/supabase_config.dart
 scripts/testflight.env
 scripts/supabase_db.env
+supabase/.temp/

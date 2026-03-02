@@ -320,6 +320,39 @@ create table if not exists public.plan_import_audit (
   athlete_profile_id uuid null
 );
 
+create table if not exists public.athlete_planning_profiles (
+  id text primary key,
+  workspace_id uuid not null,
+  athlete_profile_id uuid not null,
+  primary_goal text not null,
+  goal_target_json text not null,
+  experience_level text not null,
+  preferred_split text not null,
+  days_per_week integer not null,
+  available_equipment_json text not null,
+  contraindications_json text not null,
+  schedule_constraints_json text not null,
+  created_at bigint not null,
+  updated_at bigint not null
+);
+
+create table if not exists public.weekly_plan_build_requests (
+  id text primary key,
+  workspace_id uuid not null,
+  athlete_profile_id uuid not null,
+  week_start text not null,
+  week_end text not null,
+  split_type text not null,
+  modifier text not null,
+  mode text not null,
+  prompt_snapshot text not null,
+  request_payload_json text not null,
+  response_payload_json text null,
+  success boolean not null,
+  error_text text null,
+  created_at bigint not null
+);
+
 -- Backward-compatible alters for existing projects
 alter table public.run_sessions add column if not exists run_key text;
 alter table public.run_sessions add column if not exists plan_day_id text;
@@ -412,7 +445,9 @@ declare
     'plan_exercise_alternatives',
     'exercise_substitutions',
     'plan_summary_snapshots',
-    'plan_import_audit'
+    'plan_import_audit',
+    'athlete_planning_profiles',
+    'weekly_plan_build_requests'
   ];
 begin
   foreach t in array domain_tables loop
@@ -448,6 +483,8 @@ alter table public.plan_exercise_alternatives enable row level security;
 alter table public.exercise_substitutions enable row level security;
 alter table public.plan_summary_snapshots enable row level security;
 alter table public.plan_import_audit enable row level security;
+alter table public.athlete_planning_profiles enable row level security;
+alter table public.weekly_plan_build_requests enable row level security;
 
 -- Authorization helper functions
 create or replace function public.current_user_id()
@@ -729,7 +766,9 @@ declare
     'plan_exercise_alternatives',
     'exercise_substitutions',
     'plan_summary_snapshots',
-    'plan_import_audit'
+    'plan_import_audit',
+    'athlete_planning_profiles',
+    'weekly_plan_build_requests'
   ];
 begin
   foreach t in array domain_tables loop

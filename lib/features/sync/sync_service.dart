@@ -68,6 +68,11 @@ class SyncService {
     if (await (db.select(db.sleepNights)..limit(1)).getSingleOrNull() != null) {
       return true;
     }
+    if (await (db.select(db.athletePlanningProfiles)..limit(1))
+            .getSingleOrNull() !=
+        null) {
+      return true;
+    }
     return false;
   }
 
@@ -90,6 +95,8 @@ class SyncService {
     await _upsertPlanExerciseAlternatives();
     await _upsertPlanSummarySnapshots();
     await _upsertPlanImportAudit();
+    await _upsertAthletePlanningProfiles();
+    await _upsertWeeklyPlanBuildRequests();
   }
 
   Future<void> _pullFromSupabase() async {
@@ -102,6 +109,8 @@ class SyncService {
     await _pullPlanExerciseAlternatives();
     await _pullPlanSummarySnapshots();
     await _pullPlanImportAudit();
+    await _pullAthletePlanningProfiles();
+    await _pullWeeklyPlanBuildRequests();
     await _pullActualStrengthSets();
     await _pullPrescribedStrengthSets();
     await _pullSleepNights();
@@ -646,6 +655,65 @@ class SyncService {
     });
   }
 
+  Future<void> _pullAthletePlanningProfiles() async {
+    final rows = await _fetchRows('athlete_planning_profiles');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.athletePlanningProfiles,
+          AthletePlanningProfilesCompanion(
+            id: Value(_requiredString(r, 'id')),
+            workspaceId: Value(_requiredString(r, 'workspace_id')),
+            athleteProfileId: Value(_requiredString(r, 'athlete_profile_id')),
+            primaryGoal: Value(_requiredString(r, 'primary_goal')),
+            goalTargetJson: Value(_requiredString(r, 'goal_target_json')),
+            experienceLevel: Value(_requiredString(r, 'experience_level')),
+            preferredSplit: Value(_requiredString(r, 'preferred_split')),
+            daysPerWeek: Value(_requiredInt(r, 'days_per_week')),
+            availableEquipmentJson:
+                Value(_requiredString(r, 'available_equipment_json')),
+            contraindicationsJson:
+                Value(_requiredString(r, 'contraindications_json')),
+            scheduleConstraintsJson:
+                Value(_requiredString(r, 'schedule_constraints_json')),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+            updatedAt: Value(_requiredInt(r, 'updated_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<void> _pullWeeklyPlanBuildRequests() async {
+    final rows = await _fetchRows('weekly_plan_build_requests');
+    await db.batch((batch) {
+      for (final r in rows) {
+        batch.insert(
+          db.weeklyPlanBuildRequests,
+          WeeklyPlanBuildRequestsCompanion(
+            id: Value(_requiredString(r, 'id')),
+            workspaceId: Value(_requiredString(r, 'workspace_id')),
+            athleteProfileId: Value(_requiredString(r, 'athlete_profile_id')),
+            weekStart: Value(_requiredString(r, 'week_start')),
+            weekEnd: Value(_requiredString(r, 'week_end')),
+            splitType: Value(_requiredString(r, 'split_type')),
+            modifier: Value(_requiredString(r, 'modifier')),
+            mode: Value(_requiredString(r, 'mode')),
+            promptSnapshot: Value(_requiredString(r, 'prompt_snapshot')),
+            requestPayloadJson:
+                Value(_requiredString(r, 'request_payload_json')),
+            responsePayloadJson: Value(r['response_payload_json']?.toString()),
+            success: Value(_requiredBool(r, 'success')),
+            errorText: Value(r['error_text']?.toString()),
+            createdAt: Value(_requiredInt(r, 'created_at')),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
   Future<void> _upsertWorkoutDays() async {
     final rows = await db.select(db.workoutDays).get();
     if (rows.isEmpty) {
@@ -1080,6 +1148,65 @@ class SyncService {
                     'success': r.success,
                     'details_json': r.detailsJson,
                     'conflict_report_path': r.conflictReportPath,
+                  }))
+              .toList(),
+          onConflict: 'id',
+        );
+  }
+
+  Future<void> _upsertAthletePlanningProfiles() async {
+    final rows = (await db.select(db.athletePlanningProfiles).get())
+        .where((r) =>
+            r.workspaceId == _context.workspaceId &&
+            r.athleteProfileId == _context.athleteProfileId)
+        .toList();
+    if (rows.isEmpty) {
+      return;
+    }
+    await client.from('athlete_planning_profiles').upsert(
+          rows
+              .map((r) => _scopedRow({
+                    'id': r.id,
+                    'primary_goal': r.primaryGoal,
+                    'goal_target_json': r.goalTargetJson,
+                    'experience_level': r.experienceLevel,
+                    'preferred_split': r.preferredSplit,
+                    'days_per_week': r.daysPerWeek,
+                    'available_equipment_json': r.availableEquipmentJson,
+                    'contraindications_json': r.contraindicationsJson,
+                    'schedule_constraints_json': r.scheduleConstraintsJson,
+                    'created_at': r.createdAt,
+                    'updated_at': r.updatedAt,
+                  }))
+              .toList(),
+          onConflict: 'id',
+        );
+  }
+
+  Future<void> _upsertWeeklyPlanBuildRequests() async {
+    final rows = (await db.select(db.weeklyPlanBuildRequests).get())
+        .where((r) =>
+            r.workspaceId == _context.workspaceId &&
+            r.athleteProfileId == _context.athleteProfileId)
+        .toList();
+    if (rows.isEmpty) {
+      return;
+    }
+    await client.from('weekly_plan_build_requests').upsert(
+          rows
+              .map((r) => _scopedRow({
+                    'id': r.id,
+                    'week_start': r.weekStart,
+                    'week_end': r.weekEnd,
+                    'split_type': r.splitType,
+                    'modifier': r.modifier,
+                    'mode': r.mode,
+                    'prompt_snapshot': r.promptSnapshot,
+                    'request_payload_json': r.requestPayloadJson,
+                    'response_payload_json': r.responsePayloadJson,
+                    'success': r.success,
+                    'error_text': r.errorText,
+                    'created_at': r.createdAt,
                   }))
               .toList(),
           onConflict: 'id',

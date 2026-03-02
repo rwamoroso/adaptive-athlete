@@ -763,6 +763,7 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
               planDayId: null,
               planDayNumber: null,
               planSessionType: null,
+              isPplCompatibleCycle: true,
               prescribedRun: null,
               sleepNights: const <SleepNight>[],
               runSessions: const <RunSessionWithSegments>[],
@@ -879,10 +880,12 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
               ),
             );
           },
-          onMarkRest: safeDetail.planDayNumber == null
+          onMarkRest: (!safeDetail.isPplCompatibleCycle ||
+                  safeDetail.planDayNumber == null)
               ? null
               : () => _markRestDayAndPush(safeDetail),
-          onUndoRest: safeDetail.planDayNumber == null
+          onUndoRest: (!safeDetail.isPplCompatibleCycle ||
+                  safeDetail.planDayNumber == null)
               ? null
               : () => _undoRestDayPush(safeDetail),
           onRunMockAi: () => _runMockAi(safeDetail, excluded, gate),
@@ -1252,6 +1255,7 @@ class _DailyClinicalContent extends StatelessWidget {
   Widget _buildSecondaryActionRow(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final canUseSplitAction = onMarkRest != null || onUndoRest != null;
         final isCurrentRest =
             (safeDetail.planSessionType ?? '').toLowerCase().contains('rest');
         final splitActionText =
@@ -1262,6 +1266,16 @@ class _DailyClinicalContent extends StatelessWidget {
         final splitActionHandler = isCurrentRest ? onUndoRest : onMarkRest;
         final textScale = MediaQuery.textScalerOf(context).scale(1);
         final compact = constraints.maxWidth < 680 || textScale > 1.15;
+        if (!canUseSplitAction) {
+          return SizedBox(
+            width: double.infinity,
+            child: PrimaryPillButton(
+              text: 'Run Mock AI Analysis',
+              variant: PillButtonVariant.outlined,
+              onPressed: onRunMockAi,
+            ),
+          );
+        }
         if (compact) {
           return Column(
             children: [

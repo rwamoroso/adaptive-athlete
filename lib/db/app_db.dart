@@ -19,6 +19,7 @@ import 'tables/actual_strength_sets.dart';
 import 'tables/app_prompt_templates.dart';
 import 'tables/app_context_state.dart';
 import 'tables/ai_audit.dart';
+import 'tables/athlete_planning_profiles.dart';
 import 'tables/cloud_athlete_profile_assignments.dart';
 import 'tables/cloud_athlete_profiles.dart';
 import 'tables/cloud_workspace_invites.dart';
@@ -42,6 +43,7 @@ import 'tables/run_session_details.dart';
 import 'tables/run_sessions.dart';
 import 'tables/sleep_nights.dart';
 import 'tables/workout_days.dart';
+import 'tables/weekly_plan_build_requests.dart';
 
 part 'app_db.g.dart';
 
@@ -497,6 +499,7 @@ class WorkoutDayDetail {
     required this.planDayId,
     required this.planDayNumber,
     required this.planSessionType,
+    required this.isPplCompatibleCycle,
     required this.prescribedRun,
     required this.sleepNights,
     required this.runSessions,
@@ -512,6 +515,7 @@ class WorkoutDayDetail {
   final String? planDayId;
   final int? planDayNumber;
   final String? planSessionType;
+  final bool isPplCompatibleCycle;
   final PrescribedRunPlan? prescribedRun;
   final List<SleepNight> sleepNights;
   final List<RunSessionWithSegments> runSessions;
@@ -602,6 +606,8 @@ class ManualRunSegmentInput {
     CloudAthleteProfileAssignments,
     CloudWorkspaceInvites,
     AppContextState,
+    AthletePlanningProfiles,
+    WeeklyPlanBuildRequests,
   ],
 )
 class AppDb extends _$AppDb {
@@ -612,7 +618,7 @@ class AppDb extends _$AppDb {
   final Uuid _uuid = const Uuid();
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -696,6 +702,10 @@ class AppDb extends _$AppDb {
             await m.createTable(cloudWorkspaceInvites);
             await m.createTable(appContextState);
           }
+          if (from < 11) {
+            await m.createTable(athletePlanningProfiles);
+            await m.createTable(weeklyPlanBuildRequests);
+          }
         },
         beforeOpen: (details) async {
           await _ensurePlanDaysSessionTypeColumn();
@@ -713,6 +723,8 @@ class AppDb extends _$AppDb {
           await _ensureCloudAthleteProfileAssignmentsTable();
           await _ensureCloudWorkspaceInvitesTable();
           await _ensureAppContextStateTable();
+          await _ensureAthletePlanningProfilesTable();
+          await _ensureWeeklyPlanBuildRequestsTable();
         },
       );
 
@@ -1214,6 +1226,60 @@ class AppDb extends _$AppDb {
         "INSERT OR IGNORE INTO app_context_state(id) VALUES ('default')");
   }
 
+  Future<void> _ensureAthletePlanningProfilesTable() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'athlete_planning_profiles' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists != null) {
+      return;
+    }
+    await customStatement('''
+      CREATE TABLE athlete_planning_profiles (
+        id TEXT NOT NULL PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        athlete_profile_id TEXT NOT NULL,
+        primary_goal TEXT NOT NULL,
+        goal_target_json TEXT NOT NULL,
+        experience_level TEXT NOT NULL,
+        preferred_split TEXT NOT NULL,
+        days_per_week INTEGER NOT NULL,
+        available_equipment_json TEXT NOT NULL,
+        contraindications_json TEXT NOT NULL,
+        schedule_constraints_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(workspace_id, athlete_profile_id)
+      )
+    ''');
+  }
+
+  Future<void> _ensureWeeklyPlanBuildRequestsTable() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'weekly_plan_build_requests' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists != null) {
+      return;
+    }
+    await customStatement('''
+      CREATE TABLE weekly_plan_build_requests (
+        id TEXT NOT NULL PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        athlete_profile_id TEXT NOT NULL,
+        week_start TEXT NOT NULL,
+        week_end TEXT NOT NULL,
+        split_type TEXT NOT NULL,
+        modifier TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        prompt_snapshot TEXT NOT NULL,
+        request_payload_json TEXT NOT NULL,
+        response_payload_json TEXT NULL,
+        success INTEGER NOT NULL,
+        error_text TEXT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+  }
+
   String _startOfWeekYmd(String ymd) {
     final date = parseYmd(ymd);
     final monday = date.subtract(Duration(days: date.weekday - 1));
@@ -1251,6 +1317,21 @@ class AppDb extends _$AppDb {
     if (normalized.contains('rest')) {
       return 'rest';
     }
+    if (normalized.contains('full body') || normalized.contains('full_body')) {
+      return 'full_body';
+    }
+    if (normalized.contains('upper')) {
+      return 'upper';
+    }
+    if (normalized.contains('lower')) {
+      return 'lower';
+    }
+    if (normalized.contains('hybrid')) {
+      return 'hybrid';
+    }
+    if (normalized.contains('conditioning') || normalized.contains('cardio')) {
+      return 'conditioning';
+    }
     if (normalized.contains('push')) {
       return 'push';
     }
@@ -1274,6 +1355,16 @@ class AppDb extends _$AppDb {
         return 'Pull';
       case 'legs':
         return 'Legs';
+      case 'upper':
+        return 'Upper';
+      case 'lower':
+        return 'Lower';
+      case 'full_body':
+        return 'Full Body';
+      case 'hybrid':
+        return 'Hybrid';
+      case 'conditioning':
+        return 'Conditioning';
       case 'rest':
         return 'Rest';
       default:
@@ -1396,6 +1487,32 @@ class AppDb extends _$AppDb {
           : fallbackSheetName;
     }
     return 'Day $dayNumber - $label';
+  }
+
+  bool _isPplCompatibleSessionType(String? value) {
+    final normalized = _normalizeSessionType(value);
+    return normalized == 'push' ||
+        normalized == 'pull' ||
+        normalized == 'legs' ||
+        normalized == 'rest';
+  }
+
+  Future<bool> _isPplCompatibleCycle(String? planCycleId) async {
+    if (planCycleId == null) {
+      return true;
+    }
+    final dayRows = await (select(planDays)
+          ..where((d) => d.planCycleId.equals(planCycleId)))
+        .get();
+    if (dayRows.isEmpty) {
+      return true;
+    }
+    for (final day in dayRows) {
+      if (!_isPplCompatibleSessionType(day.sessionType ?? day.sheetName)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Future<String> createOrGetWorkoutDayByDate(String dateString) async {
@@ -2463,6 +2580,111 @@ class AppDb extends _$AppDb {
     await (delete(appPromptTemplates)
           ..where((t) => t.templateKey.equals(templateKey)))
         .go();
+  }
+
+  Future<AthletePlanningProfile?> getAthletePlanningProfile({
+    required String workspaceId,
+    required String athleteProfileId,
+  }) {
+    return (select(athletePlanningProfiles)
+          ..where((t) => t.workspaceId.equals(workspaceId))
+          ..where((t) => t.athleteProfileId.equals(athleteProfileId))
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.updatedAt, mode: OrderingMode.desc),
+          ])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  Future<void> upsertAthletePlanningProfile({
+    required String workspaceId,
+    required String athleteProfileId,
+    required String primaryGoal,
+    required String goalTargetJson,
+    required String experienceLevel,
+    required String preferredSplit,
+    required int daysPerWeek,
+    required String availableEquipmentJson,
+    required String contraindicationsJson,
+    required String scheduleConstraintsJson,
+  }) async {
+    final now = unixMsNow();
+    final existing = await getAthletePlanningProfile(
+      workspaceId: workspaceId,
+      athleteProfileId: athleteProfileId,
+    );
+
+    final companion = AthletePlanningProfilesCompanion(
+      primaryGoal: Value(primaryGoal),
+      goalTargetJson: Value(goalTargetJson),
+      experienceLevel: Value(experienceLevel),
+      preferredSplit: Value(preferredSplit),
+      daysPerWeek: Value(daysPerWeek),
+      availableEquipmentJson: Value(availableEquipmentJson),
+      contraindicationsJson: Value(contraindicationsJson),
+      scheduleConstraintsJson: Value(scheduleConstraintsJson),
+      updatedAt: Value(now),
+    );
+
+    if (existing == null) {
+      await into(athletePlanningProfiles).insert(
+        AthletePlanningProfilesCompanion.insert(
+          id: _uuid.v4(),
+          workspaceId: workspaceId,
+          athleteProfileId: athleteProfileId,
+          primaryGoal: primaryGoal,
+          goalTargetJson: goalTargetJson,
+          experienceLevel: experienceLevel,
+          preferredSplit: preferredSplit,
+          daysPerWeek: daysPerWeek,
+          availableEquipmentJson: availableEquipmentJson,
+          contraindicationsJson: contraindicationsJson,
+          scheduleConstraintsJson: scheduleConstraintsJson,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      return;
+    }
+
+    await (update(athletePlanningProfiles)
+          ..where((t) => t.id.equals(existing.id)))
+        .write(companion);
+  }
+
+  Future<void> insertWeeklyPlanBuildRequest({
+    required String workspaceId,
+    required String athleteProfileId,
+    required String weekStart,
+    required String weekEnd,
+    required String splitType,
+    required String modifier,
+    required String mode,
+    required String promptSnapshot,
+    required String requestPayloadJson,
+    required bool success,
+    String? responsePayloadJson,
+    String? errorText,
+  }) async {
+    await into(weeklyPlanBuildRequests).insert(
+      WeeklyPlanBuildRequestsCompanion.insert(
+        id: _uuid.v4(),
+        workspaceId: workspaceId,
+        athleteProfileId: athleteProfileId,
+        weekStart: weekStart,
+        weekEnd: weekEnd,
+        splitType: splitType,
+        modifier: modifier,
+        mode: mode,
+        promptSnapshot: promptSnapshot,
+        requestPayloadJson: requestPayloadJson,
+        responsePayloadJson: Value(responsePayloadJson),
+        success: success,
+        errorText: Value(errorText),
+        createdAt: unixMsNow(),
+      ),
+    );
   }
 
   Future<void> insertPrescribedStrengthSet({
@@ -4188,7 +4410,18 @@ class AppDb extends _$AppDb {
             currentDay.sessionType = 'unknown';
             break;
           }
-          const allowed = {'push', 'pull', 'legs', 'rest', 'unknown'};
+          const allowed = {
+            'push',
+            'pull',
+            'legs',
+            'upper',
+            'lower',
+            'full_body',
+            'hybrid',
+            'conditioning',
+            'rest',
+            'unknown',
+          };
           if (!allowed.contains(raw)) {
             throw StateError(
               'Line $lineNo: invalid SESSION_TYPE "$payload".',
@@ -5568,6 +5801,8 @@ class AppDb extends _$AppDb {
       storedSessionType: matchedPlanDay?.sessionType,
       plannedSets: plannedSets,
     );
+    final activeCycleId = activeCycle?.id ?? matchedPlanDay?.planCycleId;
+    final isPplCompatibleCycle = await _isPplCompatibleCycle(activeCycleId);
     final prescribedRunView = plannedRun == null
         ? null
         : PrescribedRunPlan(
@@ -5610,6 +5845,7 @@ class AppDb extends _$AppDb {
         planDayId: matchedPlanDayId,
         planDayNumber: matchedPlanDay?.dayNumber,
         planSessionType: resolvedPlanSessionType,
+        isPplCompatibleCycle: isPplCompatibleCycle,
         prescribedRun: prescribedRunView,
         sleepNights: sleeps,
         runSessions: const <RunSessionWithSegments>[],
@@ -5687,6 +5923,7 @@ class AppDb extends _$AppDb {
       planDayId: matchedPlanDayId,
       planDayNumber: matchedPlanDay?.dayNumber,
       planSessionType: resolvedPlanSessionType,
+      isPplCompatibleCycle: isPplCompatibleCycle,
       prescribedRun: prescribedRunView,
       sleepNights: sleeps,
       runSessions: runWithSegments,

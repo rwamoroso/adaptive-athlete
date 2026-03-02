@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../db/app_db.dart';
 import '../../features/ai/ai_analyze_service.dart';
 import '../../features/plan/weekly_plan_prompt_service.dart';
+import '../../features/plan/weekly_planner_service.dart';
 import '../../features/training/exercise_substitution_service.dart';
 import '../../features/workspace/invite_service.dart';
 import '../../features/workspace/workspace_models.dart';
@@ -213,6 +214,14 @@ final exerciseSubstitutionServiceProvider =
 final weeklyPlanPromptServiceProvider =
     Provider<WeeklyPlanPromptService>((ref) {
   return WeeklyPlanPromptService(db: ref.read(appDbProvider));
+});
+
+final weeklyPlannerServiceProvider = Provider<WeeklyPlannerService>((ref) {
+  return WeeklyPlannerService(
+    db: ref.read(appDbProvider),
+    promptService: ref.read(weeklyPlanPromptServiceProvider),
+    client: Supabase.instance.client,
+  );
 });
 
 final workspaceServiceProvider = Provider<WorkspaceService>((ref) {
