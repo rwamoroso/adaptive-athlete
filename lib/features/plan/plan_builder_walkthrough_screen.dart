@@ -262,7 +262,7 @@ class _PlanBuilderWalkthroughScreenState
                       ),
                       const TextSpan(
                         text:
-                            '. That’s the science behind GAS — General Adaptation Syndrome — and it’s the  of how this app builds your training.',
+                            '. That’s the science behind GAS — General Adaptation Syndrome — and it’s the backbone of how this app builds your training.',
                       ),
                     ],
                   ),
