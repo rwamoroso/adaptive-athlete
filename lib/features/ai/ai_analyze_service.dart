@@ -137,8 +137,10 @@ class AiAnalyzeResponse {
 class AiAnalyzeRequest {
   const AiAnalyzeRequest({
     required this.date,
+    required this.runScheduled,
     required this.runsCount,
     required this.sleepMinutes,
+    required this.strengthScheduled,
     required this.strengthSetsCount,
     required this.treadmillExcludedSegments,
     required this.progressionAllowed,
@@ -148,8 +150,10 @@ class AiAnalyzeRequest {
   });
 
   final String date;
+  final bool runScheduled;
   final int runsCount;
   final int? sleepMinutes;
+  final bool strengthScheduled;
   final int strengthSetsCount;
   final int treadmillExcludedSegments;
   final bool progressionAllowed;
@@ -159,8 +163,10 @@ class AiAnalyzeRequest {
 
   Map<String, dynamic> toSnapshotJson() => {
         'date': date,
+        'run_scheduled': runScheduled,
         'runs_count': runsCount,
         'sleep_minutes': sleepMinutes,
+        'strength_scheduled': strengthScheduled,
         'strength_sets_count': strengthSetsCount,
         'treadmill_excluded_segments': treadmillExcludedSegments,
         'progression_allowed': progressionAllowed,
@@ -172,26 +178,35 @@ class AiAnalyzeService {
   const AiAnalyzeService();
 
   Future<AiAnalyzeResponse> analyze(AiAnalyzeRequest request) async {
+    final runMissing = request.runScheduled && request.runsCount == 0;
+    final strengthMissing =
+        request.strengthScheduled && request.strengthSetsCount == 0;
+    final sleepMissing = request.sleepMinutes == null;
+
     final sleepSummary = request.sleepMinutes == null
         ? 'unknown'
         : '${request.sleepMinutes} min';
+    final runsSummary = !request.runScheduled
+        ? 'not scheduled'
+        : (request.runsCount == 0
+            ? 'unknown'
+            : '${request.runsCount} run session(s)');
+    final strengthSummary = !request.strengthScheduled
+        ? 'not scheduled'
+        : (request.strengthSetsCount == 0
+            ? 'unknown'
+            : '${request.strengthSetsCount} actual set(s)');
 
     return AiAnalyzeResponse(
       extractedDataSummary: ExtractedDataSummary(
-        runsSummary: request.runsCount == 0
-            ? 'unknown'
-            : '${request.runsCount} run session(s)',
+        runsSummary: runsSummary,
         sleepSummary: sleepSummary,
-        strengthSummary: request.strengthSetsCount == 0
-            ? 'unknown'
-            : '${request.strengthSetsCount} actual set(s)',
+        strengthSummary: strengthSummary,
       ),
       flags: AiFlags(
         treadmillArtifactsDetected: request.treadmillExcludedSegments > 0,
         lowSleep: request.sleepMinutes != null && request.sleepMinutes! < 360,
-        missingMetrics: request.sleepMinutes == null ||
-            request.runsCount == 0 ||
-            request.strengthSetsCount == 0,
+        missingMetrics: sleepMissing || runMissing || strengthMissing,
       ),
       progressionAllowed: request.progressionAllowed,
       reasoning: request.progressionReasoning,

@@ -250,6 +250,13 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     final aiService = ref.read(aiAnalyzeServiceProvider);
     final db = ref.read(appDbProvider);
 
+    final runPlan = detail.prescribedRun;
+    final runScheduled = ((runPlan?.runType ?? '').trim().isNotEmpty) ||
+        ((runPlan?.durationText ?? '').trim().isNotEmpty) ||
+        ((runPlan?.targetPace ?? '').trim().isNotEmpty);
+    final strengthScheduled =
+        detail.groups.any((group) => group.prescribed.isNotEmpty);
+
     final actualCount =
         detail.groups.fold<int>(0, (sum, group) => sum + group.actual.length);
     final sleepMin = detail.sleepNights.isEmpty
@@ -258,8 +265,10 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
 
     final request = AiAnalyzeRequest(
       date: _selectedDate,
+      runScheduled: runScheduled,
       runsCount: detail.runSessions.length,
       sleepMinutes: sleepMin,
+      strengthScheduled: strengthScheduled,
       strengthSetsCount: actualCount,
       treadmillExcludedSegments: treadmillExcluded,
       progressionAllowed: gate.progressionAllowed,

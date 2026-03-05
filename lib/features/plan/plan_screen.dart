@@ -4,7 +4,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/rules/recovery_gating.dart';
 import '../../core/utils/app_providers.dart';
@@ -32,6 +31,18 @@ class _ShortTermGoalDraft {
 
   final String goalText;
   final String timelineWeeks;
+}
+
+class _PlanSchedulePreviewDay {
+  const _PlanSchedulePreviewDay({
+    required this.dayLabel,
+    required this.runTitle,
+    required this.strengthTitle,
+  });
+
+  final String dayLabel;
+  final String? runTitle;
+  final String? strengthTitle;
 }
 
 class _ShortTermGoalScreen extends StatefulWidget {
@@ -233,6 +244,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   bool _legacyAiImporting = false;
   bool _legacyStandardImporting = false;
 
+  late Future<List<_PlanSchedulePreviewDay>> _schedulePreviewFuture;
   String? _loadedScopeKey;
   int? _walkthroughLastStepIndex;
 
@@ -243,6 +255,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     _selectedEquipment.addAll(settings.availableEquipment);
     _selectedContraindications.addAll(settings.movementContraindications);
     _manualAiResponseController.text = ref.read(aiWeeklyPlanResponseProvider);
+    _schedulePreviewFuture = _loadSchedulePreview();
   }
 
   @override
@@ -373,6 +386,219 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       default:
         return 'Day';
     }
+  }
+
+  String _compactDayLabelFromYmd({
+    required int dayNumber,
+    required String? ymd,
+  }) {
+    final raw = (ymd ?? '').trim();
+    if (raw.isEmpty) {
+      return 'Day $dayNumber';
+    }
+    try {
+      final date = parseYmd(raw);
+      final weekday = _weekdayLabel(date.weekday);
+      final shortWeekday =
+          weekday.length > 3 ? weekday.substring(0, 3) : weekday;
+      return '$shortWeekday ${date.month}/${date.day}';
+    } catch (_) {
+      return 'Day $dayNumber';
+    }
+  }
+
+  String _titleCaseWords(String raw) {
+    final words = raw
+        .split(RegExp(r'[_\-\s]+'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (words.isEmpty) {
+      return '';
+    }
+    return words
+        .map(
+          (part) =>
+              '${part.substring(0, 1).toUpperCase()}${part.substring(1).toLowerCase()}',
+        )
+        .join(' ');
+  }
+
+  String? _buildRunTitle({
+    required String? runType,
+    required String? durationText,
+    required String? notes,
+  }) {
+    final type = (runType ?? '').trim();
+    final duration = (durationText ?? '').trim();
+    if (type.isNotEmpty && duration.isNotEmpty) {
+      return '$type • $duration';
+    }
+    if (type.isNotEmpty) {
+      return type;
+    }
+    if (duration.isNotEmpty) {
+      return duration;
+    }
+    final noteText = (notes ?? '').trim();
+    if (noteText.isNotEmpty) {
+      return noteText;
+    }
+    return null;
+  }
+
+  String? _buildStrengthTitle({
+    required String? sessionType,
+    required String? sheetName,
+    required String? liftFocus,
+    required bool hasStrengthSets,
+  }) {
+    final normalized = (sessionType ?? '').trim().toLowerCase();
+    if (normalized.isNotEmpty && normalized != 'rest' && normalized != 'run') {
+      final title = _titleCaseWords(normalized);
+      if (title.isNotEmpty) {
+        return '$title Focus';
+      }
+    }
+    final lift = (liftFocus ?? '').trim();
+    if (lift.isNotEmpty) {
+      return lift;
+    }
+    if (hasStrengthSets) {
+      final sheet = _titleCaseWords((sheetName ?? '').trim());
+      if (sheet.isNotEmpty && sheet.toLowerCase() != 'rest') {
+        return sheet;
+      }
+      return 'Strength Session';
+    }
+    return null;
+  }
+
+  Future<List<_PlanSchedulePreviewDay>> _loadSchedulePreview() async {
+    final db = ref.read(appDbProvider);
+    final anchor = DateTime(_startDate.year, _startDate.month, _startDate.day);
+    final cycle = await db.getActivePlanCycleForDate(toYmd(anchor));
+    if (cycle == null) {
+      return const <_PlanSchedulePreviewDay>[];
+    }
+    final days = <_PlanSchedulePreviewDay>[];
+    for (var dayNumber = 1; dayNumber <= 7; dayNumber++) {
+      final detail = await db.getPlanDayDetail(
+        planCycleId: cycle.id,
+        dayNumber: dayNumber,
+      );
+      if (detail == null) {
+        continue;
+      }
+      final run = detail.prescribedRun;
+      days.add(
+        _PlanSchedulePreviewDay(
+          dayLabel: _compactDayLabelFromYmd(
+            dayNumber: dayNumber,
+            ymd: detail.day.estimatedDate,
+          ),
+          runTitle: _buildRunTitle(
+            runType: run?.runType,
+            durationText: run?.durationText,
+            notes: run?.notes,
+          ),
+          strengthTitle: _buildStrengthTitle(
+            sessionType: detail.day.sessionType,
+            sheetName: detail.day.sheetName,
+            liftFocus: run?.liftFocus,
+            hasStrengthSets: detail.strengthSets.isNotEmpty,
+          ),
+        ),
+      );
+    }
+    return days;
+  }
+
+  void _refreshSchedulePreview() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _schedulePreviewFuture = _loadSchedulePreview();
+    });
+  }
+
+  Widget _buildSchedulePreviewCard(BuildContext context) {
+    return GlassCard(
+      child: FutureBuilder<List<_PlanSchedulePreviewDay>>(
+        future: _schedulePreviewFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (snapshot.hasError) {
+            return Text(
+              'Could not load weekly schedule preview.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            );
+          }
+          final days = snapshot.data ?? const <_PlanSchedulePreviewDay>[];
+          if (days.isEmpty) {
+            return Text(
+              'No active weekly plan found for the selected start date.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            );
+          }
+          return Column(
+            children: [
+              for (var i = 0; i < days.length; i++) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 88,
+                        child: Text(
+                          days[i].dayLabel,
+                          style:
+                              Theme.of(context).textTheme.labelLarge?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (days[i].runTitle != null)
+                              Text(
+                                'Run: ${days[i].runTitle}',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            if (days[i].strengthTitle != null)
+                              Text(
+                                'Strength: ${days[i].strengthTitle}',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            if (days[i].runTitle == null &&
+                                days[i].strengthTitle == null)
+                              Text(
+                                'Rest / Recovery',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (i != days.length - 1) const Divider(height: 1),
+              ],
+            ],
+          );
+        },
+      ),
+    );
   }
 
   List<int> _selectedWeekdaysSorted() {
@@ -574,61 +800,6 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     return goalTarget;
   }
 
-  String _scopeUsername() {
-    final ctx = ref.read(activeWorkspaceContextProvider).valueOrNull;
-    User? user;
-    try {
-      user = Supabase.instance.client.auth.currentUser;
-    } catch (_) {
-      user = null;
-    }
-
-    if (ctx != null) {
-      for (final membership in ctx.memberships) {
-        final isCurrentUser = membership.userId == ctx.userId;
-        final isCurrentWorkspace = membership.workspaceId == ctx.workspaceId;
-        if (!isCurrentUser || !isCurrentWorkspace) {
-          continue;
-        }
-        final displayName = membership.displayName?.trim();
-        if (displayName != null && displayName.isNotEmpty) {
-          return displayName;
-        }
-      }
-    }
-
-    final metadata = user?.userMetadata;
-    if (metadata != null) {
-      const metadataKeys = <String>[
-        'username',
-        'display_name',
-        'full_name',
-        'name',
-      ];
-      for (final key in metadataKeys) {
-        final value = metadata[key]?.toString().trim();
-        if (value != null && value.isNotEmpty) {
-          return value;
-        }
-      }
-    }
-
-    final email = user?.email?.trim();
-    if (email != null && email.isNotEmpty) {
-      final atIndex = email.indexOf('@');
-      if (atIndex > 0) {
-        return email.substring(0, atIndex);
-      }
-      return email;
-    }
-
-    final userId = user?.id;
-    if (userId != null && userId.isNotEmpty) {
-      return userId.length > 8 ? userId.substring(0, 8) : userId;
-    }
-    return 'local_user';
-  }
-
   Future<void> _loadPlanningProfileIfNeeded() async {
     final scopeKey = '${_scopeWorkspaceId()}|${_scopeProfileId()}';
     if (_loadedScopeKey == scopeKey) {
@@ -798,6 +969,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
             ? 'One-tap AI completed with no import result.'
             : 'One-tap AI build applied: ${result.importResult!.pretty()}';
       });
+      _refreshSchedulePreview();
       _showMessage('One-tap AI build complete.');
     } catch (e) {
       final raw = e.toString();
@@ -857,6 +1029,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       setState(() {
         _status = 'Manual AI plan applied: ${result.pretty()}';
       });
+      _refreshSchedulePreview();
       _showMessage('Manual AI weekly plan applied.');
     } catch (e) {
       _showMessage('Manual AI apply failed: $e');
@@ -911,7 +1084,10 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       lastDate: DateTime(2100),
     );
     if (selected != null) {
-      setState(() => _startDate = selected);
+      setState(() {
+        _startDate = selected;
+        _schedulePreviewFuture = _loadSchedulePreview();
+      });
     }
   }
 
@@ -1028,6 +1204,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         _status =
             'Legacy template generated ${parsed.days.length} days, $insertedSets sets.';
       });
+      _refreshSchedulePreview();
       _showMessage('Legacy template plan generated.');
     } catch (e) {
       _showMessage('Legacy template generation failed: $e');
@@ -1066,6 +1243,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       setState(() {
         _status = 'Legacy AI text import complete: ${result.pretty()}';
       });
+      _refreshSchedulePreview();
       _showMessage('Legacy AI text imported.');
     } catch (e) {
       _showMessage('Legacy AI text import failed: $e');
@@ -1102,6 +1280,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       setState(() {
         _status = 'Legacy workbook import complete: ${result.pretty()}';
       });
+      _refreshSchedulePreview();
       _showMessage('Standard workbook imported.');
     } catch (e) {
       _showMessage('Standard workbook import failed: $e');
@@ -1251,8 +1430,6 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         _loadPlanningProfileIfNeeded();
       }
     });
-    final metricTileHeight =
-        MediaQuery.sizeOf(context).width < 380 ? 82.0 : 88.0;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
@@ -1270,34 +1447,10 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               'One guided flow for intake, weekly setup, generation, and apply.',
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: metricTileHeight,
-                child: MetricTile(
-                  title: 'Scope',
-                  valueText: _scopeUsername(),
-                  subtitleText: _scopeWorkspaceId(),
-                  leadingIcon: Icons.badge_outlined,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SizedBox(
-                height: metricTileHeight,
-                child: MetricTile(
-                  title: 'Planner Backend',
-                  valueText: 'Manual Assist Mode',
-                  subtitleText: 'AI Assist account not funded',
-                  leadingIcon: Icons.auto_awesome_outlined,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 2),
+        const SectionHeader(text: 'Weekly Run + Strength Schedule'),
+        const SizedBox(height: 8),
+        _buildSchedulePreviewCard(context),
+        const SizedBox(height: 10),
         SizedBox(
           width: double.infinity,
           child: PrimaryPillButton(
