@@ -61,6 +61,16 @@ create table if not exists public.workspace_invites (
   accepted_at timestamptz null
 );
 
+create table if not exists public.user_email_bindings (
+  email text primary key check (email = lower(email)),
+  user_id uuid not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_user_email_bindings_user_id
+  on public.user_email_bindings(user_id);
+
 -- Domain tables
 create table if not exists public.workout_days (
   id text primary key,
@@ -485,6 +495,7 @@ alter table public.plan_summary_snapshots enable row level security;
 alter table public.plan_import_audit enable row level security;
 alter table public.athlete_planning_profiles enable row level security;
 alter table public.weekly_plan_build_requests enable row level security;
+alter table public.user_email_bindings enable row level security;
 
 -- Authorization helper functions
 create or replace function public.current_user_id()
@@ -493,6 +504,42 @@ language sql
 stable
 as $$
   select auth.uid();
+$$;
+
+create or replace function public.ensure_email_user_binding(
+  p_user_id uuid,
+  p_email text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_email text;
+  v_existing_user_id uuid;
+begin
+  if p_user_id is null then
+    raise exception 'User id is required';
+  end if;
+
+  v_email := lower(trim(coalesce(p_email, '')));
+  if v_email = '' then
+    raise exception 'Email claim is required';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(v_email));
+
+  insert into public.user_email_bindings(email, user_id, updated_at)
+  values (v_email, p_user_id, now())
+  on conflict (email)
+  do update set updated_at = now()
+  returning user_id into v_existing_user_id;
+
+  if v_existing_user_id <> p_user_id then
+    raise exception 'Email "%" is already bound to another user.', v_email;
+  end if;
+end;
 $$;
 
 create or replace function public.is_workspace_member(p_workspace_id uuid)
@@ -818,6 +865,11 @@ begin
   end if;
 
   v_user_email := coalesce(lower(auth.jwt()->>'email'), '');
+  if v_user_email = '' then
+    raise exception 'Authenticated user does not have an email claim';
+  end if;
+  perform public.ensure_email_user_binding(v_user_id, v_user_email);
+  perform pg_advisory_xact_lock(hashtext(v_user_id::text));
 
   if not exists (
     select 1
@@ -872,25 +924,78 @@ begin
     );
   end if;
 
-  select wm.workspace_id, wm.role
+  select ranked.workspace_id, ranked.role
   into v_workspace_id, v_role
-  from public.workspace_memberships wm
-  where wm.user_id = v_user_id
-    and wm.status = 'active'
-  order by wm.created_at asc
+  from (
+    select
+      wm.workspace_id,
+      wm.role,
+      exists (
+        select 1
+        from public.plan_cycles pc
+        join public.athlete_profile_assignments apa
+          on apa.workspace_id = pc.workspace_id
+         and apa.athlete_profile_id = pc.athlete_profile_id
+         and apa.user_id = v_user_id
+         and apa.can_view = true
+        where pc.workspace_id = wm.workspace_id
+        limit 1
+      ) as has_plan_data,
+      exists (
+        select 1
+        from public.workout_days wd
+        join public.athlete_profile_assignments apa
+          on apa.workspace_id = wd.workspace_id
+         and apa.athlete_profile_id = wd.athlete_profile_id
+         and apa.user_id = v_user_id
+         and apa.can_view = true
+        where wd.workspace_id = wm.workspace_id
+        limit 1
+      ) as has_training_data,
+      wm.created_at
+    from public.workspace_memberships wm
+    where wm.user_id = v_user_id
+      and wm.status = 'active'
+  ) ranked
+  order by
+    ranked.has_plan_data desc,
+    ranked.has_training_data desc,
+    ranked.created_at asc
   limit 1;
 
   if v_workspace_id is null then
     raise exception 'No active workspace membership found.';
   end if;
 
-  select apa.athlete_profile_id
+  select ranked_profile.athlete_profile_id
   into v_profile_id
-  from public.athlete_profile_assignments apa
-  where apa.workspace_id = v_workspace_id
-    and apa.user_id = v_user_id
-    and apa.can_view = true
-  order by apa.created_at asc
+  from (
+    select
+      apa.athlete_profile_id,
+      exists (
+        select 1
+        from public.plan_cycles pc
+        where pc.workspace_id = apa.workspace_id
+          and pc.athlete_profile_id = apa.athlete_profile_id
+        limit 1
+      ) as has_plan_data,
+      exists (
+        select 1
+        from public.workout_days wd
+        where wd.workspace_id = apa.workspace_id
+          and wd.athlete_profile_id = apa.athlete_profile_id
+        limit 1
+      ) as has_training_data,
+      apa.created_at
+    from public.athlete_profile_assignments apa
+    where apa.workspace_id = v_workspace_id
+      and apa.user_id = v_user_id
+      and apa.can_view = true
+  ) ranked_profile
+  order by
+    ranked_profile.has_plan_data desc,
+    ranked_profile.has_training_data desc,
+    ranked_profile.created_at asc
   limit 1;
 
   if v_profile_id is null then
@@ -923,9 +1028,61 @@ begin
 
   v_needs_legacy_claim := exists (
     select 1
-    from public.workout_days
-    where workspace_id is null
-       or athlete_profile_id is null
+    from (
+      select 1 from public.workout_days
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.actual_strength_sets
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.prescribed_strength_sets
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.sleep_nights
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.run_sessions
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.run_segments
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.run_session_details
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.run_override_audit
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.rule_triggers
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.ai_audit
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.plan_cycles
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.plan_days
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.plan_prescribed_strength_sets
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.plan_prescribed_runs
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.plan_exercise_alternatives
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.exercise_substitutions
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.plan_summary_snapshots
+      where workspace_id is null or athlete_profile_id is null
+      union all
+      select 1 from public.plan_import_audit
+      where workspace_id is null or athlete_profile_id is null
+    ) legacy_rows
     limit 1
   );
 
@@ -1112,6 +1269,7 @@ begin
   if v_user_email = '' then
     raise exception 'Authenticated user does not have an email claim';
   end if;
+  perform public.ensure_email_user_binding(v_user_id, v_user_email);
 
   if coalesce(trim(p_token), '') = '' then
     raise exception 'Invite token is required';

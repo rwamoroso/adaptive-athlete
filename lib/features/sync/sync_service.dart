@@ -37,15 +37,28 @@ class SyncService {
       }
 
       final hasLocalRows = await _hasAnyLocalRows();
+      final hasCloudRows = await _hasAnyCloudRows();
+      if (hasCloudRows) {
+        await _pullFromSupabase();
+        await _pruneEmptyLocalPlanCycles();
+        if (hasLocalRows) {
+          await _pushToSupabase();
+          await _pullFromSupabase();
+          await _pruneEmptyLocalPlanCycles();
+          return 'Sync complete: cloud pulled, local merged, then cloud refreshed locally.';
+        }
+        await _pushToSupabase();
+        return 'Sync complete: cloud pulled to local, then local pushed to cloud.';
+      }
+
       if (hasLocalRows) {
         await _pushToSupabase();
         await _pullFromSupabase();
-        return 'Sync complete: local pushed to cloud, then cloud pulled to local.';
+        await _pruneEmptyLocalPlanCycles();
+        return 'Sync complete: local pushed to empty cloud, then cloud pulled to local.';
       }
 
-      await _pullFromSupabase();
-      await _pushToSupabase();
-      return 'Sync complete: cloud pulled to empty local, then local pushed to cloud.';
+      return 'Sync complete: nothing to sync yet.';
     } catch (e) {
       return 'Sync failed: $e';
     }
@@ -72,6 +85,29 @@ class SyncService {
             .getSingleOrNull() !=
         null) {
       return true;
+    }
+    return false;
+  }
+
+  Future<bool> _hasAnyCloudRows() async {
+    final tables = <String>[
+      'workout_days',
+      'plan_cycles',
+      'actual_strength_sets',
+      'run_sessions',
+      'sleep_nights',
+      'athlete_planning_profiles',
+    ];
+    for (final table in tables) {
+      final response = await client
+          .from(table)
+          .select('id')
+          .eq('workspace_id', _context.workspaceId)
+          .eq('athlete_profile_id', _context.athleteProfileId)
+          .limit(1);
+      if ((response as List).isNotEmpty) {
+        return true;
+      }
     }
     return false;
   }
@@ -120,6 +156,70 @@ class SyncService {
     await _pullRunOverrideAudit();
     await _pullRuleTriggers();
     await _pullAiAudit();
+  }
+
+  Future<Set<String>> _localPlanCycleIdsWithPrescribedContent() async {
+    final dayRows = await db.select(db.planDays).get();
+    if (dayRows.isEmpty) {
+      return const <String>{};
+    }
+    final setDayIds = (await db.select(db.planPrescribedStrengthSets).get())
+        .map((row) => row.planDayId)
+        .toSet();
+    final runDayIds = (await db.select(db.planPrescribedRuns).get())
+        .map((row) => row.planDayId)
+        .toSet();
+    final contentDayIds = <String>{...setDayIds, ...runDayIds};
+    if (contentDayIds.isEmpty) {
+      return const <String>{};
+    }
+    final cycleIds = <String>{};
+    for (final day in dayRows) {
+      if (contentDayIds.contains(day.id)) {
+        cycleIds.add(day.planCycleId);
+      }
+    }
+    return cycleIds;
+  }
+
+  Future<void> _pruneEmptyLocalPlanCycles() async {
+    final cycleIdsWithContent = await _localPlanCycleIdsWithPrescribedContent();
+    final cycles = await db.select(db.planCycles).get();
+    final emptyCycleIds = cycles
+        .map((cycle) => cycle.id)
+        .where((id) => !cycleIdsWithContent.contains(id))
+        .toList();
+    if (emptyCycleIds.isEmpty) {
+      return;
+    }
+
+    final dayRows = await db.select(db.planDays).get();
+    final emptyDayIds = dayRows
+        .where((day) => emptyCycleIds.contains(day.planCycleId))
+        .map((day) => day.id)
+        .toList();
+
+    await db.transaction(() async {
+      if (emptyDayIds.isNotEmpty) {
+        await (db.delete(db.planExerciseAlternatives)
+              ..where((row) => row.planDayId.isIn(emptyDayIds)))
+            .go();
+        await (db.delete(db.planPrescribedStrengthSets)
+              ..where((row) => row.planDayId.isIn(emptyDayIds)))
+            .go();
+        await (db.delete(db.planPrescribedRuns)
+              ..where((row) => row.planDayId.isIn(emptyDayIds)))
+            .go();
+        await (db.delete(db.planDays)..where((row) => row.id.isIn(emptyDayIds)))
+            .go();
+      }
+      await (db.delete(db.planSummarySnapshots)
+            ..where((row) => row.planCycleId.isIn(emptyCycleIds)))
+          .go();
+      await (db.delete(db.planCycles)
+            ..where((row) => row.id.isIn(emptyCycleIds)))
+          .go();
+    });
   }
 
   Future<List<Map<String, dynamic>>> _fetchRows(
@@ -963,8 +1063,14 @@ class SyncService {
     if (rows.isEmpty) {
       return;
     }
+    final cycleIdsWithContent = await _localPlanCycleIdsWithPrescribedContent();
+    final filteredRows =
+        rows.where((row) => cycleIdsWithContent.contains(row.id)).toList();
+    if (filteredRows.isEmpty) {
+      return;
+    }
     await client.from('plan_cycles').upsert(
-          rows
+          filteredRows
               .map((r) => _scopedRow({
                     'id': r.id,
                     'cycle_key': r.cycleKey,
@@ -983,8 +1089,15 @@ class SyncService {
     if (rows.isEmpty) {
       return;
     }
+    final cycleIdsWithContent = await _localPlanCycleIdsWithPrescribedContent();
+    final filteredRows = rows
+        .where((row) => cycleIdsWithContent.contains(row.planCycleId))
+        .toList();
+    if (filteredRows.isEmpty) {
+      return;
+    }
     await client.from('plan_days').upsert(
-          rows
+          filteredRows
               .map((r) => _scopedRow({
                     'id': r.id,
                     'plan_cycle_id': r.planCycleId,
@@ -1001,10 +1114,6 @@ class SyncService {
 
   Future<void> _upsertExerciseSubstitutions() async {
     final rows = await db.select(db.exerciseSubstitutions).get();
-    await _deleteRemoteRowsMissingLocally(
-      table: 'exercise_substitutions',
-      localIds: rows.map((r) => r.id),
-    );
     if (rows.isEmpty) {
       return;
     }
@@ -1034,10 +1143,6 @@ class SyncService {
 
   Future<void> _upsertPlanPrescribedStrengthSets() async {
     final rows = await db.select(db.planPrescribedStrengthSets).get();
-    await _deleteRemoteRowsMissingLocally(
-      table: 'plan_prescribed_strength_sets',
-      localIds: rows.map((r) => r.id),
-    );
     if (rows.isEmpty) {
       return;
     }
@@ -1062,10 +1167,6 @@ class SyncService {
 
   Future<void> _upsertPlanPrescribedRuns() async {
     final rows = await db.select(db.planPrescribedRuns).get();
-    await _deleteRemoteRowsMissingLocally(
-      table: 'plan_prescribed_runs',
-      localIds: rows.map((r) => r.id),
-    );
     if (rows.isEmpty) {
       return;
     }
@@ -1090,10 +1191,6 @@ class SyncService {
 
   Future<void> _upsertPlanExerciseAlternatives() async {
     final rows = await db.select(db.planExerciseAlternatives).get();
-    await _deleteRemoteRowsMissingLocally(
-      table: 'plan_exercise_alternatives',
-      localIds: rows.map((r) => r.id),
-    );
     if (rows.isEmpty) {
       return;
     }
@@ -1211,37 +1308,6 @@ class SyncService {
               .toList(),
           onConflict: 'id',
         );
-  }
-
-  Future<void> _deleteRemoteRowsMissingLocally({
-    required String table,
-    required Iterable<String> localIds,
-  }) async {
-    final localIdSet = localIds.toSet();
-    if (localIdSet.isEmpty) {
-      return;
-    }
-    final remoteRows = await _fetchRows(table, columns: 'id');
-    final staleIds = remoteRows
-        .map((r) => r['id']?.toString())
-        .whereType<String>()
-        .where((id) => !localIdSet.contains(id))
-        .toList();
-    if (staleIds.isEmpty) {
-      return;
-    }
-    const chunkSize = 200;
-    for (var i = 0; i < staleIds.length; i += chunkSize) {
-      final end =
-          (i + chunkSize < staleIds.length) ? i + chunkSize : staleIds.length;
-      final chunk = staleIds.sublist(i, end);
-      await client
-          .from(table)
-          .delete()
-          .eq('workspace_id', _context.workspaceId)
-          .eq('athlete_profile_id', _context.athleteProfileId)
-          .inFilter('id', chunk);
-    }
   }
 }
 

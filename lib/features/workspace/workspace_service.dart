@@ -91,12 +91,16 @@ class WorkspaceService {
           .toList(),
     );
 
-    final existing = await db.getAppContextStateRow();
     final workspaceIds = workspaces.map((w) => w.id).toSet();
     final defaultWorkspaceId = _requiredString(payload, 'active_workspace_id');
-    final activeWorkspaceId = workspaceIds.contains(existing?.activeWorkspaceId)
-        ? existing!.activeWorkspaceId!
-        : defaultWorkspaceId;
+    final existing = await db.getAppContextStateRow();
+    // Trust server-selected workspace, only preserving cached context within
+    // that same workspace to avoid pinning to stale cross-workspace state.
+    final activeWorkspaceId =
+        workspaceIds.contains(defaultWorkspaceId) ? defaultWorkspaceId : null;
+    if (activeWorkspaceId == null) {
+      throw StateError('Bootstrap returned unknown active workspace.');
+    }
 
     final profileIds = assignments
         .where((a) => a.workspaceId == activeWorkspaceId && a.userId == user.id)
@@ -104,9 +108,11 @@ class WorkspaceService {
         .map((a) => a.athleteProfileId)
         .toSet();
     final defaultProfileId = _requiredString(payload, 'active_profile_id');
-    final activeProfileId = profileIds.contains(existing?.activeProfileId)
-        ? existing!.activeProfileId!
-        : defaultProfileId;
+    final activeProfileId =
+        (existing?.activeWorkspaceId == activeWorkspaceId) &&
+                profileIds.contains(existing?.activeProfileId)
+            ? existing!.activeProfileId!
+            : defaultProfileId;
 
     final role = memberships
             .where((m) =>
@@ -247,11 +253,24 @@ class WorkspaceService {
   }
 
   Future<ActiveWorkspaceContext> requireContext() async {
-    final context = await getCachedContext() ?? await bootstrapAndGetContext();
-    if (context == null) {
-      throw StateError('No active workspace context. Sign in first.');
+    try {
+      final fresh = await bootstrapAndGetContext();
+      if (fresh != null) {
+        return fresh;
+      }
+    } catch (_) {
+      final cached = await getCachedContext();
+      if (cached != null) {
+        return cached;
+      }
+      rethrow;
     }
-    return context;
+
+    final cached = await getCachedContext();
+    if (cached != null) {
+      return cached;
+    }
+    throw StateError('No active workspace context. Sign in first.');
   }
 
   Future<void> switchActiveProfile({

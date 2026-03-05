@@ -62,6 +62,10 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   bool _intervalModeTouched = false;
   String? _prescribedRunType;
   String? _prescribedLiftFocus;
+  String? _prescribedDurationText;
+  String? _prescribedTargetPace;
+  String? _prescribedEffortHrGuardrails;
+  String? _prescribedRunNotes;
   bool _loadingRunType = false;
   int _nextSegmentId = 1;
   final List<_ManualIntervalSegmentDraft> _intervalSegments =
@@ -119,11 +123,68 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         '${seconds.toString().padLeft(2, '0')}';
   }
 
-  String _formatDistanceInSelectedUnit(double valueMeters) {
-    final converted = _distanceUnit == DistanceUnit.miles
-        ? valueMeters / GarminCsvImportService.metersPerMile
-        : valueMeters / 1000;
-    return '${converted.toStringAsFixed(2)} ${_distanceUnitLabel()}';
+  double? _parsePaceSecondsPerMile(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    if (trimmed.contains(':')) {
+      final parts = trimmed.split(':');
+      if (parts.length != 2) {
+        return null;
+      }
+      final minutes = int.tryParse(parts[0]);
+      final seconds = int.tryParse(parts[1]);
+      if (minutes == null || seconds == null || minutes < 0) {
+        return null;
+      }
+      if (seconds < 0 || seconds > 59) {
+        return null;
+      }
+      final total = (minutes * 60) + seconds;
+      return total <= 0 ? null : total.toDouble();
+    }
+
+    final decimalMinutes = double.tryParse(trimmed);
+    if (decimalMinutes == null || decimalMinutes <= 0) {
+      return null;
+    }
+    return decimalMinutes * 60;
+  }
+
+  String _formatPaceTextMinPerMile(double paceSecondsPerMile) {
+    final rounded = paceSecondsPerMile.round();
+    final minutes = rounded ~/ 60;
+    final seconds = rounded % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')} min/mi';
+  }
+
+  String _formatPaceInputMinPerMile(double paceSecondsPerMile) {
+    final rounded = paceSecondsPerMile.round();
+    final minutes = rounded ~/ 60;
+    final seconds = rounded % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String _formatPaceFromDurationAndDistance({
+    required int? durationS,
+    required double? distanceM,
+  }) {
+    if (durationS == null ||
+        durationS <= 0 ||
+        distanceM == null ||
+        distanceM <= 0) {
+      return 'unknown min/mi';
+    }
+    final miles = distanceM / GarminCsvImportService.metersPerMile;
+    if (miles <= 0) {
+      return 'unknown min/mi';
+    }
+    final secondsPerMile = durationS / miles;
+    if (secondsPerMile <= 0 || !secondsPerMile.isFinite) {
+      return 'unknown min/mi';
+    }
+    return _formatPaceTextMinPerMile(secondsPerMile);
   }
 
   Future<void> _refreshRunTypeForSelectedDate() async {
@@ -136,9 +197,17 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       }
       final runType = detail.prescribedRun?.runType;
       final liftFocus = detail.prescribedRun?.liftFocus;
+      final durationText = detail.prescribedRun?.durationText;
+      final targetPace = detail.prescribedRun?.targetPace;
+      final effortHrGuardrails = detail.prescribedRun?.effortHrGuardrails;
+      final notes = detail.prescribedRun?.notes;
       setState(() {
         _prescribedRunType = runType;
         _prescribedLiftFocus = liftFocus;
+        _prescribedDurationText = durationText;
+        _prescribedTargetPace = targetPace;
+        _prescribedEffortHrGuardrails = effortHrGuardrails;
+        _prescribedRunNotes = notes;
         _loggedRunsForSelectedDate = detail.runSessions;
         _loadingRunType = false;
         if (!_intervalModeTouched && _isIntervalRunType(runType)) {
@@ -152,6 +221,12 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       }
       setState(() {
         _loadingRunType = false;
+        _prescribedRunType = null;
+        _prescribedLiftFocus = null;
+        _prescribedDurationText = null;
+        _prescribedTargetPace = null;
+        _prescribedEffortHrGuardrails = null;
+        _prescribedRunNotes = null;
         _loggedRunsForSelectedDate = const <RunSessionWithSegments>[];
       });
     }
@@ -233,21 +308,19 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         return null;
       }
 
-      final distanceText = segment.distanceController.text.trim();
-      var distanceRaw = 0.0;
-      if (distanceText.isNotEmpty) {
-        final parsedDistance = double.tryParse(distanceText);
-        if (parsedDistance == null || parsedDistance < 0) {
+      final paceText = segment.paceController.text.trim();
+      double distanceM = 0.0;
+      if (paceText.isNotEmpty) {
+        final paceSecondsPerMile = _parsePaceSecondsPerMile(paceText);
+        if (paceSecondsPerMile == null) {
           _showMessage(
-              'Segment ${i + 1} distance must be a non-negative number.');
+              'Segment ${i + 1} pace must be MM:SS min/mi (or decimal minutes).');
           return null;
         }
-        distanceRaw = parsedDistance;
+        final miles = durationSeconds / paceSecondsPerMile;
+        distanceM = miles * GarminCsvImportService.metersPerMile;
       }
 
-      final distanceM = _distanceUnit == DistanceUnit.miles
-          ? distanceRaw * GarminCsvImportService.metersPerMile
-          : distanceRaw * 1000;
       final segmentDuration = durationSeconds.round();
       final speedMps = distanceM <= 0 ? null : distanceM / segmentDuration;
       final kind =
@@ -296,21 +369,20 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         continue;
       }
 
-      final distanceText = segment.distanceController.text.trim();
-      var distanceRaw = 0.0;
-      if (distanceText.isNotEmpty) {
-        final parsed = double.tryParse(distanceText);
-        if (parsed == null || parsed < 0) {
+      final paceText = segment.paceController.text.trim();
+      var distanceM = 0.0;
+      if (paceText.isNotEmpty) {
+        final paceSecondsPerMile = _parsePaceSecondsPerMile(paceText);
+        if (paceSecondsPerMile == null) {
           hasInvalidInput = true;
           continue;
         }
-        distanceRaw = parsed;
+        final miles = duration / paceSecondsPerMile;
+        distanceM = miles * GarminCsvImportService.metersPerMile;
       }
 
       totalDurationS += duration.round();
-      totalDistanceM += _distanceUnit == DistanceUnit.miles
-          ? distanceRaw * GarminCsvImportService.metersPerMile
-          : distanceRaw * 1000;
+      totalDistanceM += distanceM;
     }
 
     return _IntervalSegmentPreview(
@@ -369,16 +441,6 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     return '${toYmd(dt)} • ${tod.format(context)}';
   }
 
-  String _formatRunDistanceForCurrentUnit(double? meters) {
-    if (meters == null) {
-      return 'unknown';
-    }
-    final value = _distanceUnit == DistanceUnit.miles
-        ? meters / GarminCsvImportService.metersPerMile
-        : meters / 1000;
-    return '${value.toStringAsFixed(2)} ${_distanceUnitLabel()}';
-  }
-
   void _clearIntervalSegments() {
     for (final segment in _intervalSegments) {
       segment.dispose();
@@ -433,11 +495,13 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
           durationText: _formatSecondsAsHms(safeDurationS),
         );
         final distanceM = seg.distanceM ?? 0.0;
-        if (distanceM > 0) {
-          final converted = _distanceUnit == DistanceUnit.miles
-              ? distanceM / GarminCsvImportService.metersPerMile
-              : distanceM / 1000;
-          draft.distanceController.text = converted.toStringAsFixed(2);
+        if (distanceM > 0 && safeDurationS > 0) {
+          final miles = distanceM / GarminCsvImportService.metersPerMile;
+          if (miles > 0) {
+            final secondsPerMile = safeDurationS / miles;
+            draft.paceController.text =
+                _formatPaceInputMinPerMile(secondsPerMile);
+          }
         }
         nextSegments.add(draft);
       }
@@ -663,6 +727,75 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                   text:
                       'Log manual runs or import Garmin CSV. Interval mode supports work/rest segment tracking.',
                 ),
+                const SizedBox(height: 10),
+                GlassCard(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Run Prescription',
+                        style: pageTheme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      if (_loadingRunType)
+                        Text(
+                          'Loading run prescription...',
+                          style: pageTheme.textTheme.bodySmall,
+                        )
+                      else if ((_prescribedRunType ?? '').trim().isEmpty)
+                        Text(
+                          'No prescribed run for ${toYmd(_selectedDate)}.',
+                          style: pageTheme.textTheme.bodySmall,
+                        )
+                      else ...[
+                        Text(
+                          _prescribedRunType!.trim(),
+                          style: pageTheme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                            height: 1.15,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Duration: ${(_prescribedDurationText ?? '').trim().isEmpty ? 'unknown' : _prescribedDurationText!.trim()}'
+                          ' | Pace: ${(_prescribedTargetPace ?? '').trim().isEmpty ? 'unknown' : _prescribedTargetPace!.trim()}',
+                          style: pageTheme.textTheme.bodySmall?.copyWith(
+                            fontSize: 11.5,
+                            height: 1.15,
+                          ),
+                        ),
+                        if ((_prescribedEffortHrGuardrails ?? '')
+                            .trim()
+                            .isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              'Guardrails: ${_prescribedEffortHrGuardrails!.trim()}',
+                              style: pageTheme.textTheme.bodySmall?.copyWith(
+                                fontSize: 11.5,
+                                height: 1.15,
+                              ),
+                            ),
+                          ),
+                        if ((_prescribedRunNotes ?? '').trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              'Notes: ${_prescribedRunNotes!.trim()}',
+                              style: pageTheme.textTheme.bodySmall?.copyWith(
+                                fontSize: 11.5,
+                                height: 1.15,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 14),
                 SectionHeader(
                   text: 'Logged Runs (${toYmd(_selectedDate)})',
@@ -692,7 +825,10 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                           final subtitleParts = <String>[
                             _formatRunStartTime(session.startTime),
                             '${session.source} • $durationText',
-                            _formatRunDistanceForCurrentUnit(session.distanceM),
+                            _formatPaceFromDurationAndDistance(
+                              durationS: session.durationS,
+                              distanceM: session.distanceM,
+                            ),
                             if (run.segments.isNotEmpty)
                               '${run.segments.length} segment${run.segments.length == 1 ? '' : 's'}',
                           ];
@@ -837,29 +973,32 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                         value: _intervalLoggingEnabled,
                         onChanged: _setIntervalLoggingEnabled,
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Text('Distance unit:'),
-                          const SizedBox(width: 8),
-                          DropdownButton<DistanceUnit>(
-                            value: _distanceUnit,
-                            items: const [
-                              DropdownMenuItem(
-                                  value: DistanceUnit.miles, child: Text('mi')),
-                              DropdownMenuItem(
-                                  value: DistanceUnit.kilometers,
-                                  child: Text('km')),
-                            ],
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() => _distanceUnit = value);
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
+                      if (!_intervalLoggingEnabled) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Text('Distance unit:'),
+                            const SizedBox(width: 8),
+                            DropdownButton<DistanceUnit>(
+                              value: _distanceUnit,
+                              items: const [
+                                DropdownMenuItem(
+                                    value: DistanceUnit.miles,
+                                    child: Text('mi')),
+                                DropdownMenuItem(
+                                    value: DistanceUnit.kilometers,
+                                    child: Text('km')),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => _distanceUnit = value);
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       if (_intervalLoggingEnabled) ...[
                         Row(
                           children: [
@@ -945,16 +1084,13 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   TextField(
-                                    controller: segment.distanceController,
+                                    controller: segment.paceController,
                                     onChanged: (_) => setState(() {}),
                                     decoration: InputDecoration(
-                                      labelText:
-                                          'Distance (${_distanceUnitLabel()}) optional',
+                                      labelText: 'Pace (min/mi) optional',
+                                      hintText: 'e.g. 8:30',
                                     ),
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
+                                    keyboardType: TextInputType.text,
                                   ),
                                 ],
                               ),
@@ -963,7 +1099,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                         }),
                         Text(
                           'Calculated total: ${_formatSecondsAsHms(preview.totalDurationS)} | '
-                          '${_formatDistanceInSelectedUnit(preview.totalDistanceM)}'
+                          '${_formatPaceFromDurationAndDistance(durationS: preview.totalDurationS, distanceM: preview.totalDistanceM)}'
                           '${preview.hasInvalidInput ? ' (check invalid segment values)' : ''}',
                         ),
                       ] else ...[
@@ -1132,11 +1268,11 @@ class _ManualIntervalSegmentDraft {
   final int id;
   IntervalSegmentType type;
   final TextEditingController durationController;
-  final TextEditingController distanceController = TextEditingController();
+  final TextEditingController paceController = TextEditingController();
 
   void dispose() {
     durationController.dispose();
-    distanceController.dispose();
+    paceController.dispose();
   }
 }
 

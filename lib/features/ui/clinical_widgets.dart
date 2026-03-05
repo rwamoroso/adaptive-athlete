@@ -108,66 +108,84 @@ class MetricTile extends StatelessWidget {
     final theme = Theme.of(context);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final stackTrailing = textScale > 1.2 && trailingWidget != null;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight <= 96;
+        final showSubtitle = subtitleText != null && !compact;
+        final shouldStackTrailing = !compact && stackTrailing;
 
-    return GlassCard(
-      onTap: onTap,
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        return GlassCard(
+          onTap: onTap,
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 10 : 14,
+            vertical: compact ? 8 : 14,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (leadingIcon != null) ...[
-                Icon(
-                  leadingIcon,
-                  size: 18,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 6),
-              ],
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+              Row(
+                children: [
+                  if (leadingIcon != null) ...[
+                    Icon(
+                      leadingIcon,
+                      size: compact ? 16 : 18,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
+                  if (!shouldStackTrailing && trailingWidget != null)
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: trailingWidget,
+                      ),
+                    ),
+                ],
+              ),
+              if (shouldStackTrailing) ...[
+                const SizedBox(height: 6),
+                Align(alignment: Alignment.centerRight, child: trailingWidget),
+              ],
+              SizedBox(height: compact ? 4 : 8),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      valueText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    if (showSubtitle) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitleText!,
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              if (!stackTrailing && trailingWidget != null)
-                Flexible(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: trailingWidget,
-                  ),
-                ),
             ],
           ),
-          if (stackTrailing) ...[
-            const SizedBox(height: 6),
-            Align(alignment: Alignment.centerRight, child: trailingWidget),
-          ],
-          const SizedBox(height: 8),
-          Text(
-            valueText,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          if (subtitleText != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              subtitleText!,
-              style: theme.textTheme.bodySmall,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -262,8 +280,8 @@ class ClinicalBanner extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
           gradient: LinearGradient(
             colors: [
-                ClinicalPalette.accent.withValues(alpha: 0.15),
-                const Color(0xFFC782C4).withValues(alpha: 0.24),
+              ClinicalPalette.accent.withValues(alpha: 0.15),
+              const Color(0xFFC782C4).withValues(alpha: 0.24),
             ],
           ),
         ),
@@ -317,8 +335,7 @@ class RunsTrack extends StatelessWidget {
                         const RoundSliderOverlayShape(overlayRadius: 16),
                     thumbShape:
                         const RoundSliderThumbShape(enabledThumbRadius: 12),
-                    inactiveTrackColor:
-                        Colors.white.withValues(alpha: 0.18),
+                    inactiveTrackColor: Colors.white.withValues(alpha: 0.18),
                     activeTrackColor: const Color(0xFF59A8E8),
                   ),
               child: IgnorePointer(

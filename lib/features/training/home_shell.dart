@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/app_providers.dart';
+import '../ai/ai_weekly_explanation_screen.dart';
 import '../ui/clinical_theme.dart';
-import '../export/export_screen.dart';
 import '../plan/plan_screen.dart';
 import '../settings/settings_screen.dart';
 import 'daily_screen.dart';
@@ -18,18 +18,18 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> {
   int _index = 0;
-
-  final _pages = const [
-    DailyScreen(),
-    HistoryScreen(),
-    PlanScreen(),
-    ExportScreen(),
-    SettingsScreen(),
-  ];
+  int _dailyResetToken = 0;
 
   @override
   Widget build(BuildContext context) {
     final syncStatus = ref.watch(syncStatusProvider);
+    final pages = [
+      DailyScreen(resetToken: _dailyResetToken),
+      const HistoryScreen(),
+      const PlanScreen(),
+      const AiWeeklyExplanationScreen(),
+      const SettingsScreen(),
+    ];
     return Theme(
       data: buildClinicalTheme(),
       child: Scaffold(
@@ -56,7 +56,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             Positioned.fill(
               child: SafeArea(
                 bottom: false,
-                child: IndexedStack(index: _index, children: _pages),
+                child: IndexedStack(index: _index, children: pages),
               ),
             ),
             if (syncStatus.phase != AppSyncPhase.idle)
@@ -79,7 +79,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             borderRadius: BorderRadius.circular(26),
             child: NavigationBar(
               selectedIndex: _index,
-              onDestinationSelected: (index) => setState(() => _index = index),
+              onDestinationSelected: (index) => setState(() {
+                final comingToDaily = index == 0 && _index != 0;
+                _index = index;
+                if (comingToDaily) {
+                  _dailyResetToken++;
+                }
+              }),
               destinations: const [
                 NavigationDestination(
                     icon: Icon(Icons.today_outlined), label: 'Daily'),
@@ -88,7 +94,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 NavigationDestination(
                     icon: Icon(Icons.event_note_outlined), label: 'Plan'),
                 NavigationDestination(
-                    icon: Icon(Icons.download_outlined), label: 'Advanced'),
+                    icon: Icon(Icons.auto_awesome_outlined), label: 'AI'),
                 NavigationDestination(
                     icon: Icon(Icons.settings_outlined), label: 'Settings'),
               ],

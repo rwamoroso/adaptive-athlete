@@ -136,7 +136,7 @@ class ExerciseSubstitutionService {
     required String? planDayId,
     required Set<String> availableEquipment,
     required Set<String> contraindications,
-    int limit = 6,
+    int limit = 120,
   }) async {
     final prescribed =
         ExerciseNormalizer.normalize(prescribedExerciseCanonical);
@@ -144,13 +144,19 @@ class ExerciseSubstitutionService {
       planDayId: planDayId,
       prescribedExerciseCanonical: prescribed,
     );
+    final fromDb = await _allKnownExerciseCanonicalsFromDb();
     final curatedSet = curated.map((e) => e.exerciseCanonical).toSet();
     final source = getProfile(prescribed);
 
-    final candidates = <String>{...curatedSet};
+    final candidates = <String>{
+      ...curatedSet,
+      ..._profiles.keys,
+      ...fromDb,
+    }..remove(prescribed);
     if (source != null) {
       for (final profile in _profiles.values) {
-        if (profile.exerciseCanonical == prescribed) {
+        if (profile.exerciseCanonical == prescribed ||
+            candidates.contains(profile.exerciseCanonical)) {
           continue;
         }
         final sharesPattern = profile.movementPatterns
@@ -198,9 +204,57 @@ class ExerciseSubstitutionService {
       if (curatedCmp != 0) {
         return curatedCmp;
       }
-      return b.score.compareTo(a.score);
+      final scoreCmp = b.score.compareTo(a.score);
+      if (scoreCmp != 0) {
+        return scoreCmp;
+      }
+      return a.exerciseCanonical.compareTo(b.exerciseCanonical);
     });
     return scored.take(limit).toList();
+  }
+
+  Future<Set<String>> _allKnownExerciseCanonicalsFromDb() async {
+    final plannedFuture = db.select(db.planPrescribedStrengthSets).get();
+    final legacyFuture = db.select(db.prescribedStrengthSets).get();
+    final actualFuture = db.select(db.actualStrengthSets).get();
+    final alternativesFuture = db.select(db.planExerciseAlternatives).get();
+    final substitutionsFuture = db.select(db.exerciseSubstitutions).get();
+
+    final results = await Future.wait<dynamic>([
+      plannedFuture,
+      legacyFuture,
+      actualFuture,
+      alternativesFuture,
+      substitutionsFuture,
+    ]);
+
+    final canonicals = <String>{};
+    for (final row in results[0] as List<PlanPrescribedStrengthSet>) {
+      canonicals.add(ExerciseNormalizer.normalize(row.exerciseCanonical));
+    }
+    for (final row in results[1] as List<PrescribedStrengthSet>) {
+      canonicals.add(ExerciseNormalizer.normalize(row.exerciseCanonical));
+    }
+    for (final row in results[2] as List<ActualStrengthSet>) {
+      canonicals.add(ExerciseNormalizer.normalize(row.exerciseCanonical));
+      final prescribed = row.prescribedExerciseCanonical;
+      if ((prescribed ?? '').trim().isNotEmpty) {
+        canonicals.add(ExerciseNormalizer.normalize(prescribed!));
+      }
+    }
+    for (final row in results[3] as List<PlanExerciseAlternative>) {
+      canonicals
+          .add(ExerciseNormalizer.normalize(row.prescribedExerciseCanonical));
+      canonicals
+          .add(ExerciseNormalizer.normalize(row.alternativeExerciseCanonical));
+    }
+    for (final row in results[4] as List<ExerciseSubstitution>) {
+      canonicals
+          .add(ExerciseNormalizer.normalize(row.prescribedExerciseCanonical));
+      canonicals
+          .add(ExerciseNormalizer.normalize(row.substituteExerciseCanonical));
+    }
+    return canonicals;
   }
 
   SubstitutionCandidate _fallbackCandidate({
@@ -658,6 +712,160 @@ class ExerciseSubstitutionService {
       defaultRepMin: 6,
       defaultRepMax: 15,
       progressionGroupId: 'hinge',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Leg Press',
+      displayName: 'Leg Press',
+      primaryMuscles: ['quads', 'glutes'],
+      secondaryMuscles: ['adductors'],
+      movementPatterns: ['squat'],
+      equipment: ['machine'],
+      loadingStyle: 'machine_guided',
+      stabilityDemand: 'low',
+      jointStressFlags: ['deep_knee_flexion'],
+      defaultRepMin: 8,
+      defaultRepMax: 20,
+      progressionGroupId: 'squat_pattern',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Leg Extension',
+      displayName: 'Leg Extension',
+      primaryMuscles: ['quads'],
+      secondaryMuscles: ['adductors'],
+      movementPatterns: ['knee_extension'],
+      equipment: ['machine'],
+      loadingStyle: 'machine_guided',
+      stabilityDemand: 'low',
+      jointStressFlags: ['deep_knee_flexion'],
+      defaultRepMin: 10,
+      defaultRepMax: 20,
+      progressionGroupId: 'knee_extension_quad',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Seated Leg Curl',
+      displayName: 'Seated Leg Curl',
+      primaryMuscles: ['hamstrings'],
+      secondaryMuscles: ['calves'],
+      movementPatterns: ['knee_flexion'],
+      equipment: ['machine'],
+      loadingStyle: 'machine_guided',
+      stabilityDemand: 'low',
+      jointStressFlags: [],
+      defaultRepMin: 8,
+      defaultRepMax: 20,
+      progressionGroupId: 'knee_flexion_hamstring',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Lying Leg Curl',
+      displayName: 'Lying Leg Curl',
+      primaryMuscles: ['hamstrings'],
+      secondaryMuscles: ['calves'],
+      movementPatterns: ['knee_flexion'],
+      equipment: ['machine'],
+      loadingStyle: 'machine_guided',
+      stabilityDemand: 'low',
+      jointStressFlags: [],
+      defaultRepMin: 8,
+      defaultRepMax: 20,
+      progressionGroupId: 'knee_flexion_hamstring',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Kneeling Leg Curl',
+      displayName: 'Kneeling Leg Curl',
+      primaryMuscles: ['hamstrings'],
+      secondaryMuscles: ['glutes'],
+      movementPatterns: ['knee_flexion'],
+      equipment: ['machine', 'cable'],
+      loadingStyle: 'machine_guided',
+      stabilityDemand: 'medium',
+      jointStressFlags: [],
+      defaultRepMin: 8,
+      defaultRepMax: 20,
+      progressionGroupId: 'knee_flexion_hamstring',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Standing Leg Curl',
+      displayName: 'Standing Leg Curl',
+      primaryMuscles: ['hamstrings'],
+      secondaryMuscles: ['glutes', 'calves'],
+      movementPatterns: ['knee_flexion'],
+      equipment: ['machine', 'cable'],
+      loadingStyle: 'unilateral_load',
+      stabilityDemand: 'medium',
+      jointStressFlags: [],
+      defaultRepMin: 10,
+      defaultRepMax: 20,
+      progressionGroupId: 'knee_flexion_hamstring',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Glute Ham Raise',
+      displayName: 'Glute Ham Raise',
+      primaryMuscles: ['hamstrings', 'glutes'],
+      secondaryMuscles: ['calves'],
+      movementPatterns: ['knee_flexion', 'hip_extension'],
+      equipment: ['bodyweight', 'machine'],
+      loadingStyle: 'bodyweight',
+      stabilityDemand: 'high',
+      jointStressFlags: [],
+      defaultRepMin: 5,
+      defaultRepMax: 15,
+      progressionGroupId: 'knee_flexion_hamstring',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Bulgarian Split Squat',
+      displayName: 'Bulgarian Split Squat',
+      primaryMuscles: ['quads', 'glutes'],
+      secondaryMuscles: ['adductors'],
+      movementPatterns: ['squat', 'split_squat'],
+      equipment: ['dumbbell', 'barbell', 'bodyweight'],
+      loadingStyle: 'unilateral_load',
+      stabilityDemand: 'high',
+      jointStressFlags: ['deep_knee_flexion'],
+      defaultRepMin: 6,
+      defaultRepMax: 15,
+      progressionGroupId: 'split_squat',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Walking Lunge',
+      displayName: 'Walking Lunge',
+      primaryMuscles: ['quads', 'glutes'],
+      secondaryMuscles: ['adductors', 'calves'],
+      movementPatterns: ['lunge'],
+      equipment: ['dumbbell', 'barbell', 'bodyweight'],
+      loadingStyle: 'unilateral_load',
+      stabilityDemand: 'high',
+      jointStressFlags: ['deep_knee_flexion'],
+      defaultRepMin: 8,
+      defaultRepMax: 20,
+      progressionGroupId: 'lunge',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Calf Raise',
+      displayName: 'Calf Raise',
+      primaryMuscles: ['calves'],
+      secondaryMuscles: [],
+      movementPatterns: ['plantar_flexion'],
+      equipment: ['machine', 'dumbbell', 'bodyweight'],
+      loadingStyle: 'unilateral_load',
+      stabilityDemand: 'medium',
+      jointStressFlags: [],
+      defaultRepMin: 10,
+      defaultRepMax: 25,
+      progressionGroupId: 'calf',
+    ),
+    ExerciseIntentProfile(
+      exerciseCanonical: 'Seated Calf Raise',
+      displayName: 'Seated Calf Raise',
+      primaryMuscles: ['calves'],
+      secondaryMuscles: [],
+      movementPatterns: ['plantar_flexion'],
+      equipment: ['machine'],
+      loadingStyle: 'machine_guided',
+      stabilityDemand: 'low',
+      jointStressFlags: [],
+      defaultRepMin: 10,
+      defaultRepMax: 25,
+      progressionGroupId: 'calf',
     ),
     ExerciseIntentProfile(
       exerciseCanonical: 'Pull Up',

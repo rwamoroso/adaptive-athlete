@@ -116,7 +116,12 @@ Map<int, String> _manualSegmentLabelsByIdx(String? rawMetricsJson) {
 }
 
 class DailyScreen extends ConsumerStatefulWidget {
-  const DailyScreen({super.key});
+  const DailyScreen({
+    super.key,
+    this.resetToken = 0,
+  });
+
+  final int resetToken;
 
   @override
   ConsumerState<DailyScreen> createState() => _DailyScreenState();
@@ -213,6 +218,17 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
   void initState() {
     super.initState();
     _selectedDate = toYmd(DateTime.now());
+  }
+
+  @override
+  void didUpdateWidget(covariant DailyScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.resetToken != oldWidget.resetToken) {
+      setState(() {
+        _selectedDate = toYmd(DateTime.now());
+        _refresh++;
+      });
+    }
   }
 
   Future<void> _pickDate() async {
@@ -475,27 +491,30 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
         value.contains('/mile') ||
         value.contains(' per mile');
 
-    final firstTimeMatch =
-        RegExp(r'(\d{1,2}:\d{2}(?::\d{2})?)').firstMatch(value);
-    if (firstTimeMatch == null) {
+    final timeMatches =
+        RegExp(r'(\d{1,2}:\d{2}(?::\d{2})?)').allMatches(value).toList();
+    if (timeMatches.isEmpty) {
       return null;
     }
 
-    final parts =
-        firstTimeMatch.group(1)!.split(':').map(double.parse).toList();
-    double seconds;
-    if (parts.length == 3) {
-      seconds = (parts[0] * 3600) + (parts[1] * 60) + parts[2];
-    } else {
-      seconds = (parts[0] * 60) + parts[1];
+    var slowestSecondsPerUnit = 0.0;
+    for (final match in timeMatches) {
+      final parts =
+          match.group(1)!.split(':').map(double.parse).toList(growable: false);
+      final seconds = parts.length == 3
+          ? (parts[0] * 3600) + (parts[1] * 60) + parts[2]
+          : (parts[0] * 60) + parts[1];
+      if (seconds > slowestSecondsPerUnit) {
+        slowestSecondsPerUnit = seconds;
+      }
     }
-    if (seconds <= 0) {
+    if (slowestSecondsPerUnit <= 0) {
       return null;
     }
     if (unitIsKm && !unitIsMi) {
-      return seconds * 1.609344;
+      return slowestSecondsPerUnit * 1.609344;
     }
-    return seconds;
+    return slowestSecondsPerUnit;
   }
 
   double _estimatePlannedMilesForRun({
@@ -851,6 +870,10 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
           0,
           (sum, run) => sum + (run.session.distanceM ?? 0),
         );
+        final dailyPrescribedMiles = _estimatePlannedMilesForRun(
+          durationText: safeDetail.prescribedRun?.durationText,
+          targetPace: safeDetail.prescribedRun?.targetPace,
+        );
 
         return _DailyClinicalContent(
           selectedDate: _selectedDate,
@@ -865,6 +888,7 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
           sleepTrendSummary: sleepTrendSummary,
           runProgress: runProgress,
           totalRunDistance: totalRunDistance,
+          dailyPrescribedMiles: dailyPrescribedMiles,
           sessionTypeLabel: _sessionTypeLabel,
           onPickDate: _pickDate,
           onOpenSleepEditor: _openSleepEditor,
@@ -910,6 +934,7 @@ class _DailyClinicalContent extends StatelessWidget {
     required this.sleepTrendSummary,
     required this.runProgress,
     required this.totalRunDistance,
+    required this.dailyPrescribedMiles,
     required this.sessionTypeLabel,
     required this.onPickDate,
     required this.onOpenSleepEditor,
@@ -933,6 +958,7 @@ class _DailyClinicalContent extends StatelessWidget {
   final _SleepTrendCardSummary sleepTrendSummary;
   final double runProgress;
   final double totalRunDistance;
+  final double dailyPrescribedMiles;
   final String Function(String?) sessionTypeLabel;
   final VoidCallback onPickDate;
   final void Function(SleepNight?) onOpenSleepEditor;
@@ -1084,8 +1110,11 @@ class _DailyClinicalContent extends StatelessWidget {
             (safeDetail.prescribedRun?.runType ?? '').trim();
         final prescribedLiftFocusTitle =
             (safeDetail.prescribedRun?.liftFocus ?? '').trim();
-        final runCardTitle =
+        final runTitleBase =
             prescribedRunTypeTitle.isEmpty ? 'Run' : prescribedRunTypeTitle;
+        final runCardTitle = dailyPrescribedMiles > 0
+            ? '$runTitleBase - ${dailyPrescribedMiles.toStringAsFixed(1)} miles'
+            : runTitleBase;
         final splitCardTitle = prescribedLiftFocusTitle.isEmpty
             ? 'Split'
             : prescribedLiftFocusTitle;
@@ -1127,7 +1156,8 @@ class _DailyClinicalContent extends StatelessWidget {
               subtitleText:
                   '${_dailyGoalTitle() == null ? '' : '${_dailyGoalTitle()!} • '}'
                   '${safeDetail.runSessions.length} session${safeDetail.runSessions.length == 1 ? '' : 's'} today'
-                  '${totalRunDistance > 0 ? ' • ${_formatDistanceMiles(totalRunDistance)} today' : ' • No distance today'}'
+                  '${dailyPrescribedMiles > 0 ? ' • ${_formatMiles(dailyPrescribedMiles)} prescribed' : ''}'
+                  '${totalRunDistance > 0 ? ' • ${_formatDistanceMiles(totalRunDistance)} actual today' : ''}'
                   ' • Tap to log/edit',
               trailingWidget: SizedBox(
                 width: 264,

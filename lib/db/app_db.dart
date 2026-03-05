@@ -4317,6 +4317,7 @@ class AppDb extends _$AppDb {
   _AiParsedWeeklyPlan _parseAiWeeklyPlanText(String text) {
     final lines = const LineSplitter().convert(text);
     var sawHeader = false;
+    var inPlanExplanationBlock = false;
     String? weekStart;
     String? weekEnd;
     final dayBuilders = <int, _AiParsedWeeklyPlanDayBuilder>{};
@@ -4333,6 +4334,13 @@ class AppDb extends _$AppDb {
         continue;
       }
 
+      if (inPlanExplanationBlock) {
+        if (trimmed.toUpperCase() == 'END_PLAN_EXPLANATION_V1') {
+          inPlanExplanationBlock = false;
+        }
+        continue;
+      }
+
       if (!sawHeader) {
         if (trimmed != 'WEEK_PLAN_V1') {
           throw StateError('Line $lineNo: expected "WEEK_PLAN_V1".');
@@ -4345,6 +4353,10 @@ class AppDb extends _$AppDb {
       final dayEndMatch = RegExp(r'^END\s+DAY\s+([1-7])$').firstMatch(trimmed);
 
       if (currentDay == null) {
+        if (trimmed.toUpperCase() == 'PLAN_EXPLANATION_V1') {
+          inPlanExplanationBlock = true;
+          continue;
+        }
         if (dayStartMatch != null) {
           final dayNumber = int.parse(dayStartMatch.group(1)!);
           if (dayBuilders.containsKey(dayNumber)) {

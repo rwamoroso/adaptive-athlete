@@ -32,7 +32,7 @@ ThemeData buildClinicalTheme() {
     brightness: Brightness.dark,
     colorScheme: scheme,
     scaffoldBackgroundColor: Colors.transparent,
-    canvasColor: Colors.transparent,
+    canvasColor: scheme.surfaceContainerHighest,
   );
 
   final textTheme = base.textTheme.apply(

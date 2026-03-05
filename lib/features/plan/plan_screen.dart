@@ -4,14 +4,18 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/rules/recovery_gating.dart';
 import '../../core/utils/app_providers.dart';
 import '../../core/utils/date_utils.dart';
 import '../training/exercise_substitution_service.dart';
 import '../ui/clinical_widgets.dart';
+import 'plan_builder_walkthrough_screen.dart';
 import 'ppl_template_service.dart';
 import 'weekly_planner_service.dart';
+
+enum _PlannerWorkspaceTab { planning, advanced }
 
 class PlanScreen extends ConsumerStatefulWidget {
   const PlanScreen({super.key});
@@ -20,18 +24,175 @@ class PlanScreen extends ConsumerStatefulWidget {
   ConsumerState<PlanScreen> createState() => _PlanScreenState();
 }
 
+class _ShortTermGoalDraft {
+  const _ShortTermGoalDraft({
+    required this.goalText,
+    required this.timelineWeeks,
+  });
+
+  final String goalText;
+  final String timelineWeeks;
+}
+
+class _ShortTermGoalScreen extends StatefulWidget {
+  const _ShortTermGoalScreen({
+    required this.initialGoalText,
+    required this.initialTimelineWeeks,
+  });
+
+  final String initialGoalText;
+  final String initialTimelineWeeks;
+
+  @override
+  State<_ShortTermGoalScreen> createState() => _ShortTermGoalScreenState();
+}
+
+class _ShortTermGoalScreenState extends State<_ShortTermGoalScreen> {
+  late final TextEditingController _goalController;
+  late final TextEditingController _weeksController;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _goalController = TextEditingController(text: widget.initialGoalText);
+    _weeksController = TextEditingController(text: widget.initialTimelineWeeks);
+  }
+
+  @override
+  void dispose() {
+    _goalController.dispose();
+    _weeksController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final goalText = _goalController.text.trim();
+    final timelineWeeks = _weeksController.text.trim();
+    if (goalText.isNotEmpty && timelineWeeks.isEmpty) {
+      setState(() {
+        _errorText =
+            'Timeline weeks is required when short-term goal text is provided.';
+      });
+      return;
+    }
+    if (goalText.isEmpty && timelineWeeks.isNotEmpty) {
+      setState(() {
+        _errorText =
+            'Short-term goal text is required when timeline weeks is provided.';
+      });
+      return;
+    }
+    if (timelineWeeks.isNotEmpty) {
+      final parsed = int.tryParse(timelineWeeks);
+      if (parsed == null || parsed < 1 || parsed > 52) {
+        setState(() {
+          _errorText =
+              'Timeline weeks must be a whole number between 1 and 52.';
+        });
+        return;
+      }
+    }
+    Navigator.of(context).pop(
+      _ShortTermGoalDraft(
+        goalText: goalText,
+        timelineWeeks: timelineWeeks,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Short-Term Goal')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+        children: [
+          const GlassCard(
+            child: Text(
+              'Set a short-term target so AI can tune your weekly plan toward a near-term outcome.',
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _goalController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Short-Term Goal (optional)',
+              hintText:
+                  'Example: Abs showing for beach weekend, or train for a 10K.',
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _weeksController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(
+              labelText: 'Timeline (weeks)',
+              hintText: 'Example: 6',
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'If short-term goal is entered, timeline is required (1-52).',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _errorText!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: PrimaryPillButton(
+                  text: 'Cancel',
+                  variant: PillButtonVariant.outlined,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: PrimaryPillButton(text: 'Save Goal', onPressed: _save),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PlanScreenState extends ConsumerState<PlanScreen> {
   String _status = 'No weekly plan built yet.';
 
-  String _primaryGoal = 'run_5mi_8min';
+  static const String _runGoal = 'run_goal';
+  static const String _strengthGoal = 'strength';
+  static const String _hypertrophyGoal = 'hypertrophy';
+  static const String _cardioGoal = 'cardio_improvement';
+
+  String _primaryGoal = _runGoal;
   String _experienceLevel = 'intermediate';
   int _daysPerWeek = 5;
-  SplitType _preferredSplit = SplitType.ppl56d;
+  final Set<int> _selectedTrainingWeekdays = <int>{
+    DateTime.monday,
+    DateTime.tuesday,
+    DateTime.wednesday,
+    DateTime.thursday,
+    DateTime.friday,
+  };
+  SplitType _preferredSplit = SplitType.runOnly;
   final Set<String> _selectedEquipment = <String>{};
   final Set<String> _selectedContraindications = <String>{};
 
   DateTime _startDate = DateTime.now();
-  SplitType _selectedSplit = SplitType.ppl56d;
+  SplitType _selectedSplit = SplitType.runOnly;
   WeeklyPlanModifier _selectedModifier = WeeklyPlanModifier.followLongTerm;
   bool _propagateLongTerm = false;
 
@@ -39,8 +200,15 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   bool _useCustomPromptText = false;
 
   final TextEditingController _goalTargetController = TextEditingController(
-    text: '5 miles @ 8:00/mile',
+    text: '5 miles',
   );
+  final TextEditingController _runGoalDistanceController =
+      TextEditingController(text: '5');
+  final TextEditingController _runGoalPaceController = TextEditingController();
+  final TextEditingController _shortTermGoalController =
+      TextEditingController();
+  final TextEditingController _shortTermGoalWeeksController =
+      TextEditingController();
   final TextEditingController _scheduleConstraintsController =
       TextEditingController();
   final TextEditingController _additionalInstructionsController =
@@ -53,8 +221,8 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   bool _buildingPrompt = false;
   bool _oneTapGenerating = false;
   bool _manualApplying = false;
+  _PlannerWorkspaceTab _workspaceTab = _PlannerWorkspaceTab.planning;
   String? _generatedPrompt;
-  WeeklyPlanBuildRequest? _lastBuildRequest;
 
   // Legacy advanced tools
   String? _templatePath;
@@ -66,6 +234,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   bool _legacyStandardImporting = false;
 
   String? _loadedScopeKey;
+  int? _walkthroughLastStepIndex;
 
   @override
   void initState() {
@@ -73,11 +242,16 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     final settings = ref.read(settingsProvider);
     _selectedEquipment.addAll(settings.availableEquipment);
     _selectedContraindications.addAll(settings.movementContraindications);
+    _manualAiResponseController.text = ref.read(aiWeeklyPlanResponseProvider);
   }
 
   @override
   void dispose() {
     _goalTargetController.dispose();
+    _runGoalDistanceController.dispose();
+    _runGoalPaceController.dispose();
+    _shortTermGoalController.dispose();
+    _shortTermGoalWeeksController.dispose();
     _scheduleConstraintsController.dispose();
     _additionalInstructionsController.dispose();
     _promptEditorController.dispose();
@@ -93,6 +267,366 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   String _scopeProfileId() {
     final ctx = ref.read(activeWorkspaceContextProvider).valueOrNull;
     return ctx?.profileId ?? 'local_profile';
+  }
+
+  bool get _isRunGoalSelected {
+    final normalized = _normalizePrimaryGoal(_primaryGoal);
+    return normalized == _runGoal;
+  }
+
+  String _normalizePrimaryGoal(String? raw) {
+    final normalized = (raw ?? '').trim().toLowerCase();
+    switch (normalized) {
+      case 'run_5mi_8min':
+      case _runGoal:
+        return _runGoal;
+      case _strengthGoal:
+        return _strengthGoal;
+      case _hypertrophyGoal:
+        return _hypertrophyGoal;
+      case 'cardio':
+      case _cardioGoal:
+        return _cardioGoal;
+      default:
+        return _runGoal;
+    }
+  }
+
+  String _defaultGoalTargetText(String goal) {
+    switch (_normalizePrimaryGoal(goal)) {
+      case _strengthGoal:
+        return 'Improve overall strength with progressive overload.';
+      case _hypertrophyGoal:
+        return 'Build lean muscle size with consistent volume.';
+      case _cardioGoal:
+        return 'Improve aerobic capacity and endurance.';
+      case _runGoal:
+        return '5 miles';
+      default:
+        return '';
+    }
+  }
+
+  String _nonRunGoalLabel() {
+    switch (_normalizePrimaryGoal(_primaryGoal)) {
+      case _strengthGoal:
+        return 'Strength Goal Details';
+      case _hypertrophyGoal:
+        return 'Hypertrophy Goal Details';
+      case _cardioGoal:
+        return 'Cardio Improvement Details';
+      default:
+        return 'Goal Details';
+    }
+  }
+
+  String _nonRunGoalHint() {
+    switch (_normalizePrimaryGoal(_primaryGoal)) {
+      case _strengthGoal:
+        return 'Example: Add 40 lb to back squat in 12 weeks';
+      case _hypertrophyGoal:
+        return 'Example: Add 1.5 in to chest/arms over 16 weeks';
+      case _cardioGoal:
+        return 'Example: Improve aerobic base and lower easy-run heart rate';
+      default:
+        return 'Describe your goal target';
+    }
+  }
+
+  void _onPrimaryGoalChanged(String rawGoal) {
+    final normalized = _normalizePrimaryGoal(rawGoal);
+    if (normalized == _primaryGoal) {
+      return;
+    }
+    _primaryGoal = normalized;
+    if (normalized != _runGoal) {
+      _goalTargetController.text = _defaultGoalTargetText(normalized);
+    }
+  }
+
+  InputDecoration _dropdownDecoration(BuildContext context, String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: Theme.of(
+        context,
+      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.9),
+    );
+  }
+
+  String _weekdayLabel(int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return 'Monday';
+      case DateTime.tuesday:
+        return 'Tuesday';
+      case DateTime.wednesday:
+        return 'Wednesday';
+      case DateTime.thursday:
+        return 'Thursday';
+      case DateTime.friday:
+        return 'Friday';
+      case DateTime.saturday:
+        return 'Saturday';
+      case DateTime.sunday:
+        return 'Sunday';
+      default:
+        return 'Day';
+    }
+  }
+
+  List<int> _selectedWeekdaysSorted() {
+    final sorted = _selectedTrainingWeekdays.toList()..sort();
+    return sorted;
+  }
+
+  String _selectedWeekdaySummary() {
+    final selected = _selectedWeekdaysSorted();
+    if (selected.isEmpty) {
+      return 'No weekdays selected.';
+    }
+    return selected.map(_weekdayLabel).join(', ');
+  }
+
+  ({int min, int max})? _splitTrainingDayRequirement(SplitType split) {
+    switch (split) {
+      case SplitType.runOnly:
+        return (min: 4, max: 7);
+      case SplitType.fullBody3d:
+        return (min: 3, max: 3);
+      case SplitType.upperLower4d:
+      case SplitType.phul:
+        return (min: 4, max: 4);
+      case SplitType.ppl56d:
+        return (min: 5, max: 6);
+      case SplitType.hybridRunLift:
+        return (min: 5, max: 7);
+      case SplitType.arnold:
+        return (min: 6, max: 6);
+      case SplitType.broSplit:
+        return (min: 5, max: 5);
+      case SplitType.customHybrid:
+        return (min: 4, max: 7);
+    }
+  }
+
+  String _splitRequirementText(SplitType split) {
+    final requirement = _splitTrainingDayRequirement(split);
+    if (requirement == null) {
+      return 'This split has no fixed day requirement.';
+    }
+    if (requirement.min == requirement.max) {
+      return 'Split requirement: ${requirement.min} training day${requirement.min == 1 ? '' : 's'}.';
+    }
+    return 'Split requirement: ${requirement.min}-${requirement.max} training days.';
+  }
+
+  bool _selectedWeekdaysMeetSplitRequirement() {
+    final requirement = _splitTrainingDayRequirement(_selectedSplit);
+    if (requirement == null) {
+      return true;
+    }
+    final count = _selectedTrainingWeekdays.length;
+    return count >= requirement.min && count <= requirement.max;
+  }
+
+  Set<int> _weekdaysFromScheduleConstraints(Map<String, dynamic> constraints) {
+    final raw = constraints['preferred_training_weekdays'];
+    if (raw is! List) {
+      return const <int>{};
+    }
+    final parsed = <int>{};
+    for (final item in raw) {
+      if (item is int && item >= DateTime.monday && item <= DateTime.sunday) {
+        parsed.add(item);
+        continue;
+      }
+      final text = item.toString().trim().toLowerCase();
+      final mapped = switch (text) {
+        '1' || 'monday' => DateTime.monday,
+        '2' || 'tuesday' => DateTime.tuesday,
+        '3' || 'wednesday' => DateTime.wednesday,
+        '4' || 'thursday' => DateTime.thursday,
+        '5' || 'friday' => DateTime.friday,
+        '6' || 'saturday' => DateTime.saturday,
+        '7' || 'sunday' => DateTime.sunday,
+        _ => null,
+      };
+      if (mapped != null) {
+        parsed.add(mapped);
+      }
+    }
+    return parsed;
+  }
+
+  void _hydrateGoalTargetInputs(Map<String, dynamic> goalTarget) {
+    final legacyText = goalTarget['text']?.toString().trim() ?? '';
+    if (_isRunGoalSelected) {
+      _goalTargetController.text = legacyText;
+    } else {
+      _goalTargetController.text = legacyText.isEmpty
+          ? _defaultGoalTargetText(_primaryGoal)
+          : legacyText;
+    }
+
+    final distanceRaw = goalTarget['distance_miles']?.toString().trim() ?? '';
+    if (distanceRaw.isNotEmpty) {
+      _runGoalDistanceController.text = distanceRaw;
+    } else {
+      final match =
+          RegExp(r'(\d+(?:\.\d+)?)\s*(?:mile|miles)\b', caseSensitive: false)
+              .firstMatch(legacyText);
+      _runGoalDistanceController.text = match?.group(1) ?? '5';
+    }
+
+    final paceRaw = goalTarget['target_pace']?.toString().trim() ?? '';
+    if (paceRaw.isNotEmpty) {
+      _runGoalPaceController.text = paceRaw;
+    } else {
+      final paceMatch = RegExp(r'@\s*(.+)$').firstMatch(legacyText);
+      _runGoalPaceController.text = paceMatch?.group(1)?.trim() ?? '';
+    }
+
+    final shortTermRaw = goalTarget['short_term_goal'];
+    if (shortTermRaw is Map) {
+      final shortTerm = Map<String, dynamic>.from(
+        shortTermRaw.map(
+          (key, value) => MapEntry(key.toString(), value),
+        ),
+      );
+      _shortTermGoalController.text =
+          shortTerm['text']?.toString().trim() ?? '';
+      _shortTermGoalWeeksController.text =
+          shortTerm['timeline_weeks']?.toString().trim() ?? '';
+      return;
+    }
+    _shortTermGoalController.clear();
+    _shortTermGoalWeeksController.clear();
+  }
+
+  String _formatMiles(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+    return value.toStringAsFixed(1);
+  }
+
+  Map<String, dynamic> _goalTargetFromForm() {
+    final shortTermGoalText = _shortTermGoalController.text.trim();
+    final shortTermWeeksRaw = _shortTermGoalWeeksController.text.trim();
+    if (shortTermGoalText.isNotEmpty && shortTermWeeksRaw.isEmpty) {
+      throw StateError(
+        'Timeline weeks is required when short-term goal text is provided.',
+      );
+    }
+    if (shortTermGoalText.isEmpty && shortTermWeeksRaw.isNotEmpty) {
+      throw StateError(
+        'Short-term goal text is required when timeline weeks is provided.',
+      );
+    }
+
+    Map<String, dynamic>? shortTermGoal;
+    if (shortTermGoalText.isNotEmpty) {
+      final timelineWeeks = int.tryParse(shortTermWeeksRaw);
+      if (timelineWeeks == null || timelineWeeks < 1 || timelineWeeks > 52) {
+        throw StateError(
+          'Timeline weeks must be a whole number between 1 and 52.',
+        );
+      }
+      shortTermGoal = {
+        'text': shortTermGoalText,
+        'timeline_weeks': timelineWeeks,
+      };
+    }
+
+    if (_isRunGoalSelected) {
+      final distanceRaw = _runGoalDistanceController.text.trim();
+      if (distanceRaw.isEmpty) {
+        throw StateError('Run goal distance is required.');
+      }
+      final distanceMiles = double.tryParse(distanceRaw);
+      if (distanceMiles == null || distanceMiles <= 0) {
+        throw StateError('Run goal distance must be a positive number.');
+      }
+      final pace = _runGoalPaceController.text.trim();
+      final distanceLabel = '${_formatMiles(distanceMiles)} miles';
+      final summaryText =
+          pace.isEmpty ? distanceLabel : '$distanceLabel @ $pace';
+      _goalTargetController.text = summaryText;
+      final goalTarget = <String, dynamic>{
+        'distance_miles': distanceMiles,
+        'target_pace': pace.isEmpty ? null : pace,
+        'text': summaryText,
+      };
+      // Keep this payload in goal_target_json so the prompt context carries it.
+      if (shortTermGoal != null) {
+        goalTarget['short_term_goal'] = shortTermGoal;
+      }
+      return goalTarget;
+    }
+    final text = _goalTargetController.text.trim();
+    final goalTarget = <String, dynamic>{
+      'text': text.isEmpty ? _defaultGoalTargetText(_primaryGoal) : text,
+    };
+    if (shortTermGoal != null) {
+      goalTarget['short_term_goal'] = shortTermGoal;
+    }
+    return goalTarget;
+  }
+
+  String _scopeUsername() {
+    final ctx = ref.read(activeWorkspaceContextProvider).valueOrNull;
+    User? user;
+    try {
+      user = Supabase.instance.client.auth.currentUser;
+    } catch (_) {
+      user = null;
+    }
+
+    if (ctx != null) {
+      for (final membership in ctx.memberships) {
+        final isCurrentUser = membership.userId == ctx.userId;
+        final isCurrentWorkspace = membership.workspaceId == ctx.workspaceId;
+        if (!isCurrentUser || !isCurrentWorkspace) {
+          continue;
+        }
+        final displayName = membership.displayName?.trim();
+        if (displayName != null && displayName.isNotEmpty) {
+          return displayName;
+        }
+      }
+    }
+
+    final metadata = user?.userMetadata;
+    if (metadata != null) {
+      const metadataKeys = <String>[
+        'username',
+        'display_name',
+        'full_name',
+        'name',
+      ];
+      for (final key in metadataKeys) {
+        final value = metadata[key]?.toString().trim();
+        if (value != null && value.isNotEmpty) {
+          return value;
+        }
+      }
+    }
+
+    final email = user?.email?.trim();
+    if (email != null && email.isNotEmpty) {
+      final atIndex = email.indexOf('@');
+      if (atIndex > 0) {
+        return email.substring(0, atIndex);
+      }
+      return email;
+    }
+
+    final userId = user?.id;
+    if (userId != null && userId.isNotEmpty) {
+      return userId.length > 8 ? userId.substring(0, 8) : userId;
+    }
+    return 'local_user';
   }
 
   Future<void> _loadPlanningProfileIfNeeded() async {
@@ -112,12 +646,19 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     }
 
     setState(() {
-      _primaryGoal = profile.primaryGoal;
-      _goalTargetController.text = profile.goalTarget['text']?.toString() ?? '';
+      _primaryGoal = _normalizePrimaryGoal(profile.primaryGoal);
+      _hydrateGoalTargetInputs(profile.goalTarget);
       _experienceLevel = profile.experienceLevel;
       _preferredSplit = profile.preferredSplit;
       _selectedSplit = profile.preferredSplit;
       _daysPerWeek = profile.daysPerWeek;
+      final savedWeekdays =
+          _weekdaysFromScheduleConstraints(profile.scheduleConstraints);
+      if (savedWeekdays.isNotEmpty) {
+        _selectedTrainingWeekdays
+          ..clear()
+          ..addAll(savedWeekdays);
+      }
       _selectedEquipment
         ..clear()
         ..addAll(profile.availableEquipment);
@@ -134,7 +675,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       workspaceId: _scopeWorkspaceId(),
       athleteProfileId: _scopeProfileId(),
       primaryGoal: _primaryGoal,
-      goalTarget: {'text': _goalTargetController.text.trim()},
+      goalTarget: _goalTargetFromForm(),
       experienceLevel: _experienceLevel,
       preferredSplit: _preferredSplit,
       daysPerWeek: _daysPerWeek,
@@ -142,6 +683,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       contraindications: Set<String>.from(_selectedContraindications),
       scheduleConstraints: {
         'notes': _scheduleConstraintsController.text.trim(),
+        'preferred_training_weekdays': _selectedWeekdaysSorted(),
       },
     );
   }
@@ -151,6 +693,17 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   }) {
     final customPromptText =
         _useCustomPromptText ? _promptEditorController.text.trim() : null;
+    final userNotes = _additionalInstructionsController.text.trim();
+    final weekdayNotes =
+        'Preferred training weekdays: ${_selectedWeekdaySummary()}';
+    final splitRequirementNotes = _splitRequirementText(_selectedSplit);
+    final combinedNotes = <String>[
+      if (userNotes.isNotEmpty) userNotes,
+      weekdayNotes,
+      splitRequirementNotes,
+      if (!_selectedWeekdaysMeetSplitRequirement())
+        'Selected weekdays do not match this split requirement. Keep requested weekdays as much as possible and adjust with recovery-first logic.',
+    ].join('\n');
 
     return WeeklyPlanBuildRequest(
       workspaceId: _scopeWorkspaceId(),
@@ -161,7 +714,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       modifier: _selectedModifier,
       mode: mode,
       propagateLongTermChanges: _propagateLongTerm,
-      additionalInstructions: _additionalInstructionsController.text.trim(),
+      additionalInstructions: combinedNotes,
       overridePromptText: customPromptText == null || customPromptText.isEmpty
           ? null
           : customPromptText,
@@ -206,7 +759,6 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       }
       setState(() {
         _generatedPrompt = result.promptText;
-        _lastBuildRequest = request;
         if (!_useCustomPromptText) {
           _promptEditorController.text = result.promptText;
         }
@@ -237,9 +789,10 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       }
       setState(() {
         _generatedPrompt = result.promptText;
-        _lastBuildRequest = request;
         if (result.generatedText != null && result.generatedText!.isNotEmpty) {
           _manualAiResponseController.text = result.generatedText!;
+          ref.read(aiWeeklyPlanResponseProvider.notifier).state =
+              result.generatedText!;
         }
         _status = result.importResult == null
             ? 'One-tap AI completed with no import result.'
@@ -267,6 +820,18 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     }
   }
 
+  Future<void> _copyPromptToClipboard() async {
+    final text = _promptEditorController.text.trim().isNotEmpty
+        ? _promptEditorController.text.trim()
+        : (_generatedPrompt ?? '');
+    if (text.isEmpty) {
+      _showMessage('No prompt generated yet.');
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: text));
+    _showMessage('Prompt copied to clipboard.');
+  }
+
   Future<void> _applyManualAiResponse() async {
     final text = _manualAiResponseController.text.trim();
     if (text.isEmpty) {
@@ -279,7 +844,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       await ref
           .read(weeklyPlannerServiceProvider)
           .upsertPlanningProfile(_buildPlanningProfileFromForm());
-      final request = _lastBuildRequest ??
+      final request =
           _buildPlanRequest(mode: PlannerGenerationMode.manualAssist);
       final result = await ref
           .read(weeklyPlannerServiceProvider)
@@ -288,6 +853,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       if (!mounted) {
         return;
       }
+      ref.read(aiWeeklyPlanResponseProvider.notifier).state = text;
       setState(() {
         _status = 'Manual AI plan applied: ${result.pretty()}';
       });
@@ -299,18 +865,6 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         setState(() => _manualApplying = false);
       }
     }
-  }
-
-  Future<void> _copyPromptToClipboard() async {
-    final text = _promptEditorController.text.trim().isNotEmpty
-        ? _promptEditorController.text.trim()
-        : (_generatedPrompt ?? '');
-    if (text.isEmpty) {
-      _showMessage('No prompt generated yet.');
-      return;
-    }
-    await Clipboard.setData(ClipboardData(text: text));
-    _showMessage('Prompt copied to clipboard.');
   }
 
   Future<void> _pickTemplateFile() async {
@@ -566,6 +1120,129 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  PlanBuilderWalkthroughDraft _walkthroughDraftFromForm() {
+    final distance = _runGoalDistanceController.text.trim();
+    final pace = _runGoalPaceController.text.trim();
+    return PlanBuilderWalkthroughDraft(
+      primaryGoal: _normalizePrimaryGoal(_primaryGoal),
+      runTargetEnabled: distance.isNotEmpty || pace.isNotEmpty,
+      runDistanceMiles: distance,
+      runPace: pace,
+      experienceLevel: _experienceLevel,
+      splitType: _selectedSplit,
+    );
+  }
+
+  void _applyWalkthroughDraft(PlanBuilderWalkthroughDraft draft) {
+    setState(() {
+      _onPrimaryGoalChanged(draft.primaryGoal);
+      if (_normalizePrimaryGoal(draft.primaryGoal) == _runGoal) {
+        final distance = draft.runDistanceMiles.trim();
+        if (distance.isNotEmpty) {
+          _runGoalDistanceController.text = distance;
+        } else if (_runGoalDistanceController.text.trim().isEmpty) {
+          _runGoalDistanceController.text = '5';
+        }
+
+        if (draft.runTargetEnabled) {
+          _runGoalPaceController.text = draft.runPace.trim();
+        } else {
+          _runGoalPaceController.clear();
+        }
+      }
+
+      _experienceLevel = draft.experienceLevel;
+      _preferredSplit = draft.splitType;
+      _selectedSplit = draft.splitType;
+    });
+  }
+
+  Future<void> _openPlanBuilderWalkthrough() async {
+    var initialStep = 0;
+    final lastStep = _walkthroughLastStepIndex;
+    if (lastStep != null && lastStep > 0) {
+      final resumeChoice = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Resume Walkthrough?'),
+          content: const Text(
+            'Continue where you left off, or start over from the intro screen.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('start_over'),
+              child: const Text('Start Over'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop('resume'),
+              child: const Text('Resume'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) {
+        return;
+      }
+      if (resumeChoice == null) {
+        return;
+      }
+      if (resumeChoice == 'resume') {
+        initialStep = lastStep;
+      } else {
+        _walkthroughLastStepIndex = 0;
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+    final completed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PlanBuilderWalkthroughScreen(
+          initialDraft: _walkthroughDraftFromForm(),
+          initialStep: initialStep,
+          onDraftChanged: _applyWalkthroughDraft,
+          onStepChanged: (step) {
+            _walkthroughLastStepIndex = step;
+          },
+          onCompleted: () {
+            _walkthroughLastStepIndex = null;
+          },
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+    if (completed == true) {
+      _walkthroughLastStepIndex = null;
+    }
+  }
+
+  Future<void> _openShortTermGoalEditor() async {
+    final result = await Navigator.of(context).push<_ShortTermGoalDraft>(
+      MaterialPageRoute(
+        builder: (_) => _ShortTermGoalScreen(
+          initialGoalText: _shortTermGoalController.text,
+          initialTimelineWeeks: _shortTermGoalWeeksController.text,
+        ),
+      ),
+    );
+    if (!mounted || result == null) {
+      return;
+    }
+    setState(() {
+      _shortTermGoalController.text = result.goalText;
+      _shortTermGoalWeeksController.text = result.timelineWeeks;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.watch(activeWorkspaceContextProvider);
@@ -574,14 +1251,14 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         _loadPlanningProfileIfNeeded();
       }
     });
-
-    final plannerService = ref.watch(weeklyPlannerServiceProvider);
+    final metricTileHeight =
+        MediaQuery.sizeOf(context).width < 380 ? 82.0 : 88.0;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       children: [
         Text(
-          'WEEKLY PLAN BUILDER',
+          'PROGRESSIVE OVERLOAD PLAN',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 letterSpacing: 1,
                 fontWeight: FontWeight.w800,
@@ -593,79 +1270,163 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               'One guided flow for intake, weekly setup, generation, and apply.',
         ),
         const SizedBox(height: 12),
-        GridView.count(
-          crossAxisCount: 2,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.85,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
+        Row(
           children: [
-            MetricTile(
-              title: 'Scope',
-              valueText: _scopeProfileId(),
-              subtitleText: _scopeWorkspaceId(),
-              leadingIcon: Icons.badge_outlined,
+            Expanded(
+              child: SizedBox(
+                height: metricTileHeight,
+                child: MetricTile(
+                  title: 'Scope',
+                  valueText: _scopeUsername(),
+                  subtitleText: _scopeWorkspaceId(),
+                  leadingIcon: Icons.badge_outlined,
+                ),
+              ),
             ),
-            MetricTile(
-              title: 'Planner Backend',
-              valueText: plannerService.isServerSideAiEnabled
-                  ? 'Server AI enabled'
-                  : 'Manual assist mode',
-              subtitleText: plannerService.isServerSideAiEnabled
-                  ? 'Edge function available'
-                  : 'Sign in to enable one-tap AI',
-              leadingIcon: Icons.auto_awesome_outlined,
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                height: metricTileHeight,
+                child: MetricTile(
+                  title: 'Planner Backend',
+                  valueText: 'Manual Assist Mode',
+                  subtitleText: 'AI Assist account not funded',
+                  leadingIcon: Icons.auto_awesome_outlined,
+                ),
+              ),
             ),
           ],
         ),
+        const SizedBox(height: 2),
+        SizedBox(
+          width: double.infinity,
+          child: PrimaryPillButton(
+            text: 'Adaptation Philosophy',
+            icon: Icons.auto_awesome,
+            variant: PillButtonVariant.filled,
+            onPressed: _openPlanBuilderWalkthrough,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: PrimaryPillButton(
+            text: 'Short-Term Goal',
+            icon: Icons.flag_outlined,
+            variant: PillButtonVariant.tonal,
+            onPressed: _openShortTermGoalEditor,
+          ),
+        ),
         const SizedBox(height: 14),
-        const SectionHeader(text: 'Step 1 — Athlete Intake'),
+        const SectionHeader(text: 'Step 1 — Athletic Goal Setting'),
         const SizedBox(height: 8),
         GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               DropdownButtonFormField<String>(
-                value: _primaryGoal,
-                decoration: const InputDecoration(labelText: 'Primary Goal'),
+                initialValue: _primaryGoal,
+                dropdownColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                decoration: _dropdownDecoration(context, 'Primary Goal'),
                 items: const [
                   DropdownMenuItem(
-                    value: 'run_5mi_8min',
-                    child: Text('Run 5 miles @ 8:00 pace'),
+                    value: _runGoal,
+                    child: Text('Run Goal'),
                   ),
                   DropdownMenuItem(
-                    value: 'hypertrophy',
-                    child: Text('Hypertrophy / Aesthetics'),
+                    value: _strengthGoal,
+                    child: Text('Strength Goal (Strength)'),
                   ),
                   DropdownMenuItem(
-                    value: 'strength',
-                    child: Text('Strength Performance'),
+                    value: _hypertrophyGoal,
+                    child: Text('Strength Goal (Hypertrophy)'),
                   ),
                   DropdownMenuItem(
-                    value: 'recomposition',
-                    child: Text('Body Recomposition'),
+                    value: _cardioGoal,
+                    child: Text('Cardio Improvement'),
                   ),
                 ],
                 onChanged: (value) {
                   if (value != null) {
-                    setState(() => _primaryGoal = value);
+                    setState(() => _onPrimaryGoalChanged(value));
                   }
                 },
               ),
               const SizedBox(height: 8),
+              if (_isRunGoalSelected)
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _runGoalDistanceController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9.]'),
+                          ),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Distance (miles) *',
+                          hintText: 'Example: 5',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _runGoalPaceController,
+                        decoration: const InputDecoration(
+                          labelText: 'Target Pace (optional)',
+                          hintText: 'Example: 9:15-9:10/mi',
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                TextField(
+                  controller: _goalTargetController,
+                  decoration: InputDecoration(
+                    labelText: _nonRunGoalLabel(),
+                    hintText: _nonRunGoalHint(),
+                  ),
+                ),
+              const SizedBox(height: 8),
               TextField(
-                controller: _goalTargetController,
+                controller: _shortTermGoalController,
+                maxLines: 2,
                 decoration: const InputDecoration(
-                  labelText: 'Goal Target Details',
-                  hintText: 'Example: 5 miles in 40:00 by July',
+                  labelText: 'Short-Term Goal (optional)',
+                  hintText:
+                      'Example: Abs showing for beach weekend, or train for a 10K.',
                 ),
               ),
               const SizedBox(height: 8),
+              TextField(
+                controller: _shortTermGoalWeeksController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+                decoration: const InputDecoration(
+                  labelText: 'Timeline (weeks)',
+                  hintText: 'Example: 6',
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'If short-term goal is entered, timeline is required (1-52).',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _experienceLevel,
-                decoration:
-                    const InputDecoration(labelText: 'Experience Level'),
+                initialValue: _experienceLevel,
+                dropdownColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                decoration: _dropdownDecoration(context, 'Experience Level'),
                 items: const [
                   DropdownMenuItem(value: 'beginner', child: Text('Beginner')),
                   DropdownMenuItem(
@@ -680,8 +1441,10 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<SplitType>(
-                value: _preferredSplit,
-                decoration: const InputDecoration(labelText: 'Preferred Split'),
+                initialValue: _preferredSplit,
+                dropdownColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                decoration: _dropdownDecoration(context, 'Preferred Split'),
                 items: SplitType.values
                     .map(
                       (split) => DropdownMenuItem(
@@ -806,9 +1569,10 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<SplitType>(
-                value: _selectedSplit,
-                decoration:
-                    const InputDecoration(labelText: 'Weekly Split Type'),
+                initialValue: _selectedSplit,
+                dropdownColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                decoration: _dropdownDecoration(context, 'Weekly Split Type'),
                 items: SplitType.values
                     .map(
                       (split) => DropdownMenuItem(
@@ -824,9 +1588,57 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                 },
               ),
               const SizedBox(height: 8),
+              Text(
+                _splitRequirementText(_selectedSplit),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: _selectedWeekdaysMeetSplitRequirement()
+                          ? null
+                          : Colors.orange.shade300,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Workout Weekdays',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              Text(
+                _selectedWeekdaySummary(),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 4),
+              for (final weekday in const <int>[
+                DateTime.monday,
+                DateTime.tuesday,
+                DateTime.wednesday,
+                DateTime.thursday,
+                DateTime.friday,
+                DateTime.saturday,
+                DateTime.sunday,
+              ])
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  value: _selectedTrainingWeekdays.contains(weekday),
+                  title: Text(_weekdayLabel(weekday)),
+                  onChanged: (selected) {
+                    if (selected == null) {
+                      return;
+                    }
+                    setState(() {
+                      if (selected) {
+                        _selectedTrainingWeekdays.add(weekday);
+                      } else {
+                        _selectedTrainingWeekdays.remove(weekday);
+                      }
+                    });
+                  },
+                ),
+              const SizedBox(height: 8),
               DropdownButtonFormField<WeeklyPlanModifier>(
-                value: _selectedModifier,
-                decoration: const InputDecoration(labelText: 'Weekly Modifier'),
+                initialValue: _selectedModifier,
+                dropdownColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                decoration: _dropdownDecoration(context, 'Weekly Modifier'),
                 items: WeeklyPlanModifier.values
                     .map(
                       (modifier) => DropdownMenuItem(
@@ -856,153 +1668,300 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        const SectionHeader(text: 'Step 3 — Generation Mode + Prompt Controls'),
+        const SectionHeader(text: 'Step 3 — Planning Workspace'),
         const SizedBox(height: 8),
         GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SegmentedButton<PlannerGenerationMode>(
-                segments: PlannerGenerationMode.values
-                    .map(
-                      (mode) => ButtonSegment<PlannerGenerationMode>(
-                        value: mode,
-                        label: Text(mode.label),
-                      ),
-                    )
-                    .toList(),
-                selected: {_generationMode},
-                onSelectionChanged: (selection) {
-                  setState(() => _generationMode = selection.first);
-                },
+          child: SegmentedButton<_PlannerWorkspaceTab>(
+            segments: const [
+              ButtonSegment<_PlannerWorkspaceTab>(
+                value: _PlannerWorkspaceTab.planning,
+                label: Text('Planning'),
+                icon: Icon(Icons.tune),
               ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _additionalInstructionsController,
-                minLines: 2,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Additional Planning Instructions',
-                  hintText: 'Optional constraints or focus areas for this week',
+              ButtonSegment<_PlannerWorkspaceTab>(
+                value: _PlannerWorkspaceTab.advanced,
+                label: Text('Advanced'),
+                icon: Icon(Icons.build_outlined),
+              ),
+            ],
+            selected: {_workspaceTab},
+            onSelectionChanged: (selection) {
+              setState(() => _workspaceTab = selection.first);
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (_workspaceTab == _PlannerWorkspaceTab.planning) ...[
+          GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SegmentedButton<PlannerGenerationMode>(
+                  segments: PlannerGenerationMode.values
+                      .map(
+                        (mode) => ButtonSegment<PlannerGenerationMode>(
+                          value: mode,
+                          label: Text(mode.label),
+                        ),
+                      )
+                      .toList(),
+                  selected: {_generationMode},
+                  onSelectionChanged: (selection) {
+                    setState(() => _generationMode = selection.first);
+                  },
                 ),
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _useCustomPromptText,
-                title: const Text('Use custom prompt text for this run'),
-                subtitle: const Text(
-                  'Enable to edit raw prompt before generation/apply.',
-                ),
-                onChanged: (value) =>
-                    setState(() => _useCustomPromptText = value),
-              ),
-              if (_useCustomPromptText) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 TextField(
-                  controller: _promptEditorController,
+                  controller: _additionalInstructionsController,
+                  minLines: 2,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Additional Planning Instructions',
+                    hintText:
+                        'Optional constraints or focus areas for this week',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _useCustomPromptText,
+                  title: const Text('Use custom prompt text for this run'),
+                  subtitle: const Text(
+                    'Enable to edit raw prompt before generation/apply.',
+                  ),
+                  onChanged: (value) =>
+                      setState(() => _useCustomPromptText = value),
+                ),
+                if (_useCustomPromptText) ...[
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _promptEditorController,
+                    minLines: 8,
+                    maxLines: 14,
+                    decoration: const InputDecoration(
+                      labelText: 'Raw Prompt Override',
+                      border: OutlineInputBorder(),
+                    ),
+                    style:
+                        const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: _buildingPrompt
+                        ? 'Building Prompt...'
+                        : 'Build Prompt Snapshot',
+                    variant: PillButtonVariant.outlined,
+                    onPressed: _buildingPrompt ? null : _buildPromptSnapshot,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _copyPromptToClipboard,
+                      icon: const Icon(Icons.copy_all_outlined),
+                      label: const Text('Copy Prompt'),
+                    ),
+                    if (_generationMode == PlannerGenerationMode.oneTapAi)
+                      FilledButton.icon(
+                        onPressed: _oneTapGenerating ? null : _runOneTapAiBuild,
+                        icon: const Icon(Icons.auto_awesome),
+                        label: Text(
+                          _oneTapGenerating
+                              ? 'Generating...'
+                              : 'Generate with One-tap AI',
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _manualAiResponseController,
                   minLines: 8,
                   maxLines: 14,
+                  onChanged: (value) {
+                    ref.read(aiWeeklyPlanResponseProvider.notifier).state =
+                        value;
+                    setState(() {});
+                  },
                   decoration: const InputDecoration(
-                    labelText: 'Raw Prompt Override',
+                    labelText: 'Paste Weekly AI Plan Response Here.',
+                    alignLabelWithHint: true,
                     border: OutlineInputBorder(),
                   ),
                   style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 ),
-              ],
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: PrimaryPillButton(
-                  text: _buildingPrompt
-                      ? 'Building Prompt...'
-                      : 'Build Prompt Snapshot',
-                  variant: PillButtonVariant.outlined,
-                  onPressed: _buildingPrompt ? null : _buildPromptSnapshot,
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: _manualApplying
+                        ? 'Applying...'
+                        : 'Apply Pasted Weekly Plan Text',
+                    variant: PillButtonVariant.tonal,
+                    onPressed: _manualApplying ? null : _applyManualAiResponse,
+                  ),
                 ),
-              ),
-              if (_generatedPrompt != null) ...[
+                if (_generatedPrompt != null) ...[
+                  const SizedBox(height: 8),
+                  ExpansionTile(
+                    title: const Text('Prompt Preview'),
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: SelectableText(
+                          _generatedPrompt!,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ] else ...[
+          GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SectionHeader(text: 'Advanced Planning Tools'),
                 const SizedBox(height: 8),
-                ExpansionTile(
-                  title: const Text('Prompt Preview'),
+                const Text(
+                  'Use legacy import/generation workflows from local files.',
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Template Workbook (XLSX)',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 6),
+                Row(
                   children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
+                    Expanded(
+                      child: Text(
+                        _templatePath ?? 'No file selected',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      child: SelectableText(
-                        _generatedPrompt!,
-                        style: const TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 11,
-                        ),
-                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    PrimaryPillButton(
+                      text: 'Pick File',
+                      variant: PillButtonVariant.outlined,
+                      onPressed: _pickTemplateFile,
                     ),
                   ],
                 ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        const SectionHeader(text: 'Step 4 — Review + Apply'),
-        const SizedBox(height: 8),
-        GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _copyPromptToClipboard,
-                    icon: const Icon(Icons.copy_all_outlined),
-                    label: const Text('Copy Prompt'),
+                const SizedBox(height: 6),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _applyProgression,
+                  title: const Text('Apply progression adjustments'),
+                  onChanged: (value) =>
+                      setState(() => _applyProgression = value),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: _legacyGenerating
+                        ? 'Generating...'
+                        : 'Generate From Template',
+                    onPressed:
+                        _legacyGenerating ? null : _generateFromTemplateLegacy,
                   ),
-                  if (_generationMode == PlannerGenerationMode.oneTapAi)
-                    FilledButton.icon(
-                      onPressed: _oneTapGenerating ? null : _runOneTapAiBuild,
-                      icon: const Icon(Icons.auto_awesome),
-                      label: Text(
-                        _oneTapGenerating
-                            ? 'Generating...'
-                            : 'Generate with One-tap AI',
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'AI Weekly Plan Text (.txt/.md)',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _aiWeeklyPlanTextPath ?? 'No file selected',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _manualAiResponseController,
-                minLines: 8,
-                maxLines: 14,
-                decoration: const InputDecoration(
-                  labelText: 'AI Weekly Plan Response (WEEK_PLAN_V1 text)',
-                  alignLabelWithHint: true,
-                  border: OutlineInputBorder(),
+                    const SizedBox(width: 8),
+                    PrimaryPillButton(
+                      text: 'Pick File',
+                      variant: PillButtonVariant.outlined,
+                      onPressed: _pickAiWeeklyPlanTextFile,
+                    ),
+                  ],
                 ),
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: PrimaryPillButton(
-                  text: _manualApplying
-                      ? 'Applying...'
-                      : 'Apply Pasted Weekly Plan Text',
-                  variant: PillButtonVariant.tonal,
-                  onPressed: _manualApplying ? null : _applyManualAiResponse,
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: _legacyAiImporting
+                        ? 'Importing...'
+                        : 'Import AI Weekly Plan Text',
+                    variant: PillButtonVariant.tonal,
+                    onPressed: _legacyAiImporting
+                        ? null
+                        : _importAiWeeklyPlanTextLegacy,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                Text(
+                  'Standard Workbook (XLSX)',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _standardWorkbookPath ?? 'No file selected',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    PrimaryPillButton(
+                      text: 'Pick File',
+                      variant: PillButtonVariant.outlined,
+                      onPressed: _pickStandardWorkbookFile,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: _legacyStandardImporting
+                        ? 'Importing...'
+                        : 'Import Standard Workbook',
+                    variant: PillButtonVariant.tonal,
+                    onPressed: _legacyStandardImporting
+                        ? null
+                        : _importStandardWorkbookLegacy,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 12),
         GlassCard(
           child: Column(
@@ -1011,103 +1970,6 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               const SectionHeader(text: 'Planner Status'),
               const SizedBox(height: 8),
               Text(_status),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        const SectionHeader(text: 'Advanced Planning Tools'),
-        const SizedBox(height: 8),
-        GlassCard(
-          child: ExpansionTile(
-            title: const Text('Legacy XLSX/Text Imports & Template Generator'),
-            subtitle: const Text(
-              'Kept for compatibility. Preferred flow is the guided planner above.',
-            ),
-            childrenPadding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
-            children: [
-              ListTile(
-                title: const Text('Import Standard Workbook (XLSX)'),
-                subtitle: Text(_standardWorkbookPath ?? 'No XLSX selected'),
-                trailing: PrimaryPillButton(
-                  text: 'Pick XLSX',
-                  variant: PillButtonVariant.outlined,
-                  onPressed: _pickStandardWorkbookFile,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: PrimaryPillButton(
-                    text: _legacyStandardImporting
-                        ? 'Importing...'
-                        : 'Import Standard Workbook',
-                    onPressed: _legacyStandardImporting
-                        ? null
-                        : _importStandardWorkbookLegacy,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                title: const Text('Import AI Weekly Plan Text (.txt/.md)'),
-                subtitle:
-                    Text(_aiWeeklyPlanTextPath ?? 'No text file selected'),
-                trailing: PrimaryPillButton(
-                  text: 'Pick File',
-                  variant: PillButtonVariant.outlined,
-                  onPressed: _pickAiWeeklyPlanTextFile,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: PrimaryPillButton(
-                    text:
-                        _legacyAiImporting ? 'Importing...' : 'Import AI Text',
-                    onPressed: _legacyAiImporting
-                        ? null
-                        : _importAiWeeklyPlanTextLegacy,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                title: const Text('Generate from Template XLSX'),
-                subtitle: Text(_templatePath ?? 'No template selected'),
-                trailing: PrimaryPillButton(
-                  text: 'Pick XLSX',
-                  variant: PillButtonVariant.outlined,
-                  onPressed: _pickTemplateFile,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Apply progression (+5 lb loaded sets)'),
-                  subtitle: const Text(
-                    'Legacy generator option (auto-blocked by recovery gate).',
-                  ),
-                  value: _applyProgression,
-                  onChanged: (value) =>
-                      setState(() => _applyProgression = value),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: PrimaryPillButton(
-                    text: _legacyGenerating
-                        ? 'Generating...'
-                        : 'Generate from Template',
-                    onPressed:
-                        _legacyGenerating ? null : _generateFromTemplateLegacy,
-                  ),
-                ),
-              ),
             ],
           ),
         ),

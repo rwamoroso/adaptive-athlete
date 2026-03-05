@@ -8,6 +8,7 @@ import '../../db/app_db.dart';
 import 'weekly_plan_prompt_service.dart';
 
 enum SplitType {
+  runOnly,
   fullBody3d,
   upperLower4d,
   ppl56d,
@@ -20,6 +21,7 @@ enum SplitType {
 
 extension SplitTypeX on SplitType {
   String get code => switch (this) {
+        SplitType.runOnly => 'run_only',
         SplitType.fullBody3d => 'full_body_3d',
         SplitType.upperLower4d => 'upper_lower_4d',
         SplitType.ppl56d => 'ppl_5_6d',
@@ -31,6 +33,7 @@ extension SplitTypeX on SplitType {
       };
 
   String get label => switch (this) {
+        SplitType.runOnly => 'Run Only',
         SplitType.fullBody3d => 'Full Body (3d)',
         SplitType.upperLower4d => 'Upper/Lower (4d)',
         SplitType.ppl56d => 'Push/Pull/Legs (5-6d)',
@@ -317,6 +320,9 @@ class WeeklyPlannerService {
     final recentMetricsJson = const JsonEncoder.withIndent('  ').convert(
       context.recentMetricsSummary,
     );
+    final goalTargetJson = const JsonEncoder.withIndent('  ').convert(
+      context.profile.goalTarget,
+    );
 
     final modifierInstructions = switch (context.modifier) {
       WeeklyPlanModifier.followLongTerm => '''
@@ -334,6 +340,50 @@ class WeeklyPlannerService {
 
     final extra = (context.additionalInstructions ?? '').trim();
     final extraBlock = extra.isEmpty ? '' : '\nAdditional Notes:\n$extra\n';
+    final primaryGoal = context.profile.primaryGoal.trim().toLowerCase();
+    final goalInstructionBlock = switch (primaryGoal) {
+      'run_goal' || 'run_5mi_8min' => '''
+Goal-Specific Instructions:
+- Primary goal is run performance.
+- Prioritize run prescription quality, progressive endurance development, and fatigue-aware run scheduling.
+- Keep strength work supplemental unless split instructions require otherwise.''',
+      'hypertrophy' => '''
+Goal-Specific Instructions:
+- Primary goal is hypertrophy-focused strength training.
+- Bias strength prescriptions toward muscle growth while preserving run consistency.''',
+      'strength' => '''
+Goal-Specific Instructions:
+- Primary goal is strength-focused training.
+- Bias strength prescriptions toward measurable force/output progression while preserving run consistency.''',
+      'cardio_improvement' || 'cardio' => '''
+Goal-Specific Instructions:
+- Primary goal is broad cardio improvement without a fixed race-distance target.
+- Emphasize aerobic development, sustainable progression, and cardiovascular efficiency.
+- Use varied cardio prescriptions as needed; avoid forcing a specific distance/pace milestone.''',
+      _ => '''
+Goal-Specific Instructions:
+- Treat Athlete Profile primary_goal as authoritative over any generic defaults in the base prompt.''',
+    };
+    final splitInstructionBlock = context.splitType == SplitType.runOnly
+        ? '''
+Split-Specific Instructions:
+- Requested split is run_only.
+- Generate a run-only week: do not include any STRENGTH_SET rows.
+- Because there are no strength sets, do not include ALT rows.
+- Keep strength-focused fields blank or run-focused text only.
+- Include only run prescriptions and recovery structure for the 7-day week.'''
+        : '';
+    const explanationInstructionBlock = '''
+Plan Explanation Output Requirements:
+- After the full WEEK_PLAN_V1 block (after END DAY 7), append:
+  PLAN_EXPLANATION_V1
+  WHY_THIS_WEEK: <plain-language rationale for this week structure>
+  ADAPTATION_OR_GROWTH: <what this week is adapting/growing in the athlete>
+  LOGIC_OVERVIEW: <brief summary of load/recovery/progression logic>
+  END_PLAN_EXPLANATION_V1
+- WHY_THIS_WEEK must answer: "Why am I training like this for the week?"
+- ADAPTATION_OR_GROWTH must answer: "What adaptation or growth does the week provide to my body?"
+- Keep explanation practical and athlete-facing, without medical claims.''';
 
     return '''
 $basePrompt
@@ -344,12 +394,18 @@ Week End: ${context.weekEnd}
 Requested Split Type: ${context.splitType.label} (${context.splitType.code})
 Requested Modifier: ${context.modifier.label} (${context.modifier.code})
 Propagate Long-term Changes: ${context.propagateLongTermChanges ? 'yes' : 'no'}
+Primary Goal Code: ${context.profile.primaryGoal}
+Goal Target (JSON):
+$goalTargetJson
 
 Athlete Profile:
 ${const JsonEncoder.withIndent('  ').convert(context.profile.toJson())}
 
 Modifier Instructions:
 $modifierInstructions
+$goalInstructionBlock
+$splitInstructionBlock
+$explanationInstructionBlock
 
 Long Range Context (JSON):
 $longRangeJson

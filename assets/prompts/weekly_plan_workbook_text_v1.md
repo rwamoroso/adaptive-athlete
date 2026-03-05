@@ -12,8 +12,8 @@ Goal:
 - Maintain the required output structure exactly, while optimizing the plan content.
 
 Priorities:
-1. Primary goal is ability to run 5 miles at 8 minutes per mile.
-2. Secondary goal of increased muscle mass targeting aestetics over strength.
+1. Use `APP_CONTEXT_V1` as the source of truth for `primary_goal`, `goal_target`, `preferred_split`, and `split_type`.
+2. Treat selected goal intent as authoritative (run performance, cardio improvement, strength, or hypertrophy).
 3. Preserve weight/rep/RIR intent when appropriate, but change it when analysis indicates a better outcome.
 4. Respect available equipment when known.
 5. Respect contraindications / pain triggers.
@@ -32,6 +32,7 @@ Use these inputs (provided by the user/app context):
 - Start date for Day 1
 
 Authority / optimization rules (important):
+- `APP_CONTEXT_V1` overrides any generic defaults in this template when there is conflict.
 - You must keep the line-based output schema exactly as specified.
 - Within that fixed schema, you have full autonomy to adjust:
   - exercise selection
@@ -145,12 +146,14 @@ Rules for 10-week updates (required when `TEN_WEEK_PLAN_UPDATE_V1` is included):
 - Use `deload=yes` for recovery/taper weeks when appropriate.
 
 Weekly split rules (required):
-- Build a 7-day week containing exactly 5 training days and 2 rest days unless recovery/pain context clearly requires a different structure.
+- If `Requested Split Type` is `run_only`, generate a run-focused week and do not include strength prescriptions or ALT rows.
+- Otherwise, build a 7-day week containing exactly 5 training days and 2 rest days unless recovery/pain context clearly requires a different structure.
 - Place the 2 rest days optimally based on fatigue management, run quality, and lower-body recovery.
 - Rest days should not contain copied strength prescriptions from training days.
 - If a rest day includes optional activity, keep it clearly recovery-focused and low load.
 
 Rules for alternatives (required):
+- For `run_only` split: skip ALT rows because there are no prescribed strength exercises.
 - Provide a ranked list for every unique prescribed strength exercise in each day block.
 - Default to 3 alternatives per exercise when feasible.
 - Include at least 1 `ALT` row per prescribed exercise (required, even if only weak options exist).
@@ -176,6 +179,6 @@ Quality constraints:
 - In fallback text mode, do not include markdown code fences.
 - In preferred workbook mode, do not add explanatory worksheets or embedded instructions.
 - Do not omit any day (1-7).
-- Do not omit ALT rows for strength exercises.
+- Do not omit ALT rows for strength exercises (except `run_only` split with no strength work).
 - Do not use the `|` character inside field values (especially `rationale` or `notes`).
 - Do not use unescaped `=` inside field values.

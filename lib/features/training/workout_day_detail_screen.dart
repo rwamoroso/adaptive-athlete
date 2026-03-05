@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/parsing/exercise_normalizer.dart';
 import '../../core/utils/app_providers.dart';
 import '../../db/app_db.dart';
 import '../ui/clinical_theme.dart';
@@ -57,6 +59,8 @@ class WorkoutDayDetailScreen extends ConsumerStatefulWidget {
 
 class _WorkoutDayDetailScreenState
     extends ConsumerState<WorkoutDayDetailScreen> {
+  static const int _defaultRestSeconds = 90;
+
   late Future<WorkoutDayDetail> _detailFuture;
   final ScrollController _scrollController = ScrollController();
   final Map<String, _EditableSetState> _editedByKey =
@@ -65,8 +69,14 @@ class _WorkoutDayDetailScreenState
   final Set<String> _savingExercises = <String>{};
   final Map<String, bool> _expandedByExercise = <String, bool>{};
   final Map<String, GlobalKey> _cardKeysByExercise = <String, GlobalKey>{};
+  bool _addingExercise = false;
   String? _pendingScrollExercise;
   int _tilesEpoch = 0;
+  Timer? _restTicker;
+  bool _restVisible = false;
+  int _restRemainingSeconds = 0;
+  int _restTotalSeconds = _defaultRestSeconds;
+  int _restDismissibleEpoch = 0;
 
   @override
   void initState() {
@@ -89,6 +99,7 @@ class _WorkoutDayDetailScreenState
 
   @override
   void dispose() {
+    _restTicker?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -180,9 +191,40 @@ class _WorkoutDayDetailScreenState
         .toList();
   }
 
+  List<PlannedStrengthSetView> _editableSetsForGroup(ExerciseSetGroup group) {
+    final prescribed = _effectivePrescribedSets(group.prescribed);
+    if (prescribed.isNotEmpty) {
+      return prescribed;
+    }
+    final actualSorted = [...group.actual]
+      ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
+    if (actualSorted.isEmpty) {
+      return const <PlannedStrengthSetView>[
+        PlannedStrengthSetView(
+          setIndex: 1,
+          weight: 0,
+          reps: 0,
+          rir: 0,
+          unit: 'lb',
+        ),
+      ];
+    }
+    return actualSorted
+        .map(
+          (set) => PlannedStrengthSetView(
+            setIndex: set.setIndex,
+            weight: set.weight ?? 0,
+            reps: set.reps ?? 0,
+            rir: set.rir ?? 0,
+            unit: set.unit,
+          ),
+        )
+        .toList();
+  }
+
   void _ensureEditableRows(WorkoutDayDetail detail) {
     for (final group in detail.groups) {
-      final sets = _effectivePrescribedSets(group.prescribed);
+      final sets = _editableSetsForGroup(group);
       for (final set in sets) {
         final key = _setKey(group.exercise, set.setIndex);
         _editedByKey.putIfAbsent(key, () {
@@ -196,6 +238,152 @@ class _WorkoutDayDetailScreenState
         });
       }
     }
+  }
+
+  Future<void> _addCustomExercise({
+    required String exerciseCanonical,
+    required int initialSetCount,
+  }) async {
+    setState(() => _addingExercise = true);
+    try {
+      final db = ref.read(appDbProvider);
+      for (var setIndex = 1; setIndex <= initialSetCount; setIndex++) {
+        await db.upsertActualStrengthSetForDate(
+          dateYmd: widget.date,
+          exerciseCanonical: exerciseCanonical,
+          prescribedExerciseCanonical: exerciseCanonical,
+          setIndex: setIndex,
+          weight: 0,
+          reps: 0,
+          rir: 0,
+          source: 'manual_custom_exercise',
+        );
+      }
+      if (!mounted) {
+        return;
+      }
+      _expandedByExercise[exerciseCanonical] = true;
+      _pendingScrollExercise = exerciseCanonical;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Added $exerciseCanonical with $initialSetCount set${initialSetCount == 1 ? '' : 's'}.',
+          ),
+        ),
+      );
+      _refreshDetail();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add exercise: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _addingExercise = false);
+      }
+    }
+  }
+
+  Future<void> _promptAddExercise(WorkoutDayDetail detail) async {
+    final nameController = TextEditingController();
+    final setsController = TextEditingController(text: '1');
+
+    final draft = await showDialog<_AddExerciseDraft>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Exercise'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Exercise Name',
+                hintText: 'Example: Kneeling Leg Curl',
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: setsController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Initial Set Count',
+                hintText: '1-10',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(
+              _AddExerciseDraft(
+                exerciseName: nameController.text,
+                initialSetCountRaw: setsController.text,
+              ),
+            ),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+
+    if (draft == null) {
+      return;
+    }
+    final rawName = draft.exerciseName.trim();
+    if (rawName.isEmpty) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Exercise name is required.')),
+      );
+      return;
+    }
+
+    final initialSetCount = int.tryParse(draft.initialSetCountRaw.trim());
+    if (initialSetCount == null ||
+        initialSetCount < 1 ||
+        initialSetCount > 10) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Initial set count must be between 1 and 10.')),
+      );
+      return;
+    }
+
+    final exerciseCanonical = ExerciseNormalizer.normalize(rawName);
+    final exists = detail.groups.any((g) => g.exercise == exerciseCanonical);
+    if (exists) {
+      _expandedByExercise[exerciseCanonical] = true;
+      _pendingScrollExercise = exerciseCanonical;
+      _refreshDetail();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content:
+                Text('$exerciseCanonical is already on this workout day.')),
+      );
+      return;
+    }
+
+    await _addCustomExercise(
+      exerciseCanonical: exerciseCanonical,
+      initialSetCount: initialSetCount,
+    );
   }
 
   void _adjustWeight(String key, double delta) {
@@ -241,6 +429,48 @@ class _WorkoutDayDetailScreenState
     return value.toStringAsFixed(1);
   }
 
+  int _resolveRestSecondsForSet({
+    required ExerciseSetGroup group,
+    required PlannedStrengthSetView set,
+  }) {
+    // TODO: Replace with AI-prescribed per-set rest when plan data stores it.
+    return _defaultRestSeconds;
+  }
+
+  void _startRestCountdown(int seconds) {
+    final clamped = seconds < 1 ? 1 : seconds;
+    _restTicker?.cancel();
+    setState(() {
+      _restVisible = true;
+      _restTotalSeconds = clamped;
+      _restRemainingSeconds = clamped;
+      _restDismissibleEpoch++;
+    });
+    _restTicker = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_restRemainingSeconds <= 1) {
+        timer.cancel();
+        setState(() => _restRemainingSeconds = 0);
+        return;
+      }
+      setState(() => _restRemainingSeconds--);
+    });
+  }
+
+  void _dismissRestCountdown() {
+    _restTicker?.cancel();
+    setState(() => _restVisible = false);
+  }
+
+  String _formatCountdown(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _confirmActualSet({
     required String performedExerciseCanonical,
     required String prescribedExerciseCanonical,
@@ -250,6 +480,7 @@ class _WorkoutDayDetailScreenState
     required String currentExercise,
     required String? nextExercise,
     required bool advanceCard,
+    required int restSeconds,
   }) async {
     final key = _setKey(prescribedExerciseCanonical, prescribed.setIndex);
     final fallbackWeight = prescribed.weight ?? 0.0;
@@ -283,6 +514,7 @@ class _WorkoutDayDetailScreenState
           ),
         ),
       );
+      _startRestCountdown(restSeconds);
       final targetExercise = (advanceCard && nextExercise != null)
           ? nextExercise
           : currentExercise;
@@ -485,6 +717,70 @@ class _WorkoutDayDetailScreenState
     _refreshDetail();
   }
 
+  Widget _buildRestCountdownOverlay(BuildContext context) {
+    final progress = _restTotalSeconds == 0
+        ? 0.0
+        : _restRemainingSeconds / _restTotalSeconds;
+    final done = _restRemainingSeconds == 0;
+
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        bottom: false,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Dismissible(
+                key: ValueKey<String>('rest-countdown-$_restDismissibleEpoch'),
+                direction: DismissDirection.horizontal,
+                onDismissed: (_) => _dismissRestCountdown(),
+                child: GlassCard(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  tintColor: Theme.of(context)
+                      .colorScheme
+                      .surface
+                      .withValues(alpha: 0.82),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Rest',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatCountdown(_restRemainingSeconds),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      LinearProgressIndicator(
+                        value: progress.clamp(0.0, 1.0),
+                        minHeight: 4,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        done ? 'Rest complete' : 'Swipe to dismiss',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Theme(
@@ -604,7 +900,16 @@ class _WorkoutDayDetailScreenState
                         },
                       ),
                     const SizedBox(height: 16),
-                    const SectionHeader(text: 'Exercises'),
+                    SectionHeader(
+                      text: 'Exercises',
+                      trailing: FilledButton.tonal(
+                        onPressed: _addingExercise
+                            ? null
+                            : () => _promptAddExercise(detail),
+                        child: Text(
+                            _addingExercise ? 'Adding...' : 'Add Exercise'),
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     if (detail.groups.isEmpty)
                       const GlassCard(
@@ -615,10 +920,12 @@ class _WorkoutDayDetailScreenState
                         final group = entry.value;
                         final prescribedSets =
                             _effectivePrescribedSets(group.prescribed);
+                        final editableSets = _editableSetsForGroup(group);
                         final normalizedSetIndexes =
                             _needsSetIndexNormalization(group.prescribed);
                         final actualSets = [...group.actual]
                           ..sort((a, b) => a.setIndex.compareTo(b.setIndex));
+                        final isCustomExercise = group.prescribed.isEmpty;
                         final skippingExercise =
                             _savingExercises.contains(group.exercise);
                         final performedExercise =
@@ -643,9 +950,11 @@ class _WorkoutDayDetailScreenState
                             },
                             title: Text(group.displayExercise),
                             subtitle: Text(
-                              group.substitution == null
-                                  ? 'Prescribed: ${prescribedSets.length} | Actual: ${actualSets.length}'
-                                  : 'Planned: ${group.exercise} | Actual: ${actualSets.length}',
+                              isCustomExercise
+                                  ? 'Custom exercise | Sets: ${editableSets.length} | Actual: ${actualSets.length}'
+                                  : group.substitution == null
+                                      ? 'Prescribed: ${prescribedSets.length} | Actual: ${actualSets.length}'
+                                      : 'Planned: ${group.exercise} | Actual: ${actualSets.length}',
                             ),
                             childrenPadding: const EdgeInsets.all(12),
                             children: [
@@ -687,52 +996,53 @@ class _WorkoutDayDetailScreenState
                               Align(
                                 alignment: Alignment.centerLeft,
                                 child: Text(
-                                  group.substitution == null
-                                      ? 'Adjust Prescribed and Confirm as Actual'
-                                      : 'Adjusted for substitute; confirm as actual',
+                                  isCustomExercise
+                                      ? 'Adjust and Update Actual'
+                                      : group.substitution == null
+                                          ? 'Adjust Prescribed and Confirm as Actual'
+                                          : 'Adjusted for substitute; confirm as actual',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  FilledButton.tonal(
-                                    onPressed: prescribedSets.isEmpty
-                                        ? null
-                                        : () => _openSubstitutionPicker(
-                                              detail: detail,
-                                              group: group,
-                                              prescribedSets: prescribedSets,
-                                            ),
-                                    child: const Text('Substitute Exercise'),
-                                  ),
-                                  if (group.substitution != null)
-                                    OutlinedButton(
-                                      onPressed: () =>
-                                          _clearSubstitutionForGroup(group),
-                                      child: const Text('Clear'),
+                              if (prescribedSets.isNotEmpty)
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    FilledButton.tonal(
+                                      onPressed: () => _openSubstitutionPicker(
+                                        detail: detail,
+                                        group: group,
+                                        prescribedSets: prescribedSets,
+                                      ),
+                                      child: const Text('Substitute Exercise'),
                                     ),
-                                  FilledButton.tonal(
-                                    onPressed: skippingExercise ||
-                                            prescribedSets.isEmpty
-                                        ? null
-                                        : () => _skipExercise(
-                                              performedExerciseCanonical:
-                                                  performedExercise,
-                                              prescribedExerciseCanonical:
-                                                  group.exercise,
-                                              substitutionId:
-                                                  group.substitution?.id,
-                                              prescribedSets: prescribedSets,
-                                            ),
-                                    child: const Text('Skip Exercise (log 0)'),
-                                  ),
-                                ],
-                              ),
+                                    if (group.substitution != null)
+                                      OutlinedButton(
+                                        onPressed: () =>
+                                            _clearSubstitutionForGroup(group),
+                                        child: const Text('Clear'),
+                                      ),
+                                    FilledButton.tonal(
+                                      onPressed: skippingExercise
+                                          ? null
+                                          : () => _skipExercise(
+                                                performedExerciseCanonical:
+                                                    performedExercise,
+                                                prescribedExerciseCanonical:
+                                                    group.exercise,
+                                                substitutionId:
+                                                    group.substitution?.id,
+                                                prescribedSets: prescribedSets,
+                                              ),
+                                      child:
+                                          const Text('Skip Exercise (log 0)'),
+                                    ),
+                                  ],
+                                ),
                               if (skippingExercise) ...[
                                 const SizedBox(height: 6),
                                 const Align(
@@ -741,7 +1051,8 @@ class _WorkoutDayDetailScreenState
                                 ),
                               ],
                               const SizedBox(height: 8),
-                              if (normalizedSetIndexes) ...[
+                              if (!isCustomExercise &&
+                                  normalizedSetIndexes) ...[
                                 const Align(
                                   alignment: Alignment.centerLeft,
                                   child: Text(
@@ -750,113 +1061,109 @@ class _WorkoutDayDetailScreenState
                                 ),
                                 const SizedBox(height: 8),
                               ],
-                              if (prescribedSets.isEmpty)
-                                const Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                      'No prescribed sets for this exercise.'),
-                                )
-                              else
-                                ...prescribedSets
-                                    .asMap()
-                                    .entries
-                                    .map((setEntry) {
-                                  final set = setEntry.value;
-                                  final isLastSet =
-                                      setEntry.key == prescribedSets.length - 1;
-                                  final key =
-                                      _setKey(group.exercise, set.setIndex);
-                                  final edited = _editedByKey[key]!;
-                                  final hasExistingActual = actualSets
-                                      .any((a) => a.setIndex == set.setIndex);
-                                  final saving = _savingKeys.contains(key);
+                              ...editableSets.asMap().entries.map((setEntry) {
+                                final set = setEntry.value;
+                                final isLastSet =
+                                    setEntry.key == editableSets.length - 1;
+                                final key =
+                                    _setKey(group.exercise, set.setIndex);
+                                final edited = _editedByKey[key]!;
+                                final hasExistingActual = actualSets
+                                    .any((a) => a.setIndex == set.setIndex);
+                                final saving = _savingKeys.contains(key);
 
-                                  return Container(
-                                    width: double.infinity,
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .outline,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
+                                return Container(
+                                  width: double.infinity,
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color:
+                                          Theme.of(context).colorScheme.outline,
                                     ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Text(
-                                              'Set ${set.setIndex}',
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.bold),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            'Set ${set.setIndex}',
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          if (hasExistingActual)
+                                            const Chip(
+                                              label: Text(
+                                                  'Will overwrite existing actual'),
                                             ),
-                                            const SizedBox(width: 8),
-                                            if (hasExistingActual)
-                                              const Chip(
-                                                label: Text(
-                                                    'Will overwrite existing actual'),
-                                              ),
-                                          ],
-                                        ),
-                                        _AdjustRow(
-                                          label: 'Weight (lb)',
-                                          value: _formatWeight(edited.weight),
-                                          onMinus: () =>
-                                              _adjustWeight(key, -2.5),
-                                          onPlus: () => _adjustWeight(key, 2.5),
-                                        ),
-                                        _AdjustRow(
-                                          label: 'Reps',
-                                          value: edited.reps?.toString() ??
-                                              'unset',
-                                          onMinus: () => _adjustReps(key, -1),
-                                          onPlus: () => _adjustReps(key, 1),
-                                        ),
-                                        _AdjustRow(
-                                          label: 'RIR',
-                                          value:
-                                              edited.rir?.toString() ?? 'unset',
-                                          onMinus: () => _adjustRir(key, -1),
-                                          onPlus: () => _adjustRir(key, 1),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Align(
-                                          alignment: Alignment.centerRight,
-                                          child: FilledButton.tonal(
-                                            onPressed: saving
-                                                ? null
-                                                : () => _confirmActualSet(
-                                                      performedExerciseCanonical:
-                                                          performedExercise,
-                                                      prescribedExerciseCanonical:
-                                                          group.exercise,
-                                                      substitutionId: group
-                                                          .substitution?.id,
-                                                      prescribed: set,
-                                                      hadExistingActual:
-                                                          hasExistingActual,
-                                                      currentExercise:
-                                                          group.exercise,
-                                                      nextExercise: isLastSet
-                                                          ? nextExercise
-                                                          : null,
-                                                      advanceCard: isLastSet,
+                                        ],
+                                      ),
+                                      _AdjustRow(
+                                        label: 'Weight (lb)',
+                                        value: _formatWeight(edited.weight),
+                                        onMinus: () => _adjustWeight(key, -2.5),
+                                        onPlus: () => _adjustWeight(key, 2.5),
+                                      ),
+                                      _AdjustRow(
+                                        label: 'Reps',
+                                        value:
+                                            edited.reps?.toString() ?? 'unset',
+                                        onMinus: () => _adjustReps(key, -1),
+                                        onPlus: () => _adjustReps(key, 1),
+                                      ),
+                                      _AdjustRow(
+                                        label: 'RIR',
+                                        value:
+                                            edited.rir?.toString() ?? 'unset',
+                                        onMinus: () => _adjustRir(key, -1),
+                                        onPlus: () => _adjustRir(key, 1),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: FilledButton.tonal(
+                                          key: ValueKey<String>(
+                                            'confirm-actual-${group.exercise}-${set.setIndex}',
+                                          ),
+                                          onPressed: saving
+                                              ? null
+                                              : () => _confirmActualSet(
+                                                    performedExerciseCanonical:
+                                                        performedExercise,
+                                                    prescribedExerciseCanonical:
+                                                        group.exercise,
+                                                    substitutionId:
+                                                        group.substitution?.id,
+                                                    prescribed: set,
+                                                    hadExistingActual:
+                                                        hasExistingActual,
+                                                    currentExercise:
+                                                        group.exercise,
+                                                    nextExercise: isLastSet
+                                                        ? nextExercise
+                                                        : null,
+                                                    advanceCard: isLastSet,
+                                                    restSeconds:
+                                                        _resolveRestSecondsForSet(
+                                                      group: group,
+                                                      set: set,
                                                     ),
-                                            child: Text(
-                                              hasExistingActual
-                                                  ? 'Update Actual'
-                                                  : 'Confirm as Actual',
-                                            ),
+                                                  ),
+                                          child: Text(
+                                            hasExistingActual
+                                                ? 'Update Actual'
+                                                : 'Confirm as Actual',
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                  );
-                                }),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
                               const SizedBox(height: 8),
                               const Align(
                                 alignment: Alignment.centerLeft,
@@ -940,6 +1247,7 @@ class _WorkoutDayDetailScreenState
                 );
               },
             ),
+            if (_restVisible) _buildRestCountdownOverlay(context),
           ],
         ),
       ),
@@ -963,6 +1271,16 @@ class _SubstitutionSelectionResult {
   final bool warningAcknowledged;
   final bool isCurated;
   final bool clear;
+}
+
+class _AddExerciseDraft {
+  const _AddExerciseDraft({
+    required this.exerciseName,
+    required this.initialSetCountRaw,
+  });
+
+  final String exerciseName;
+  final String initialSetCountRaw;
 }
 
 class _WorkoutDetailPageBackground extends StatelessWidget {
@@ -1032,11 +1350,17 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final sheetTheme = buildClinicalTheme();
-    final filtered = widget.suggestions
-        .where((c) => _query.trim().isEmpty
-            ? true
-            : c.exerciseCanonical.toLowerCase().contains(_query.toLowerCase()))
-        .toList();
+    final queryRaw = _query.trim().toLowerCase();
+    final normalizedQuery = queryRaw.isEmpty
+        ? ''
+        : ExerciseNormalizer.normalize(queryRaw).toLowerCase();
+    final filtered = widget.suggestions.where((c) {
+      if (queryRaw.isEmpty) {
+        return true;
+      }
+      final name = c.exerciseCanonical.toLowerCase();
+      return name.contains(queryRaw) || name.contains(normalizedQuery);
+    }).toList();
     SubstitutionCandidate? selectedCandidate;
     final selectedKey = _selectedExercise;
     if (selectedKey != null) {
@@ -1095,32 +1419,34 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
                     height: 320,
                     child: filtered.isEmpty
                         ? const Center(child: Text('No suggestions found.'))
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final c = filtered[index];
-                              return RadioListTile<String>(
-                                value: c.exerciseCanonical,
-                                groupValue: _selectedExercise,
-                                onChanged: (v) => setState(() {
-                                  _selectedExercise = v;
-                                  _warningAcknowledged = false;
-                                }),
-                                title: Text(c.exerciseCanonical),
-                                subtitle: Text(
-                                  '${_tierLabel(c.tier)} • ${c.score.round()}/100'
-                                  '${c.isCurated ? ' • curated' : ''}'
-                                  '${c.warnings.isEmpty ? '' : '\n${c.warnings.join('; ')}'}',
-                                ),
-                              );
-                            },
+                        : RadioGroup<String>(
+                            groupValue: _selectedExercise,
+                            onChanged: (value) => setState(() {
+                              _selectedExercise = value;
+                              _warningAcknowledged = false;
+                            }),
+                            child: ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final c = filtered[index];
+                                return RadioListTile<String>(
+                                  value: c.exerciseCanonical,
+                                  title: Text(c.exerciseCanonical),
+                                  subtitle: Text(
+                                    '${_tierLabel(c.tier)} • ${c.score.round()}/100'
+                                    '${c.isCurated ? ' • curated' : ''}'
+                                    '${c.warnings.isEmpty ? '' : '\n${c.warnings.join('; ')}'}',
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _reasonCode,
+                  initialValue: _reasonCode,
                   items: const [
                     DropdownMenuItem(
                         value: 'equipment_unavailable',

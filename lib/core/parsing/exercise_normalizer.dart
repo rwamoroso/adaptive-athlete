@@ -18,6 +18,16 @@ class ExerciseNormalizer {
     'romainian deadlift': 'Romanian Deadlift',
     'pull up': 'Pull Up',
     'pull-up': 'Pull Up',
+    'seated leg curl': 'Seated Leg Curl',
+    'seated leg curls': 'Seated Leg Curl',
+    'sitting leg curl': 'Seated Leg Curl',
+    'sitting leg curls': 'Seated Leg Curl',
+    'lying leg curl': 'Lying Leg Curl',
+    'lying leg curls': 'Lying Leg Curl',
+    'kneeling leg curl': 'Kneeling Leg Curl',
+    'kneeling leg curls': 'Kneeling Leg Curl',
+    'standing leg curl': 'Standing Leg Curl',
+    'standing leg curls': 'Standing Leg Curl',
   };
 
   static String normalize(String input) {

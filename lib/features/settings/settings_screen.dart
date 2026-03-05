@@ -84,7 +84,7 @@ class SettingsScreen extends ConsumerWidget {
                 onChanged: settingsNotifier.setLocalOnly,
               ),
               DropdownButtonFormField<UnitPreference>(
-                value: settings.unit,
+                initialValue: settings.unit,
                 decoration: const InputDecoration(labelText: 'Units'),
                 items: const [
                   DropdownMenuItem(value: UnitPreference.lb, child: Text('lb')),
@@ -216,7 +216,7 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: profiles.any((p) => p.id == ctx.profileId)
+                    initialValue: profiles.any((p) => p.id == ctx.profileId)
                         ? ctx.profileId
                         : (profiles.isNotEmpty ? profiles.first.id : null),
                     decoration:
@@ -386,7 +386,7 @@ class _WorkspaceInviteCardState extends ConsumerState<_WorkspaceInviteCard> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: _role,
+          initialValue: _role,
           decoration: const InputDecoration(labelText: 'Role'),
           items: const [
             DropdownMenuItem(value: 'coach', child: Text('coach')),
@@ -467,7 +467,7 @@ class _WorkspaceInviteCardState extends ConsumerState<_WorkspaceInviteCard> {
                           );
                       await Clipboard.setData(
                           ClipboardData(text: invite.deepLink));
-                      if (!mounted) {
+                      if (!context.mounted) {
                         return;
                       }
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -478,7 +478,7 @@ class _WorkspaceInviteCardState extends ConsumerState<_WorkspaceInviteCard> {
                         ),
                       );
                     } catch (e) {
-                      if (!mounted) {
+                      if (!context.mounted) {
                         return;
                       }
                       final errorText = e is PostgrestException

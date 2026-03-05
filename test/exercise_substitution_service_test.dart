@@ -118,4 +118,31 @@ void main() {
       ['Push Up', 'Dumbbell Bench Press'],
     );
   });
+
+  test('leg curl variants are discoverable for substitution search', () async {
+    final db = AppDb.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    final service = ExerciseSubstitutionService(db: db);
+    final suggestions = await service.suggestAlternatives(
+      prescribedExerciseCanonical: 'Kneeling Leg Curl',
+      prescribedSets: const <PlannedStrengthSetView>[],
+      planDayId: null,
+      availableEquipment: const <String>{'machine'},
+      contraindications: const <String>{},
+    );
+
+    expect(suggestions.length, greaterThan(6));
+    expect(
+      suggestions.any((c) => c.exerciseCanonical == 'Seated Leg Curl'),
+      isTrue,
+    );
+  });
+
+  test('normalizes sitting leg curl alias to seated leg curl', () {
+    expect(
+      ExerciseNormalizer.normalize('sitting leg curls'),
+      'Seated Leg Curl',
+    );
+  });
 }

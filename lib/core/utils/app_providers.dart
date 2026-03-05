@@ -203,6 +203,8 @@ final syncStatusProvider =
   (_) => AppSyncStatusNotifier(),
 );
 
+final aiWeeklyPlanResponseProvider = StateProvider<String>((_) => '');
+
 final aiAnalyzeServiceProvider =
     Provider<AiAnalyzeService>((_) => const AiAnalyzeService());
 
