@@ -123,6 +123,21 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         '${seconds.toString().padLeft(2, '0')}';
   }
 
+  void _adjustDurationBySeconds({
+    required TextEditingController controller,
+    required int deltaSeconds,
+  }) {
+    final parsed = GarminCsvImportService.parseDurationSeconds(
+      controller.text.trim(),
+    );
+    final currentSeconds = parsed?.round() ?? 0;
+    final nextSeconds = currentSeconds + deltaSeconds;
+    final clampedSeconds = nextSeconds < 0 ? 0 : nextSeconds;
+    setState(() {
+      controller.text = _formatSecondsAsHms(clampedSeconds);
+    });
+  }
+
   double? _parsePaceSecondsPerMile(String raw) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
@@ -1074,13 +1089,40 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                                       ),
                                     ],
                                   ),
-                                  TextField(
-                                    controller: segment.durationController,
-                                    onChanged: (_) => setState(() {}),
-                                    decoration: const InputDecoration(
-                                      labelText: 'Duration',
-                                      hintText: 'HH:MM:SS',
-                                    ),
+                                  Row(
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Decrease by 30 seconds',
+                                        onPressed: () =>
+                                            _adjustDurationBySeconds(
+                                          controller:
+                                              segment.durationController,
+                                          deltaSeconds: -30,
+                                        ),
+                                        icon: const Icon(Icons.remove_circle),
+                                      ),
+                                      Expanded(
+                                        child: TextField(
+                                          controller:
+                                              segment.durationController,
+                                          onChanged: (_) => setState(() {}),
+                                          decoration: const InputDecoration(
+                                            labelText: 'Duration',
+                                            hintText: 'HH:MM:SS',
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Increase by 30 seconds',
+                                        onPressed: () =>
+                                            _adjustDurationBySeconds(
+                                          controller:
+                                              segment.durationController,
+                                          deltaSeconds: 30,
+                                        ),
+                                        icon: const Icon(Icons.add_circle),
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: 8),
                                   TextField(
@@ -1103,12 +1145,34 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                           '${preview.hasInvalidInput ? ' (check invalid segment values)' : ''}',
                         ),
                       ] else ...[
-                        TextField(
-                          controller: _durationController,
-                          decoration: const InputDecoration(
-                            labelText: 'Duration',
-                            hintText: 'HH:MM:SS',
-                          ),
+                        Row(
+                          children: [
+                            IconButton(
+                              tooltip: 'Decrease by 30 seconds',
+                              onPressed: () => _adjustDurationBySeconds(
+                                controller: _durationController,
+                                deltaSeconds: -30,
+                              ),
+                              icon: const Icon(Icons.remove_circle),
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: _durationController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Duration',
+                                  hintText: 'HH:MM:SS',
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Increase by 30 seconds',
+                              onPressed: () => _adjustDurationBySeconds(
+                                controller: _durationController,
+                                deltaSeconds: 30,
+                              ),
+                              icon: const Icon(Icons.add_circle),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         TextField(
