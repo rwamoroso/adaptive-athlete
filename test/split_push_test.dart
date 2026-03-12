@@ -117,10 +117,10 @@ void main() {
       days.map((d) => d.sessionType).toList(),
       ['push', 'rest', 'pull', 'legs', 'push', 'pull', 'legs'],
     );
+    expect(days[1].shiftReason, 'manual_rest');
   });
 
-  test('push split can skip selected day type when no future rest exists',
-      () async {
+  test('manual rest is blocked when no future rest day exists', () async {
     final db = await _seedDbWithSplit([
       'push',
       'pull',
@@ -134,21 +134,131 @@ void main() {
 
     expect(
       () => db.markRestDayAndPushSplit(dateYmd: '2026-02-10'),
-      throwsA(isA<StateError>()),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message.toString(),
+          'message',
+          contains('not optimal'),
+        ),
+      ),
     );
+    expect(
+      () => db.markRestDayAndPushSplit(
+        dateYmd: '2026-02-10',
+        skipSessionType: 'push',
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message.toString(),
+          'message',
+          contains('not optimal'),
+        ),
+      ),
+    );
+  });
 
-    final options = await db.getAvailableSkipDayTypesForDate('2026-02-10');
-    expect(options, containsAll(<String>['push', 'pull', 'legs']));
+  test('illness can eliminate selected day type when no future rest exists',
+      () async {
+    final db = await _seedDbWithSplit([
+      'push',
+      'pull',
+      'legs',
+      'push',
+      'pull',
+      'legs',
+      'push',
+    ]);
+    addTearDown(db.close);
 
     await db.markRestDayAndPushSplit(
       dateYmd: '2026-02-10',
       skipSessionType: 'push',
+      shiftReason: 'illness',
     );
     final days = await db.select(db.planDays).get()
       ..sort((a, b) => a.dayNumber.compareTo(b.dayNumber));
     expect(
       days.map((d) => d.sessionType).toList(),
       ['push', 'rest', 'pull', 'legs', 'pull', 'legs', 'push'],
+    );
+    expect(days[1].shiftReason, 'illness');
+  });
+
+  test('push split can mark an illness day and shift prescribed run days',
+      () async {
+    final db = await _seedDbWithSplit([
+      'push',
+      'pull',
+      'rest',
+      'legs',
+      'push',
+      'pull',
+      'legs',
+    ]);
+    addTearDown(db.close);
+
+    await db.markRestDayAndPushSplit(
+      dateYmd: '2026-02-10',
+      shiftReason: 'illness',
+    );
+    final days = await db.select(db.planDays).get()
+      ..sort((a, b) => a.dayNumber.compareTo(b.dayNumber));
+    expect(days[1].shiftReason, 'illness');
+
+    final runs = await db.select(db.planPrescribedRuns).get();
+    final dayNumberByPlanDayId = <String, int>{
+      for (final day in days) day.id: day.dayNumber,
+    };
+    final runDayLabelByNumber = <int, String?>{
+      for (final run in runs)
+        if (dayNumberByPlanDayId[run.planDayId] != null)
+          dayNumberByPlanDayId[run.planDayId]!: run.dayLabel,
+    };
+    expect(runDayLabelByNumber[2], isNull);
+    expect(runDayLabelByNumber[3], 'Day 2');
+  });
+
+  test('push split can mark an injury day when skipping a future day type',
+      () async {
+    final db = await _seedDbWithSplit([
+      'push',
+      'pull',
+      'legs',
+      'push',
+      'pull',
+      'legs',
+      'push',
+    ]);
+    addTearDown(db.close);
+
+    await db.markRestDayAndPushSplit(
+      dateYmd: '2026-02-10',
+      skipSessionType: 'push',
+      shiftReason: 'injury',
+    );
+    final days = await db.select(db.planDays).get()
+      ..sort((a, b) => a.dayNumber.compareTo(b.dayNumber));
+    expect(days[1].shiftReason, 'injury');
+  });
+
+  test('push split rejects unsupported shift reason', () async {
+    final db = await _seedDbWithSplit([
+      'push',
+      'pull',
+      'rest',
+      'legs',
+      'push',
+      'pull',
+      'legs',
+    ]);
+    addTearDown(db.close);
+
+    expect(
+      () => db.markRestDayAndPushSplit(
+        dateYmd: '2026-02-10',
+        shiftReason: 'vacation',
+      ),
+      throwsA(isA<StateError>()),
     );
   });
 
@@ -225,7 +335,10 @@ void main() {
     ]);
     addTearDown(db.close);
 
-    await db.markRestDayAndPushSplit(dateYmd: '2026-02-10');
+    await db.markRestDayAndPushSplit(
+      dateYmd: '2026-02-10',
+      shiftReason: 'illness',
+    );
     await db.undoRestDayAndPullSplit(dateYmd: '2026-02-10');
 
     final days = await db.select(db.planDays).get()
@@ -234,6 +347,8 @@ void main() {
       days.map((d) => d.sessionType).toList(),
       ['push', 'pull', 'legs', 'push', 'pull', 'legs', 'rest'],
     );
+    expect(days.last.shiftReason, isNull);
+    expect(days.where((d) => d.shiftReason != null), isEmpty);
   });
 
   test('workout detail resolves day number and corrected split type after push',

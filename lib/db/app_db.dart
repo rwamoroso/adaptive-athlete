@@ -465,6 +465,7 @@ class _PlanDaySnapshot {
   const _PlanDaySnapshot({
     required this.sheetName,
     required this.sessionType,
+    required this.shiftReason,
     required this.strengthSets,
     required this.alternatives,
     required this.runPlan,
@@ -472,6 +473,7 @@ class _PlanDaySnapshot {
 
   final String sheetName;
   final String sessionType;
+  final String? shiftReason;
   final List<PlanPrescribedStrengthSet> strengthSets;
   final List<PlanExerciseAlternative> alternatives;
   final PlanPrescribedRun? runPlan;
@@ -618,7 +620,7 @@ class AppDb extends _$AppDb {
   final Uuid _uuid = const Uuid();
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -706,9 +708,19 @@ class AppDb extends _$AppDb {
             await m.createTable(athletePlanningProfiles);
             await m.createTable(weeklyPlanBuildRequests);
           }
+          if (from >= 3 && from < 12) {
+            await m.addColumn(planDays, planDays.shiftReason);
+          }
+          if (from < 13) {
+            await _dedupeWorkoutDaysByDateAndRepointReferences();
+            await _ensureWorkoutDaysDateUniqueIndex();
+          }
         },
         beforeOpen: (details) async {
+          await _dedupeWorkoutDaysByDateAndRepointReferences();
+          await _ensureWorkoutDaysDateUniqueIndex();
           await _ensurePlanDaysSessionTypeColumn();
+          await _ensurePlanDaysShiftReasonColumn();
           await _ensureExerciseSubstitutionsTable();
           await _ensurePlanExerciseAlternativesTable();
           await _ensureActualStrengthSetSubstitutionColumns();
@@ -727,6 +739,175 @@ class AppDb extends _$AppDb {
           await _ensureWeeklyPlanBuildRequestsTable();
         },
       );
+
+  Future<void> enforceWorkoutDayDateUniqueness() async {
+    await _dedupeWorkoutDaysByDateAndRepointReferences();
+    await _ensureWorkoutDaysDateUniqueIndex();
+  }
+
+  Future<void> _ensureWorkoutDaysDateUniqueIndex() async {
+    final tableExists = await _doesTableExist('workout_days');
+    if (!tableExists) {
+      return;
+    }
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_workout_days_workout_date '
+      'ON workout_days(workout_date)',
+    );
+  }
+
+  Future<bool> _doesTableExist(String tableName) async {
+    final exists = await customSelect(
+      'SELECT name FROM sqlite_master WHERE type = ? AND name = ? LIMIT 1',
+      variables: <Variable<Object>>[
+        const Variable<String>('table'),
+        Variable<String>(tableName),
+      ],
+    ).getSingleOrNull();
+    return exists != null;
+  }
+
+  Future<void> _dedupeWorkoutDaysByDateAndRepointReferences() async {
+    final tableExists = await _doesTableExist('workout_days');
+    if (!tableExists) {
+      return;
+    }
+
+    final dayRows = await (select(workoutDays)
+          ..orderBy([
+            (d) =>
+                OrderingTerm(expression: d.workoutDate, mode: OrderingMode.asc),
+            (d) =>
+                OrderingTerm(expression: d.createdAt, mode: OrderingMode.asc),
+            (d) => OrderingTerm(expression: d.id, mode: OrderingMode.asc),
+          ]))
+        .get();
+    if (dayRows.length < 2) {
+      return;
+    }
+
+    final canonicalByDate = <String, String>{};
+    final remap = <String, String>{};
+    for (final row in dayRows) {
+      final canonicalId = canonicalByDate[row.workoutDate];
+      if (canonicalId == null) {
+        canonicalByDate[row.workoutDate] = row.id;
+        continue;
+      }
+      if (row.id != canonicalId) {
+        remap[row.id] = canonicalId;
+      }
+    }
+    if (remap.isEmpty) {
+      return;
+    }
+
+    await transaction(() async {
+      await _mergeExerciseSubstitutionsWorkoutDayRefs(remap);
+      await _repointWorkoutDayIds(
+        tableName: 'run_sessions',
+        columnName: 'workout_day_id',
+        remap: remap,
+      );
+      await _repointWorkoutDayIds(
+        tableName: 'actual_strength_sets',
+        columnName: 'workout_day_id',
+        remap: remap,
+      );
+      await _repointWorkoutDayIds(
+        tableName: 'prescribed_strength_sets',
+        columnName: 'workout_day_id',
+        remap: remap,
+      );
+      await _repointWorkoutDayIds(
+        tableName: 'run_override_audit',
+        columnName: 'workout_day_id',
+        remap: remap,
+      );
+      await (delete(workoutDays)..where((d) => d.id.isIn(remap.keys.toList())))
+          .go();
+    });
+  }
+
+  Future<void> _repointWorkoutDayIds({
+    required String tableName,
+    required String columnName,
+    required Map<String, String> remap,
+  }) async {
+    if (remap.isEmpty || !(await _doesTableExist(tableName))) {
+      return;
+    }
+    for (final entry in remap.entries) {
+      await customStatement(
+        'UPDATE $tableName SET $columnName = ? WHERE $columnName = ?',
+        <Object>[entry.value, entry.key],
+      );
+    }
+  }
+
+  Future<void> _mergeExerciseSubstitutionsWorkoutDayRefs(
+      Map<String, String> remap) async {
+    if (remap.isEmpty || !(await _doesTableExist('exercise_substitutions'))) {
+      return;
+    }
+
+    final rows = await (select(exerciseSubstitutions)
+          ..where((t) => t.workoutDayId.isIn(remap.keys.toList()))
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.selectedAt, mode: OrderingMode.desc),
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+          ]))
+        .get();
+
+    for (final row in rows) {
+      final canonicalWorkoutDayId = remap[row.workoutDayId];
+      if (canonicalWorkoutDayId == null) {
+        continue;
+      }
+
+      final existingOnCanonical = await (select(exerciseSubstitutions)
+            ..where((t) => t.workoutDayId.equals(canonicalWorkoutDayId))
+            ..where((t) => t.prescribedExerciseCanonical
+                .equals(row.prescribedExerciseCanonical))
+            ..limit(1))
+          .getSingleOrNull();
+
+      if (existingOnCanonical == null) {
+        await (update(exerciseSubstitutions)..where((t) => t.id.equals(row.id)))
+            .write(
+          ExerciseSubstitutionsCompanion(
+            workoutDayId: Value(canonicalWorkoutDayId),
+          ),
+        );
+        continue;
+      }
+
+      final shouldReplaceCanonical =
+          row.selectedAt >= existingOnCanonical.selectedAt;
+      if (shouldReplaceCanonical) {
+        await (update(exerciseSubstitutions)
+              ..where((t) => t.id.equals(existingOnCanonical.id)))
+            .write(
+          ExerciseSubstitutionsCompanion(
+            planDayId: Value(row.planDayId),
+            substituteExerciseCanonical: Value(row.substituteExerciseCanonical),
+            reasonCode: Value(row.reasonCode),
+            reasonNotes: Value(row.reasonNotes),
+            selectedAt: Value(row.selectedAt),
+            selectedBy: Value(row.selectedBy),
+            matchScore: Value(row.matchScore),
+            matchExplanationJson: Value(row.matchExplanationJson),
+            warningAcknowledged: Value(row.warningAcknowledged),
+            createdAt: Value(row.createdAt),
+          ),
+        );
+      }
+      await (delete(exerciseSubstitutions)..where((t) => t.id.equals(row.id)))
+          .go();
+    }
+  }
 
   Future<void> _backfillLegacyRunRows() async {
     final rows = await select(runSessions).get();
@@ -875,6 +1056,26 @@ class AppDb extends _$AppDb {
 
     await customStatement('ALTER TABLE plan_days ADD COLUMN session_type TEXT');
     await _backfillPlanDaySessionTypes();
+  }
+
+  Future<void> _ensurePlanDaysShiftReasonColumn() async {
+    final tableExists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'plan_days' LIMIT 1",
+    ).getSingleOrNull();
+    if (tableExists == null) {
+      return;
+    }
+
+    final columns = await customSelect('PRAGMA table_info(plan_days)').get();
+    final hasShiftReason = columns.any(
+      (row) =>
+          (row.data['name']?.toString().toLowerCase() ?? '') == 'shift_reason',
+    );
+    if (hasShiftReason) {
+      return;
+    }
+
+    await customStatement('ALTER TABLE plan_days ADD COLUMN shift_reason TEXT');
   }
 
   Future<void> _backfillActualStrengthPrescribedExerciseCanonical() async {
@@ -1311,6 +1512,36 @@ class AppDb extends _$AppDb {
     'pull',
     'legs',
   ];
+  static const List<String> _supportedShiftReasons = <String>[
+    'manual_rest',
+    'illness',
+    'injury',
+  ];
+  static const String _manualRestNoFutureRestError =
+      'Manual rest day is not available because no future rest day exists. '
+      'This timing is not optimal; use Illness or Injury if you cannot train.';
+
+  String _normalizeShiftReason(String? value) {
+    final normalized = (value ?? '').trim().toLowerCase();
+    if (normalized.isEmpty ||
+        normalized == 'manual' ||
+        normalized == 'manual_rest' ||
+        normalized == 'rest') {
+      return 'manual_rest';
+    }
+    if (normalized.contains('ill')) {
+      return 'illness';
+    }
+    if (normalized.contains('injur')) {
+      return 'injury';
+    }
+    if (_supportedShiftReasons.contains(normalized)) {
+      return normalized;
+    }
+    throw StateError(
+      'Invalid shift reason "$value". Expected manual_rest, illness, or injury.',
+    );
+  }
 
   String _normalizeSessionType(String? value) {
     final normalized = (value ?? '').trim().toLowerCase();
@@ -1516,22 +1747,55 @@ class AppDb extends _$AppDb {
   }
 
   Future<String> createOrGetWorkoutDayByDate(String dateString) async {
-    final existing = await (select(workoutDays)
-          ..where((d) => d.workoutDate.equals(dateString)))
-        .getSingleOrNull();
-    if (existing != null) {
-      return existing.id;
+    final existingRows = await (select(workoutDays)
+          ..where((d) => d.workoutDate.equals(dateString))
+          ..orderBy([
+            (d) =>
+                OrderingTerm(expression: d.createdAt, mode: OrderingMode.asc),
+            (d) => OrderingTerm(expression: d.id, mode: OrderingMode.asc),
+          ])
+          ..limit(2))
+        .get();
+    if (existingRows.isNotEmpty) {
+      if (existingRows.length > 1) {
+        await _dedupeWorkoutDaysByDateAndRepointReferences();
+        final canonical = await _findCanonicalWorkoutDayByDate(dateString);
+        if (canonical != null) {
+          return canonical.id;
+        }
+      }
+      return existingRows.first.id;
     }
 
     final id = _uuid.v4();
-    await into(workoutDays).insert(
-      WorkoutDaysCompanion.insert(
-        id: id,
-        workoutDate: dateString,
-        createdAt: unixMsNow(),
-      ),
-    );
-    return id;
+    try {
+      await into(workoutDays).insert(
+        WorkoutDaysCompanion.insert(
+          id: id,
+          workoutDate: dateString,
+          createdAt: unixMsNow(),
+        ),
+      );
+      return id;
+    } catch (_) {
+      final canonical = await _findCanonicalWorkoutDayByDate(dateString);
+      if (canonical != null) {
+        return canonical.id;
+      }
+      rethrow;
+    }
+  }
+
+  Future<WorkoutDay?> _findCanonicalWorkoutDayByDate(String dateString) {
+    return (select(workoutDays)
+          ..where((d) => d.workoutDate.equals(dateString))
+          ..orderBy([
+            (d) =>
+                OrderingTerm(expression: d.createdAt, mode: OrderingMode.asc),
+            (d) => OrderingTerm(expression: d.id, mode: OrderingMode.asc),
+          ])
+          ..limit(1))
+        .getSingleOrNull();
   }
 
   Future<PlanCycle?> getActivePlanCycleForDate(String ymd) async {
@@ -1732,6 +1996,7 @@ class AppDb extends _$AppDb {
   Future<void> markRestDayAndPushSplit({
     required String dateYmd,
     String? skipSessionType,
+    String shiftReason = 'manual_rest',
   }) async {
     final normalizedSkip =
         skipSessionType == null ? null : _normalizeSessionType(skipSessionType);
@@ -1739,6 +2004,7 @@ class AppDb extends _$AppDb {
       throw StateError(
           'Invalid skip day type "$skipSessionType". Expected Push, Pull, or Legs.');
     }
+    final normalizedShiftReason = _normalizeShiftReason(shiftReason);
 
     await transaction(() async {
       final cycle = await getActivePlanCycleForDate(dateYmd);
@@ -1819,6 +2085,7 @@ class AppDb extends _$AppDb {
               sheetName: day.sheetName,
               sessionType:
                   _normalizeSessionType(day.sessionType ?? day.sheetName),
+              shiftReason: day.shiftReason,
               strengthSets: List<PlanPrescribedStrengthSet>.from(
                 setsByDayId[day.id] ?? const <PlanPrescribedStrengthSet>[],
               ),
@@ -1834,6 +2101,7 @@ class AppDb extends _$AppDb {
       final restPlaceholder = _PlanDaySnapshot(
         sheetName: selected.sheetName,
         sessionType: 'rest',
+        shiftReason: normalizedShiftReason,
         strengthSets: const <PlanPrescribedStrengthSet>[],
         alternatives: const <PlanExerciseAlternative>[],
         runPlan: null,
@@ -1853,6 +2121,9 @@ class AppDb extends _$AppDb {
       }
 
       if (removeIndex == -1) {
+        if (normalizedShiftReason == 'manual_rest') {
+          throw StateError(_manualRestNoFutureRestError);
+        }
         if (normalizedSkip == null) {
           final available = <String>{};
           for (var i = 1; i < candidates.length; i++) {
@@ -1903,6 +2174,7 @@ class AppDb extends _$AppDb {
             dayNumber: Value(i + 1),
             estimatedDate: Value(toYmd(splitStart.add(Duration(days: i)))),
             sessionType: Value(sessionType),
+            shiftReason: Value(source.shiftReason),
             sheetName: Value(
               _sheetNameForDay(
                 dayNumber: i + 1,
@@ -2059,6 +2331,7 @@ class AppDb extends _$AppDb {
               sheetName: day.sheetName,
               sessionType:
                   _normalizeSessionType(day.sessionType ?? day.sheetName),
+              shiftReason: day.shiftReason,
               strengthSets: List<PlanPrescribedStrengthSet>.from(
                 setsByDayId[day.id] ?? const <PlanPrescribedStrengthSet>[],
               ),
@@ -2091,6 +2364,7 @@ class AppDb extends _$AppDb {
       final endRestPlaceholder = _PlanDaySnapshot(
         sheetName: selected.sheetName,
         sessionType: 'rest',
+        shiftReason: null,
         strengthSets: const <PlanPrescribedStrengthSet>[],
         alternatives: const <PlanExerciseAlternative>[],
         runPlan: null,
@@ -2118,6 +2392,7 @@ class AppDb extends _$AppDb {
             dayNumber: Value(i + 1),
             estimatedDate: Value(toYmd(splitStart.add(Duration(days: i)))),
             sessionType: Value(sessionType),
+            shiftReason: Value(source.shiftReason),
             sheetName: Value(
               _sheetNameForDay(
                 dayNumber: i + 1,

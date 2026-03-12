@@ -31,7 +31,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   String? _standardImportConflictReportPath;
   String? _weeklyWorkbookPath;
   String? _exportDirectoryPath;
-  GarminActivityFilter _activityFilter = GarminActivityFilter.runningOnly;
+  GarminActivityFilter _activityFilter = GarminActivityFilter.cardioOnly;
   bool _exporting = false;
   bool _importing = false;
   bool _strengthImporting = false;
@@ -494,12 +494,12 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                 SegmentedButton<GarminActivityFilter>(
                   segments: const [
                     ButtonSegment(
-                      value: GarminActivityFilter.runningOnly,
-                      label: Text('Running Only'),
+                      value: GarminActivityFilter.cardioOnly,
+                      label: Text('Cardio Only'),
                     ),
                     ButtonSegment(
-                      value: GarminActivityFilter.allActivities,
-                      label: Text('All Activities'),
+                      value: GarminActivityFilter.runningOnly,
+                      label: Text('Running Only'),
                     ),
                   ],
                   selected: {_activityFilter},

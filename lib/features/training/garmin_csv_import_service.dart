@@ -2,11 +2,11 @@ import 'dart:convert';
 
 import 'package:csv/csv.dart';
 
-enum GarminActivityFilter { runningOnly, allActivities }
+enum GarminActivityFilter { cardioOnly, runningOnly }
 
 class GarminImportOptions {
   const GarminImportOptions({
-    this.activityFilter = GarminActivityFilter.runningOnly,
+    this.activityFilter = GarminActivityFilter.cardioOnly,
   });
 
   final GarminActivityFilter activityFilter;
@@ -172,10 +172,17 @@ class GarminCsvImportService {
           continue;
         }
 
-        if (options.activityFilter == GarminActivityFilter.runningOnly &&
-            !_isRunningActivityType(activityType)) {
-          skipped++;
-          continue;
+        switch (options.activityFilter) {
+          case GarminActivityFilter.cardioOnly:
+            if (!_isCardioActivityType(activityType)) {
+              skipped++;
+              continue;
+            }
+          case GarminActivityFilter.runningOnly:
+            if (!_isRunningActivityType(activityType)) {
+              skipped++;
+              continue;
+            }
         }
 
         final dateRaw = _clean(field('Date'));
@@ -258,6 +265,16 @@ class GarminCsvImportService {
         value == 'trail running' ||
         value == 'treadmill running' ||
         value.endsWith(' running');
+  }
+
+  static bool _isCardioActivityType(String raw) {
+    final value = raw.trim().toLowerCase();
+    if (_isRunningActivityType(value)) {
+      return true;
+    }
+    return value == 'stair stepper' ||
+        value == 'stair stepping' ||
+        value == 'stairs stepper';
   }
 
   static String _normalizeHeaderKey(String raw) {

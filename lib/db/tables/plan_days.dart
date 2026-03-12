@@ -6,7 +6,10 @@ class PlanDays extends Table {
   IntColumn get dayNumber => integer()(); // 1..7
   TextColumn get sheetName => text()();
   TextColumn get estimatedDate => text().nullable()(); // YYYY-MM-DD estimate
-  TextColumn get sessionType => text().nullable()(); // push|pull|legs|rest|unknown
+  TextColumn get sessionType =>
+      text().nullable()(); // push|pull|legs|rest|unknown
+  TextColumn get shiftReason => text()
+      .nullable()(); // manual_rest|illness|injury for inserted rest pushes
   IntColumn get createdAt => integer()();
 
   @override

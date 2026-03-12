@@ -6968,6 +6968,12 @@ class $PlanDaysTable extends PlanDays with TableInfo<$PlanDaysTable, PlanDay> {
   late final GeneratedColumn<String> sessionType = GeneratedColumn<String>(
       'session_type', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _shiftReasonMeta =
+      const VerificationMeta('shiftReason');
+  @override
+  late final GeneratedColumn<String> shiftReason = GeneratedColumn<String>(
+      'shift_reason', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -6982,6 +6988,7 @@ class $PlanDaysTable extends PlanDays with TableInfo<$PlanDaysTable, PlanDay> {
         sheetName,
         estimatedDate,
         sessionType,
+        shiftReason,
         createdAt
       ];
   @override
@@ -7031,6 +7038,12 @@ class $PlanDaysTable extends PlanDays with TableInfo<$PlanDaysTable, PlanDay> {
           sessionType.isAcceptableOrUnknown(
               data['session_type']!, _sessionTypeMeta));
     }
+    if (data.containsKey('shift_reason')) {
+      context.handle(
+          _shiftReasonMeta,
+          shiftReason.isAcceptableOrUnknown(
+              data['shift_reason']!, _shiftReasonMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -7058,6 +7071,8 @@ class $PlanDaysTable extends PlanDays with TableInfo<$PlanDaysTable, PlanDay> {
           .read(DriftSqlType.string, data['${effectivePrefix}estimated_date']),
       sessionType: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}session_type']),
+      shiftReason: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}shift_reason']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
     );
@@ -7076,6 +7091,7 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
   final String sheetName;
   final String? estimatedDate;
   final String? sessionType;
+  final String? shiftReason;
   final int createdAt;
   const PlanDay(
       {required this.id,
@@ -7084,6 +7100,7 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
       required this.sheetName,
       this.estimatedDate,
       this.sessionType,
+      this.shiftReason,
       required this.createdAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7097,6 +7114,9 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
     }
     if (!nullToAbsent || sessionType != null) {
       map['session_type'] = Variable<String>(sessionType);
+    }
+    if (!nullToAbsent || shiftReason != null) {
+      map['shift_reason'] = Variable<String>(shiftReason);
     }
     map['created_at'] = Variable<int>(createdAt);
     return map;
@@ -7114,6 +7134,9 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
       sessionType: sessionType == null && nullToAbsent
           ? const Value.absent()
           : Value(sessionType),
+      shiftReason: shiftReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shiftReason),
       createdAt: Value(createdAt),
     );
   }
@@ -7128,6 +7151,7 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
       sheetName: serializer.fromJson<String>(json['sheetName']),
       estimatedDate: serializer.fromJson<String?>(json['estimatedDate']),
       sessionType: serializer.fromJson<String?>(json['sessionType']),
+      shiftReason: serializer.fromJson<String?>(json['shiftReason']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
     );
   }
@@ -7141,6 +7165,7 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
       'sheetName': serializer.toJson<String>(sheetName),
       'estimatedDate': serializer.toJson<String?>(estimatedDate),
       'sessionType': serializer.toJson<String?>(sessionType),
+      'shiftReason': serializer.toJson<String?>(shiftReason),
       'createdAt': serializer.toJson<int>(createdAt),
     };
   }
@@ -7152,6 +7177,7 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
           String? sheetName,
           Value<String?> estimatedDate = const Value.absent(),
           Value<String?> sessionType = const Value.absent(),
+          Value<String?> shiftReason = const Value.absent(),
           int? createdAt}) =>
       PlanDay(
         id: id ?? this.id,
@@ -7161,6 +7187,7 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
         estimatedDate:
             estimatedDate.present ? estimatedDate.value : this.estimatedDate,
         sessionType: sessionType.present ? sessionType.value : this.sessionType,
+        shiftReason: shiftReason.present ? shiftReason.value : this.shiftReason,
         createdAt: createdAt ?? this.createdAt,
       );
   PlanDay copyWithCompanion(PlanDaysCompanion data) {
@@ -7175,6 +7202,8 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
           : this.estimatedDate,
       sessionType:
           data.sessionType.present ? data.sessionType.value : this.sessionType,
+      shiftReason:
+          data.shiftReason.present ? data.shiftReason.value : this.shiftReason,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -7188,6 +7217,7 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
           ..write('sheetName: $sheetName, ')
           ..write('estimatedDate: $estimatedDate, ')
           ..write('sessionType: $sessionType, ')
+          ..write('shiftReason: $shiftReason, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -7195,7 +7225,7 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
 
   @override
   int get hashCode => Object.hash(id, planCycleId, dayNumber, sheetName,
-      estimatedDate, sessionType, createdAt);
+      estimatedDate, sessionType, shiftReason, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -7206,6 +7236,7 @@ class PlanDay extends DataClass implements Insertable<PlanDay> {
           other.sheetName == this.sheetName &&
           other.estimatedDate == this.estimatedDate &&
           other.sessionType == this.sessionType &&
+          other.shiftReason == this.shiftReason &&
           other.createdAt == this.createdAt);
 }
 
@@ -7216,6 +7247,7 @@ class PlanDaysCompanion extends UpdateCompanion<PlanDay> {
   final Value<String> sheetName;
   final Value<String?> estimatedDate;
   final Value<String?> sessionType;
+  final Value<String?> shiftReason;
   final Value<int> createdAt;
   final Value<int> rowid;
   const PlanDaysCompanion({
@@ -7225,6 +7257,7 @@ class PlanDaysCompanion extends UpdateCompanion<PlanDay> {
     this.sheetName = const Value.absent(),
     this.estimatedDate = const Value.absent(),
     this.sessionType = const Value.absent(),
+    this.shiftReason = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -7235,6 +7268,7 @@ class PlanDaysCompanion extends UpdateCompanion<PlanDay> {
     required String sheetName,
     this.estimatedDate = const Value.absent(),
     this.sessionType = const Value.absent(),
+    this.shiftReason = const Value.absent(),
     required int createdAt,
     this.rowid = const Value.absent(),
   })  : id = Value(id),
@@ -7249,6 +7283,7 @@ class PlanDaysCompanion extends UpdateCompanion<PlanDay> {
     Expression<String>? sheetName,
     Expression<String>? estimatedDate,
     Expression<String>? sessionType,
+    Expression<String>? shiftReason,
     Expression<int>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -7259,6 +7294,7 @@ class PlanDaysCompanion extends UpdateCompanion<PlanDay> {
       if (sheetName != null) 'sheet_name': sheetName,
       if (estimatedDate != null) 'estimated_date': estimatedDate,
       if (sessionType != null) 'session_type': sessionType,
+      if (shiftReason != null) 'shift_reason': shiftReason,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -7271,6 +7307,7 @@ class PlanDaysCompanion extends UpdateCompanion<PlanDay> {
       Value<String>? sheetName,
       Value<String?>? estimatedDate,
       Value<String?>? sessionType,
+      Value<String?>? shiftReason,
       Value<int>? createdAt,
       Value<int>? rowid}) {
     return PlanDaysCompanion(
@@ -7280,6 +7317,7 @@ class PlanDaysCompanion extends UpdateCompanion<PlanDay> {
       sheetName: sheetName ?? this.sheetName,
       estimatedDate: estimatedDate ?? this.estimatedDate,
       sessionType: sessionType ?? this.sessionType,
+      shiftReason: shiftReason ?? this.shiftReason,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -7306,6 +7344,9 @@ class PlanDaysCompanion extends UpdateCompanion<PlanDay> {
     if (sessionType.present) {
       map['session_type'] = Variable<String>(sessionType.value);
     }
+    if (shiftReason.present) {
+      map['shift_reason'] = Variable<String>(shiftReason.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
     }
@@ -7324,6 +7365,7 @@ class PlanDaysCompanion extends UpdateCompanion<PlanDay> {
           ..write('sheetName: $sheetName, ')
           ..write('estimatedDate: $estimatedDate, ')
           ..write('sessionType: $sessionType, ')
+          ..write('shiftReason: $shiftReason, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -18878,6 +18920,7 @@ typedef $$PlanDaysTableCreateCompanionBuilder = PlanDaysCompanion Function({
   required String sheetName,
   Value<String?> estimatedDate,
   Value<String?> sessionType,
+  Value<String?> shiftReason,
   required int createdAt,
   Value<int> rowid,
 });
@@ -18888,6 +18931,7 @@ typedef $$PlanDaysTableUpdateCompanionBuilder = PlanDaysCompanion Function({
   Value<String> sheetName,
   Value<String?> estimatedDate,
   Value<String?> sessionType,
+  Value<String?> shiftReason,
   Value<int> createdAt,
   Value<int> rowid,
 });
@@ -18917,6 +18961,9 @@ class $$PlanDaysTableFilterComposer extends Composer<_$AppDb, $PlanDaysTable> {
 
   ColumnFilters<String> get sessionType => $composableBuilder(
       column: $table.sessionType, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get shiftReason => $composableBuilder(
+      column: $table.shiftReason, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -18950,6 +18997,9 @@ class $$PlanDaysTableOrderingComposer
   ColumnOrderings<String> get sessionType => $composableBuilder(
       column: $table.sessionType, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get shiftReason => $composableBuilder(
+      column: $table.shiftReason, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 }
@@ -18980,6 +19030,9 @@ class $$PlanDaysTableAnnotationComposer
 
   GeneratedColumn<String> get sessionType => $composableBuilder(
       column: $table.sessionType, builder: (column) => column);
+
+  GeneratedColumn<String> get shiftReason => $composableBuilder(
+      column: $table.shiftReason, builder: (column) => column);
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -19014,6 +19067,7 @@ class $$PlanDaysTableTableManager extends RootTableManager<
             Value<String> sheetName = const Value.absent(),
             Value<String?> estimatedDate = const Value.absent(),
             Value<String?> sessionType = const Value.absent(),
+            Value<String?> shiftReason = const Value.absent(),
             Value<int> createdAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -19024,6 +19078,7 @@ class $$PlanDaysTableTableManager extends RootTableManager<
             sheetName: sheetName,
             estimatedDate: estimatedDate,
             sessionType: sessionType,
+            shiftReason: shiftReason,
             createdAt: createdAt,
             rowid: rowid,
           ),
@@ -19034,6 +19089,7 @@ class $$PlanDaysTableTableManager extends RootTableManager<
             required String sheetName,
             Value<String?> estimatedDate = const Value.absent(),
             Value<String?> sessionType = const Value.absent(),
+            Value<String?> shiftReason = const Value.absent(),
             required int createdAt,
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -19044,6 +19100,7 @@ class $$PlanDaysTableTableManager extends RootTableManager<
             sheetName: sheetName,
             estimatedDate: estimatedDate,
             sessionType: sessionType,
+            shiftReason: shiftReason,
             createdAt: createdAt,
             rowid: rowid,
           ),

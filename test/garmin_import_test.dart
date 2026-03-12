@@ -18,6 +18,12 @@ const _cyclingRow =
 const _trailRunningRow =
     'Trail Running,2026-02-15 08:00:00,false,"Trail Run","3.00","300","00:30:00","145","171","3.0","160","180","10:00","7:30","--","--","0.90","0.0","4,000","--","--","60.0","No","00:05:00.0","3","70.0","00:29:00","00:30:00","--","--"';
 
+const _stairStepperRow =
+    'Stair Stepper,2026-02-16 06:20:00,false,"Stair Session","0.00","260","00:25:00","132","158","2.0","--","--","--","--","--","--","--","0.0","3,000","--","--","65.0","No","00:04:10.0","5","69.0","00:24:00","00:25:00","--","--"';
+
+const _strengthRow =
+    'Strength Training,2026-02-16 12:15:00,false,"Upper Body","0.00","180","00:30:00","110","140","1.0","--","--","--","--","--","--","--","0.0","--","--","--","68.0","No","--","--","70.0","00:30:00","00:30:00","--","--"';
+
 String _csvWithRows(List<String> rows) => <String>[_header, ...rows].join('\n');
 
 void main() {
@@ -38,20 +44,45 @@ void main() {
     expect(row.bestLapTimeS, closeTo(217.4, 0.01));
   });
 
-  test('Activity filter controls whether non-running rows are imported', () {
+  test(
+      'Activity filter controls cardio-only vs running-only and excludes strength rows',
+      () {
     final runningOnly = GarminCsvImportService.parseCsvContent(
-      _csvWithRows(const [_runningRow, _trailRunningRow, _cyclingRow]),
+      _csvWithRows(const [
+        _runningRow,
+        _trailRunningRow,
+        _stairStepperRow,
+        _cyclingRow,
+        _strengthRow,
+      ]),
       const GarminImportOptions(
           activityFilter: GarminActivityFilter.runningOnly),
     );
-    final allActivities = GarminCsvImportService.parseCsvContent(
-      _csvWithRows(const [_runningRow, _trailRunningRow, _cyclingRow]),
+    final cardioOnly = GarminCsvImportService.parseCsvContent(
+      _csvWithRows(const [
+        _runningRow,
+        _trailRunningRow,
+        _stairStepperRow,
+        _cyclingRow,
+        _strengthRow,
+      ]),
       const GarminImportOptions(
-          activityFilter: GarminActivityFilter.allActivities),
+          activityFilter: GarminActivityFilter.cardioOnly),
     );
 
     expect(runningOnly.rows.length, 2);
-    expect(allActivities.rows.length, 3);
+    expect(cardioOnly.rows.length, 3);
+    expect(
+      cardioOnly.rows
+          .any((r) => r.activityType.toLowerCase() == 'stair stepper'),
+      isTrue,
+    );
+    expect(
+      cardioOnly.rows.any(
+        (r) => r.activityType.toLowerCase() == 'strength training',
+      ),
+      isFalse,
+    );
   });
 
   test('Parser handles UTF-8 BOM header and still reads running rows', () {
@@ -186,5 +217,165 @@ void main() {
     final columnNames = columns.map((c) => c.read<String>('name')).toList();
     expect(columnNames, contains('run_key'));
     expect(columnNames, contains('max_hr'));
+  });
+
+  test('Garmin import heals duplicate workout_days for same date', () async {
+    final db = AppDb.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    await db.customStatement(
+      'DROP INDEX IF EXISTS idx_workout_days_workout_date',
+    );
+    await db.customStatement(
+      "INSERT INTO workout_days (id, workout_date, created_at, notes) VALUES ('wd_a','2026-02-14',1,NULL)",
+    );
+    await db.customStatement(
+      "INSERT INTO workout_days (id, workout_date, created_at, notes) VALUES ('wd_b','2026-02-14',2,NULL)",
+    );
+    await db.customStatement(
+      "INSERT INTO actual_strength_sets (id, workout_day_id, plan_day_id, performed_at, exercise_canonical, prescribed_exercise_canonical, substitution_id, set_index, weight, reps, rir, unit, source, raw_set_string, created_at) "
+      "VALUES ('as1','wd_b',NULL,NULL,'Back Squat',NULL,NULL,1,225,5,2,'lb','manual',NULL,1)",
+    );
+
+    final dir = await Directory.systemTemp.createTemp('garmin-dupe-day-');
+    final file = File('${dir.path}\\activities.csv');
+    await file.writeAsString(_csvWithRows(const [_runningRow]));
+
+    final result = await db.importGarminCsv(
+      filePath: file.path,
+      options: const GarminImportOptions(
+        activityFilter: GarminActivityFilter.cardioOnly,
+      ),
+    );
+
+    expect(result.insertedCount + result.updatedCount, greaterThan(0));
+
+    final dayCount = await db
+        .customSelect(
+          "SELECT COUNT(*) AS cnt FROM workout_days WHERE workout_date='2026-02-14'",
+        )
+        .getSingle();
+    expect(dayCount.read<int>('cnt'), 1);
+
+    final strengthRef = await db
+        .customSelect(
+          "SELECT workout_day_id FROM actual_strength_sets WHERE id='as1'",
+        )
+        .getSingle();
+    expect(strengthRef.read<String>('workout_day_id'), 'wd_a');
+
+    await dir.delete(recursive: true);
+  });
+
+  test('Migration v12 -> v13 dedupes workout_days and repoints refs', () async {
+    final dir = await Directory.systemTemp.createTemp('drift-migration-v13-');
+    final dbFile = File('${dir.path}\\legacy_v12.sqlite');
+    final legacy = sqlite.sqlite3.open(dbFile.path);
+
+    legacy.execute('PRAGMA user_version = 12;');
+    legacy.execute(
+      'CREATE TABLE workout_days (id TEXT PRIMARY KEY, workout_date TEXT NOT NULL, created_at INTEGER NOT NULL, notes TEXT);',
+    );
+    legacy.execute(
+      'CREATE TABLE run_sessions (id TEXT PRIMARY KEY, workout_day_id TEXT);',
+    );
+    legacy.execute(
+      'CREATE TABLE actual_strength_sets (id TEXT PRIMARY KEY, workout_day_id TEXT NOT NULL, plan_day_id TEXT, performed_at INTEGER, exercise_canonical TEXT NOT NULL, prescribed_exercise_canonical TEXT, substitution_id TEXT, set_index INTEGER NOT NULL, weight REAL, reps INTEGER, rir INTEGER, unit TEXT NOT NULL, source TEXT NOT NULL, raw_set_string TEXT, created_at INTEGER NOT NULL);',
+    );
+    legacy.execute(
+      'CREATE TABLE prescribed_strength_sets (id TEXT PRIMARY KEY, workout_day_id TEXT NOT NULL);',
+    );
+    legacy.execute(
+      'CREATE TABLE run_override_audit (id TEXT PRIMARY KEY, workout_day_id TEXT);',
+    );
+    legacy.execute('''
+      CREATE TABLE exercise_substitutions (
+        id TEXT NOT NULL PRIMARY KEY,
+        workout_day_id TEXT NOT NULL,
+        plan_day_id TEXT NULL,
+        prescribed_exercise_canonical TEXT NOT NULL,
+        substitute_exercise_canonical TEXT NOT NULL,
+        reason_code TEXT NOT NULL,
+        reason_notes TEXT NULL,
+        selected_at INTEGER NOT NULL,
+        selected_by TEXT NULL,
+        match_score REAL NULL,
+        match_explanation_json TEXT NULL,
+        warning_acknowledged INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        UNIQUE(workout_day_id, prescribed_exercise_canonical)
+      );
+    ''');
+
+    legacy.execute(
+      "INSERT INTO workout_days (id, workout_date, created_at, notes) VALUES ('wd1','2026-02-24',10,NULL);",
+    );
+    legacy.execute(
+      "INSERT INTO workout_days (id, workout_date, created_at, notes) VALUES ('wd2','2026-02-24',20,NULL);",
+    );
+    legacy.execute(
+      "INSERT INTO run_sessions (id, workout_day_id) VALUES ('r1','wd2');",
+    );
+    legacy.execute(
+      "INSERT INTO actual_strength_sets (id, workout_day_id, plan_day_id, performed_at, exercise_canonical, prescribed_exercise_canonical, substitution_id, set_index, weight, reps, rir, unit, source, raw_set_string, created_at) VALUES ('a1','wd2',NULL,NULL,'Back Squat',NULL,NULL,1,225,5,2,'lb','manual',NULL,20);",
+    );
+    legacy.execute(
+      "INSERT INTO prescribed_strength_sets (id, workout_day_id) VALUES ('p1','wd2');",
+    );
+    legacy.execute(
+      "INSERT INTO run_override_audit (id, workout_day_id) VALUES ('o1','wd2');",
+    );
+    legacy.execute(
+      "INSERT INTO exercise_substitutions (id, workout_day_id, plan_day_id, prescribed_exercise_canonical, substitute_exercise_canonical, reason_code, reason_notes, selected_at, selected_by, match_score, match_explanation_json, warning_acknowledged, created_at) VALUES ('e1','wd2',NULL,'bench_press','dumbbell_bench_press','equipment',NULL,20,NULL,NULL,NULL,0,20);",
+    );
+    legacy.dispose();
+
+    final db = AppDb.forTesting(NativeDatabase(dbFile));
+    addTearDown(() async {
+      await db.close();
+      await dir.delete(recursive: true);
+    });
+
+    final dayCount = await db
+        .customSelect(
+          "SELECT COUNT(*) AS cnt FROM workout_days WHERE workout_date='2026-02-24'",
+        )
+        .getSingle();
+    expect(dayCount.read<int>('cnt'), 1);
+
+    final runRef = await db
+        .customSelect(
+          "SELECT workout_day_id FROM run_sessions WHERE id='r1'",
+        )
+        .getSingle();
+    expect(runRef.read<String>('workout_day_id'), 'wd1');
+
+    final actualRef = await db
+        .customSelect(
+          "SELECT workout_day_id FROM actual_strength_sets WHERE id='a1'",
+        )
+        .getSingle();
+    expect(actualRef.read<String>('workout_day_id'), 'wd1');
+
+    final prescribedRef = await db
+        .customSelect(
+          "SELECT workout_day_id FROM prescribed_strength_sets WHERE id='p1'",
+        )
+        .getSingle();
+    expect(prescribedRef.read<String>('workout_day_id'), 'wd1');
+
+    final auditRef = await db
+        .customSelect(
+          "SELECT workout_day_id FROM run_override_audit WHERE id='o1'",
+        )
+        .getSingle();
+    expect(auditRef.read<String>('workout_day_id'), 'wd1');
+
+    final substitutionRef = await db
+        .customSelect(
+          "SELECT workout_day_id FROM exercise_substitutions WHERE id='e1'",
+        )
+        .getSingle();
+    expect(substitutionRef.read<String>('workout_day_id'), 'wd1');
   });
 }

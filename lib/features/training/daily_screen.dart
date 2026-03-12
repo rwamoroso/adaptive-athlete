@@ -17,6 +17,15 @@ import '../ui/clinical_widgets.dart';
 import 'run_inputs_screen.dart';
 import 'workout_day_detail_screen.dart';
 
+const String kRecoveryReasonDialogText =
+    'Choose why training cannot happen today.\n\n'
+    'Manual rest is allowed only when a future planned rest day exists. '
+    'If no future rest day exists, manual rest is blocked because that timing is not optimal.';
+
+bool shouldShowSkipTypePickerForPushError(String message) {
+  return message.contains('Choose a day type to skip');
+}
+
 String _formatMinutesAsHoursMinutes(int? totalMinutes) {
   if (totalMinutes == null) {
     return 'unknown';
@@ -125,6 +134,36 @@ class DailyScreen extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<DailyScreen> createState() => _DailyScreenState();
+}
+
+class RecoveryReasonDialog extends StatelessWidget {
+  const RecoveryReasonDialog({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Push Split Reason'),
+      content: const Text(kRecoveryReasonDialogText),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop('manual_rest'),
+          child: const Text('Manual Rest (Warning)'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop('illness'),
+          child: const Text('Illness'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop('injury'),
+          child: const Text('Injury'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
 }
 
 class _WeeklyMileagePoint {
@@ -340,23 +379,50 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     );
   }
 
-  Future<void> _markRestDayAndPush(WorkoutDayDetail detail) async {
+  Future<String?> _pickShiftReasonDialog() async {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => const RecoveryReasonDialog(),
+    );
+  }
+
+  String _shiftReasonLabel(String reason) {
+    switch (reason) {
+      case 'illness':
+        return 'Illness';
+      case 'injury':
+        return 'Injury';
+      case 'manual_rest':
+        return 'Manual rest';
+      default:
+        return 'Rest';
+    }
+  }
+
+  Future<void> _markRestDayAndPush(WorkoutDayDetail detail,
+      {String shiftReason = 'manual_rest'}) async {
     final db = ref.read(appDbProvider);
     if ((detail.planSessionType ?? '').toLowerCase().contains('rest')) {
       _showSnack('Selected day is already marked as rest.');
       return;
     }
+    final reasonLabel = _shiftReasonLabel(shiftReason);
+    final insertedDayLabel = '$reasonLabel day';
 
     try {
-      await db.markRestDayAndPushSplit(dateYmd: _selectedDate);
+      await db.markRestDayAndPushSplit(
+        dateYmd: _selectedDate,
+        shiftReason: shiftReason,
+      );
       if (!mounted) {
         return;
       }
-      _showSnack('Split updated. Rest day inserted and future days shifted.');
+      _showSnack(
+          'Split updated. $insertedDayLabel inserted and future days shifted.');
       setState(() => _refresh++);
     } on StateError catch (e) {
       final message = e.message.toString();
-      if (!message.contains('Choose a day type to skip')) {
+      if (!shouldShowSkipTypePickerForPushError(message)) {
         _showSnack(message);
         return;
       }
@@ -374,17 +440,26 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
         await db.markRestDayAndPushSplit(
           dateYmd: _selectedDate,
           skipSessionType: selected,
+          shiftReason: shiftReason,
         );
         if (!mounted) {
           return;
         }
         _showSnack(
-            'Split updated. Rest day inserted and ${_sessionTypeLabel(selected)} skipped.');
+            'Split updated. $insertedDayLabel inserted and ${_sessionTypeLabel(selected)} skipped.');
         setState(() => _refresh++);
       } on StateError catch (inner) {
         _showSnack(inner.message.toString());
       }
     }
+  }
+
+  Future<void> _markRestDayAndPushFromChoice(WorkoutDayDetail detail) async {
+    final shiftReason = await _pickShiftReasonDialog();
+    if (shiftReason == null) {
+      return;
+    }
+    await _markRestDayAndPush(detail, shiftReason: shiftReason);
   }
 
   Future<void> _undoRestDayPush(WorkoutDayDetail detail) async {
@@ -913,12 +988,10 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
               ),
             );
           },
-          onMarkRest: (!safeDetail.isPplCompatibleCycle ||
-                  safeDetail.planDayNumber == null)
+          onMarkRest: safeDetail.planDayNumber == null
               ? null
-              : () => _markRestDayAndPush(safeDetail),
-          onUndoRest: (!safeDetail.isPplCompatibleCycle ||
-                  safeDetail.planDayNumber == null)
+              : () => _markRestDayAndPushFromChoice(safeDetail),
+          onUndoRest: safeDetail.planDayNumber == null
               ? null
               : () => _undoRestDayPush(safeDetail),
           onRunMockAi: () => _runMockAi(safeDetail, excluded, gate),
@@ -1297,8 +1370,9 @@ class _DailyClinicalContent extends StatelessWidget {
         final canUseSplitAction = onMarkRest != null || onUndoRest != null;
         final isCurrentRest =
             (safeDetail.planSessionType ?? '').toLowerCase().contains('rest');
-        final splitActionText =
-            isCurrentRest ? 'Undo Rest Day Push' : 'Mark Rest Day + Push Split';
+        final splitActionText = isCurrentRest
+            ? 'Undo Rest Day Push'
+            : 'Add Recovery Day + Push Split';
         final splitActionIcon = isCurrentRest
             ? Icons.undo_rounded
             : Icons.playlist_add_check_circle_outlined;

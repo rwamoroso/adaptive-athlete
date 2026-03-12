@@ -81,6 +81,9 @@ create table if not exists public.workout_days (
   athlete_profile_id uuid null
 );
 
+create unique index if not exists idx_workout_days_scope_date
+  on public.workout_days(workspace_id, athlete_profile_id, workout_date);
+
 create table if not exists public.actual_strength_sets (
   id text primary key,
   workout_day_id text not null,
@@ -244,6 +247,7 @@ create table if not exists public.plan_days (
   sheet_name text not null,
   estimated_date text null,
   session_type text null,
+  shift_reason text null,
   created_at bigint not null,
   workspace_id uuid null,
   athlete_profile_id uuid null

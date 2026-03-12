@@ -57,7 +57,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   DistanceUnit _distanceUnit = DistanceUnit.miles;
-  GarminActivityFilter _activityFilter = GarminActivityFilter.runningOnly;
+  GarminActivityFilter _activityFilter = GarminActivityFilter.cardioOnly;
   bool _intervalLoggingEnabled = false;
   bool _intervalModeTouched = false;
   String? _prescribedRunType;
@@ -1242,12 +1242,12 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                       SegmentedButton<GarminActivityFilter>(
                         segments: const [
                           ButtonSegment(
-                            value: GarminActivityFilter.runningOnly,
-                            label: Text('Running Only'),
+                            value: GarminActivityFilter.cardioOnly,
+                            label: Text('Cardio Only'),
                           ),
                           ButtonSegment(
-                            value: GarminActivityFilter.allActivities,
-                            label: Text('All Activities'),
+                            value: GarminActivityFilter.runningOnly,
+                            label: Text('Running Only'),
                           ),
                         ],
                         selected: {_activityFilter},

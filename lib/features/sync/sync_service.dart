@@ -16,6 +16,7 @@ class SyncService {
   final SupabaseClient client;
   final WorkspaceService workspaceService;
   late final _ScopedSyncContext _context;
+  final Map<String, String> _workoutDayIdRemap = <String, String>{};
 
   Future<String> syncNow() async {
     final user = client.auth.currentUser;
@@ -136,6 +137,7 @@ class SyncService {
   }
 
   Future<void> _pullFromSupabase() async {
+    _workoutDayIdRemap.clear();
     await _pullWorkoutDays();
     await _pullPlanCycles();
     await _pullPlanDays();
@@ -156,6 +158,7 @@ class SyncService {
     await _pullRunOverrideAudit();
     await _pullRuleTriggers();
     await _pullAiAudit();
+    await db.enforceWorkoutDayDateUniqueness();
   }
 
   Future<Set<String>> _localPlanCycleIdsWithPrescribedContent() async {
@@ -331,8 +334,37 @@ class SyncService {
 
   Future<void> _pullWorkoutDays() async {
     final rows = await _fetchRows('workout_days');
+    final sorted = rows.toList()
+      ..sort((a, b) {
+        final aDate = _requiredString(a, 'workout_date');
+        final bDate = _requiredString(b, 'workout_date');
+        final byDate = aDate.compareTo(bDate);
+        if (byDate != 0) {
+          return byDate;
+        }
+        final byCreatedAt = _requiredInt(a, 'created_at')
+            .compareTo(_requiredInt(b, 'created_at'));
+        if (byCreatedAt != 0) {
+          return byCreatedAt;
+        }
+        return _requiredString(a, 'id').compareTo(_requiredString(b, 'id'));
+      });
+
+    final canonicalByDate = <String, Map<String, dynamic>>{};
+    _workoutDayIdRemap.clear();
+    for (final r in sorted) {
+      final workoutDate = _requiredString(r, 'workout_date');
+      final rowId = _requiredString(r, 'id');
+      final canonical = canonicalByDate[workoutDate];
+      if (canonical == null) {
+        canonicalByDate[workoutDate] = r;
+      } else {
+        _workoutDayIdRemap[rowId] = _requiredString(canonical, 'id');
+      }
+    }
+
     await db.batch((batch) {
-      for (final r in rows) {
+      for (final r in canonicalByDate.values) {
         batch.insert(
           db.workoutDays,
           WorkoutDaysCompanion(
@@ -355,7 +387,8 @@ class SyncService {
           db.actualStrengthSets,
           ActualStrengthSetsCompanion(
             id: Value(_requiredString(r, 'id')),
-            workoutDayId: Value(_requiredString(r, 'workout_day_id')),
+            workoutDayId:
+                Value(_remapWorkoutDayId(_requiredString(r, 'workout_day_id'))),
             planDayId: Value(r['plan_day_id']?.toString()),
             performedAt: Value(_asInt(r['performed_at'])),
             exerciseCanonical: Value(_requiredString(r, 'exercise_canonical')),
@@ -382,7 +415,8 @@ class SyncService {
           db.prescribedStrengthSets,
           PrescribedStrengthSetsCompanion(
             id: Value(_requiredString(r, 'id')),
-            workoutDayId: Value(_requiredString(r, 'workout_day_id')),
+            workoutDayId:
+                Value(_remapWorkoutDayId(_requiredString(r, 'workout_day_id'))),
             exerciseCanonical: Value(_requiredString(r, 'exercise_canonical')),
             setIndex: Value(_requiredInt(r, 'set_index')),
             weight: Value(_asDouble(r['weight'])),
@@ -429,7 +463,9 @@ class SyncService {
           RunSessionsCompanion(
             id: Value(_requiredString(r, 'id')),
             runKey: Value(_requiredString(r, 'run_key')),
-            workoutDayId: Value(r['workout_day_id']?.toString()),
+            workoutDayId: Value(_optionalRemappedWorkoutDayId(
+              r['workout_day_id']?.toString(),
+            )),
             planDayId: Value(r['plan_day_id']?.toString()),
             startTime: Value(_asInt(r['start_time'])),
             endTime: Value(_asInt(r['end_time'])),
@@ -517,7 +553,9 @@ class SyncService {
           RunOverrideAuditCompanion(
             id: Value(_requiredString(r, 'id')),
             runKey: Value(_requiredString(r, 'run_key')),
-            workoutDayId: Value(r['workout_day_id']?.toString()),
+            workoutDayId: Value(_optionalRemappedWorkoutDayId(
+              r['workout_day_id']?.toString(),
+            )),
             oldSource: Value(_requiredString(r, 'old_source')),
             newSource: Value(_requiredString(r, 'new_source')),
             oldSnapshotJson: Value(_requiredString(r, 'old_snapshot_json')),
@@ -606,6 +644,7 @@ class SyncService {
             sheetName: Value(_requiredString(r, 'sheet_name')),
             estimatedDate: Value(r['estimated_date']?.toString()),
             sessionType: Value(r['session_type']?.toString()),
+            shiftReason: Value(r['shift_reason']?.toString()),
             createdAt: Value(_requiredInt(r, 'created_at')),
           ),
           mode: InsertMode.insertOrReplace,
@@ -693,7 +732,8 @@ class SyncService {
           db.exerciseSubstitutions,
           ExerciseSubstitutionsCompanion(
             id: Value(_requiredString(r, 'id')),
-            workoutDayId: Value(_requiredString(r, 'workout_day_id')),
+            workoutDayId:
+                Value(_remapWorkoutDayId(_requiredString(r, 'workout_day_id'))),
             planDayId: Value(r['plan_day_id']?.toString()),
             prescribedExerciseCanonical:
                 Value(_requiredString(r, 'prescribed_exercise_canonical')),
@@ -815,6 +855,7 @@ class SyncService {
   }
 
   Future<void> _upsertWorkoutDays() async {
+    await db.enforceWorkoutDayDateUniqueness();
     final rows = await db.select(db.workoutDays).get();
     if (rows.isEmpty) {
       return;
@@ -830,6 +871,22 @@ class SyncService {
               .toList(),
           onConflict: 'id',
         );
+  }
+
+  String _remapWorkoutDayId(String id) {
+    var current = id;
+    final seen = <String>{};
+    while (seen.add(current) && _workoutDayIdRemap.containsKey(current)) {
+      current = _workoutDayIdRemap[current]!;
+    }
+    return current;
+  }
+
+  String? _optionalRemappedWorkoutDayId(String? id) {
+    if (id == null || id.trim().isEmpty) {
+      return null;
+    }
+    return _remapWorkoutDayId(id);
   }
 
   Future<void> _upsertActualStrengthSets() async {
@@ -1105,6 +1162,7 @@ class SyncService {
                     'sheet_name': r.sheetName,
                     'estimated_date': r.estimatedDate,
                     'session_type': r.sessionType,
+                    'shift_reason': r.shiftReason,
                     'created_at': r.createdAt,
                   }))
               .toList(),
