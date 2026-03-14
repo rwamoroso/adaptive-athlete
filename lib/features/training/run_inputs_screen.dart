@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
+import 'package:drift/drift.dart' show Variable;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +16,38 @@ import 'garmin_csv_import_service.dart';
 enum DistanceUnit { miles, kilometers }
 
 enum IntervalSegmentType { interval, rest }
+
+class _RunWeeklyMileagePoint {
+  const _RunWeeklyMileagePoint({
+    required this.weekStartYmd,
+    required this.totalMiles,
+  });
+
+  final String weekStartYmd;
+  final double totalMiles;
+}
+
+class _RunMileageCardSummary {
+  const _RunMileageCardSummary({
+    required this.weeklyPoints,
+    required this.last7DaysMiles,
+  });
+
+  final List<_RunWeeklyMileagePoint> weeklyPoints;
+  final double last7DaysMiles;
+
+  static const _RunMileageCardSummary empty = _RunMileageCardSummary(
+    weeklyPoints: <_RunWeeklyMileagePoint>[
+      _RunWeeklyMileagePoint(weekStartYmd: '2000-01-03', totalMiles: 0),
+      _RunWeeklyMileagePoint(weekStartYmd: '2000-01-10', totalMiles: 0),
+      _RunWeeklyMileagePoint(weekStartYmd: '2000-01-17', totalMiles: 0),
+      _RunWeeklyMileagePoint(weekStartYmd: '2000-01-24', totalMiles: 0),
+      _RunWeeklyMileagePoint(weekStartYmd: '2000-01-31', totalMiles: 0),
+      _RunWeeklyMileagePoint(weekStartYmd: '2000-02-07', totalMiles: 0),
+    ],
+    last7DaysMiles: 0,
+  );
+}
 
 Map<int, String> _manualRunSegmentLabelsByIdx(String? rawMetricsJson) {
   if (rawMetricsJson == null || rawMetricsJson.trim().isEmpty) {
@@ -61,7 +95,6 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   bool _intervalLoggingEnabled = false;
   bool _intervalModeTouched = false;
   String? _prescribedRunType;
-  String? _prescribedLiftFocus;
   String? _prescribedDurationText;
   String? _prescribedTargetPace;
   String? _prescribedEffortHrGuardrails;
@@ -84,6 +117,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   List<RunSessionWithSegments> _loggedRunsForSelectedDate =
       const <RunSessionWithSegments>[];
   String? _editingRunSessionId;
+  _RunMileageCardSummary _runMileageSummary = _RunMileageCardSummary.empty;
 
   @override
   void initState() {
@@ -108,6 +142,31 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     return value.contains('interval') ||
         value.contains('repeat') ||
         value.contains('fartlek');
+  }
+
+  String _formatRunTypeLabel(
+    String? raw, {
+    bool includeRunSuffix = false,
+  }) {
+    final trimmed = (raw ?? '').trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final cleaned = trimmed.replaceAll(RegExp(r'[_-]+'), ' ');
+    final titleCased = cleaned
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .map((part) {
+      final lower = part.toLowerCase();
+      if (lower.length == 1) {
+        return lower.toUpperCase();
+      }
+      return '${lower[0].toUpperCase()}${lower.substring(1)}';
+    }).join(' ');
+    if (!includeRunSuffix || titleCased.toLowerCase().contains('run')) {
+      return titleCased;
+    }
+    return '$titleCased Run';
   }
 
   String _distanceUnitLabel() {
@@ -202,28 +261,206 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     return _formatPaceTextMinPerMile(secondsPerMile);
   }
 
+  DateTime _startOfWeek(DateTime date) {
+    return DateTime(date.year, date.month, date.day)
+        .subtract(Duration(days: date.weekday - 1));
+  }
+
+  double? _parsePlannedDurationSeconds(String? raw) {
+    if (raw == null) {
+      return null;
+    }
+    final value = raw.trim().toLowerCase();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    final colonMatch = RegExp(r'(\d{1,2}:\d{2}(?::\d{2})?)').firstMatch(value);
+    if (colonMatch != null) {
+      final parts = colonMatch.group(1)!.split(':').map(double.parse).toList();
+      if (parts.length == 3) {
+        return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+      }
+      if (parts.length == 2) {
+        return (parts[0] * 60) + parts[1];
+      }
+    }
+
+    final hoursMatch = RegExp(r'(\d+(?:\.\d+)?)\s*h').firstMatch(value);
+    final minsMatch = RegExp(r'(\d+(?:\.\d+)?)\s*m').firstMatch(value);
+    final secsMatch = RegExp(r'(\d+(?:\.\d+)?)\s*s').firstMatch(value);
+    if (hoursMatch != null || minsMatch != null || secsMatch != null) {
+      final hours = double.tryParse(hoursMatch?.group(1) ?? '') ?? 0;
+      final mins = double.tryParse(minsMatch?.group(1) ?? '') ?? 0;
+      final secs = double.tryParse(secsMatch?.group(1) ?? '') ?? 0;
+      final total = (hours * 3600) + (mins * 60) + secs;
+      return total > 0 ? total : null;
+    }
+
+    final minWordMatch =
+        RegExp(r'(\d+(?:\.\d+)?)\s*(min|mins|minute|minutes)\b')
+            .firstMatch(value);
+    if (minWordMatch != null) {
+      final mins = double.tryParse(minWordMatch.group(1)!);
+      return mins == null ? null : mins * 60;
+    }
+
+    final numOnly = double.tryParse(value);
+    if (numOnly != null && numOnly > 0) {
+      return numOnly * 60;
+    }
+    return null;
+  }
+
+  double? _parseTargetPaceSecondsPerMile(String? raw) {
+    if (raw == null) {
+      return null;
+    }
+    final value = raw.trim().toLowerCase();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    final unitIsKm = value.contains('/km') || value.contains(' per km');
+    final unitIsMi = value.contains('/mi') ||
+        value.contains('/mile') ||
+        value.contains(' per mile');
+
+    final timeMatches =
+        RegExp(r'(\d{1,2}:\d{2}(?::\d{2})?)').allMatches(value).toList();
+    if (timeMatches.isEmpty) {
+      return null;
+    }
+
+    var slowestSecondsPerUnit = 0.0;
+    for (final match in timeMatches) {
+      final parts =
+          match.group(1)!.split(':').map(double.parse).toList(growable: false);
+      final seconds = parts.length == 3
+          ? (parts[0] * 3600) + (parts[1] * 60) + parts[2]
+          : (parts[0] * 60) + parts[1];
+      if (seconds > slowestSecondsPerUnit) {
+        slowestSecondsPerUnit = seconds;
+      }
+    }
+    if (slowestSecondsPerUnit <= 0) {
+      return null;
+    }
+    if (unitIsKm && !unitIsMi) {
+      return slowestSecondsPerUnit * 1.609344;
+    }
+    return slowestSecondsPerUnit;
+  }
+
+  double _estimatePlannedMilesForRun({
+    required String? durationText,
+    required String? targetPace,
+  }) {
+    final durationSeconds = _parsePlannedDurationSeconds(durationText);
+    final paceSecondsPerMile = _parseTargetPaceSecondsPerMile(targetPace);
+    if (durationSeconds == null ||
+        paceSecondsPerMile == null ||
+        durationSeconds <= 0 ||
+        paceSecondsPerMile <= 0) {
+      return 0.0;
+    }
+    return durationSeconds / paceSecondsPerMile;
+  }
+
+  Future<_RunMileageCardSummary> _loadRunMileageCardSummary(
+    AppDb db,
+    String anchorYmd,
+  ) async {
+    const weeksToShow = 6;
+    final anchorDate = parseYmd(anchorYmd);
+    final anchorWeekStart = _startOfWeek(anchorDate);
+    final chartStart = anchorWeekStart.subtract(
+      const Duration(days: (weeksToShow - 1) * 7),
+    );
+    final chartEnd = anchorWeekStart.add(const Duration(days: 6));
+    final last7Start = anchorDate.subtract(const Duration(days: 6));
+    final queryStart =
+        last7Start.isBefore(chartStart) ? last7Start : chartStart;
+
+    final rows = await db.customSelect(
+      '''
+      select wd.workout_date as workout_date, coalesce(sum(rs.distance_m), 0) as total_distance_m
+      from run_sessions rs
+      join workout_days wd on wd.id = rs.workout_day_id
+      where wd.workout_date >= ? and wd.workout_date <= ?
+      group by wd.workout_date
+      ''',
+      variables: [
+        Variable.withString(toYmd(queryStart)),
+        Variable.withString(toYmd(chartEnd)),
+      ],
+    ).get();
+
+    final dailyMetersByYmd = <String, double>{};
+    for (final row in rows) {
+      final ymd = row.data['workout_date']?.toString();
+      final totalDistance = row.data['total_distance_m'];
+      if (ymd == null || ymd.isEmpty) {
+        continue;
+      }
+      if (totalDistance is num) {
+        dailyMetersByYmd[ymd] = totalDistance.toDouble();
+      } else {
+        dailyMetersByYmd[ymd] = double.tryParse('$totalDistance') ?? 0;
+      }
+    }
+
+    final weeklyPoints = <_RunWeeklyMileagePoint>[];
+    for (var i = 0; i < weeksToShow; i++) {
+      final weekStart = chartStart.add(Duration(days: i * 7));
+      var weekMeters = 0.0;
+      for (var d = 0; d < 7; d++) {
+        weekMeters +=
+            dailyMetersByYmd[toYmd(weekStart.add(Duration(days: d)))] ?? 0.0;
+      }
+      weeklyPoints.add(
+        _RunWeeklyMileagePoint(
+          weekStartYmd: toYmd(weekStart),
+          totalMiles: weekMeters / 1609.344,
+        ),
+      );
+    }
+
+    var last7Meters = 0.0;
+    for (var d = 0; d < 7; d++) {
+      last7Meters +=
+          dailyMetersByYmd[toYmd(last7Start.add(Duration(days: d)))] ?? 0.0;
+    }
+
+    return _RunMileageCardSummary(
+      weeklyPoints: weeklyPoints,
+      last7DaysMiles: last7Meters / 1609.344,
+    );
+  }
+
   Future<void> _refreshRunTypeForSelectedDate() async {
     final dateYmd = toYmd(_selectedDate);
     setState(() => _loadingRunType = true);
     try {
-      final detail = await ref.read(appDbProvider).getWorkoutDayDetail(dateYmd);
+      final db = ref.read(appDbProvider);
+      final detail = await db.getWorkoutDayDetail(dateYmd);
+      final runMileageSummary = await _loadRunMileageCardSummary(db, dateYmd);
       if (!mounted) {
         return;
       }
       final runType = detail.prescribedRun?.runType;
-      final liftFocus = detail.prescribedRun?.liftFocus;
       final durationText = detail.prescribedRun?.durationText;
       final targetPace = detail.prescribedRun?.targetPace;
       final effortHrGuardrails = detail.prescribedRun?.effortHrGuardrails;
       final notes = detail.prescribedRun?.notes;
       setState(() {
         _prescribedRunType = runType;
-        _prescribedLiftFocus = liftFocus;
         _prescribedDurationText = durationText;
         _prescribedTargetPace = targetPace;
         _prescribedEffortHrGuardrails = effortHrGuardrails;
         _prescribedRunNotes = notes;
         _loggedRunsForSelectedDate = detail.runSessions;
+        _runMileageSummary = runMileageSummary;
         _loadingRunType = false;
         if (!_intervalModeTouched && _isIntervalRunType(runType)) {
           _intervalLoggingEnabled = true;
@@ -237,12 +474,12 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       setState(() {
         _loadingRunType = false;
         _prescribedRunType = null;
-        _prescribedLiftFocus = null;
         _prescribedDurationText = null;
         _prescribedTargetPace = null;
         _prescribedEffortHrGuardrails = null;
         _prescribedRunNotes = null;
         _loggedRunsForSelectedDate = const <RunSessionWithSegments>[];
+        _runMileageSummary = _RunMileageCardSummary.empty;
       });
     }
   }
@@ -694,12 +931,39 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   @override
   Widget build(BuildContext context) {
     final pageTheme = buildClinicalTheme();
-    final runHeaderTitle = ((_prescribedRunType ?? '').trim().isEmpty)
-        ? 'Run Inputs'
-        : (_prescribedRunType ?? '').trim();
-    final splitContextTitle = ((_prescribedLiftFocus ?? '').trim().isEmpty)
-        ? null
-        : (_prescribedLiftFocus ?? '').trim();
+    final runPlanLabel = _loadingRunType
+        ? 'Loading today\'s run...'
+        : (_formatRunTypeLabel(_prescribedRunType, includeRunSuffix: true)
+                .isEmpty
+            ? 'No Prescribed Run'
+            : _formatRunTypeLabel(
+                _prescribedRunType,
+                includeRunSuffix: true,
+              ));
+    final dailyPrescribedMiles = _estimatePlannedMilesForRun(
+      durationText: _prescribedDurationText,
+      targetPace: _prescribedTargetPace,
+    );
+    final runCardTitle = dailyPrescribedMiles > 0
+        ? '$runPlanLabel - ${dailyPrescribedMiles.toStringAsFixed(1)} Miles'
+        : runPlanLabel;
+    final todayTotalDistanceM = _loggedRunsForSelectedDate.fold<double>(
+      0,
+      (sum, run) => sum + (run.session.distanceM ?? 0),
+    );
+    final todayTotalDurationS = _loggedRunsForSelectedDate.fold<int>(
+      0,
+      (sum, run) => sum + (run.session.durationS ?? 0),
+    );
+    final todayPace = _formatPaceFromDurationAndDistance(
+      durationS: todayTotalDurationS,
+      distanceM: todayTotalDistanceM,
+    );
+    final todaysRunStatusTitle =
+        todayTotalDistanceM > 0 ? 'Today\'s Run Logged' : 'No Run Logged';
+    final todaysRunStatusDetail = todayTotalDistanceM > 0
+        ? '${(todayTotalDistanceM / 1609.344).toStringAsFixed(1)} Miles @ $todayPace'
+        : null;
     final preview = _intervalLoggingEnabled
         ? _previewSegments()
         : const _IntervalSegmentPreview(
@@ -721,26 +985,54 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     return Theme(
       data: pageTheme,
       child: Scaffold(
-        appBar: AppBar(title: Text(runHeaderTitle)),
+        appBar: AppBar(title: const Text('Run')),
         body: Stack(
           children: [
             const Positioned.fill(child: _RunInputsPageBackground()),
             ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
               children: [
-                Text(
-                  splitContextTitle == null
-                      ? 'RUN DATA CAPTURE'
-                      : '${splitContextTitle.toUpperCase()} • RUN DATA CAPTURE',
-                  style: pageTheme.textTheme.headlineSmall?.copyWith(
-                    letterSpacing: 1,
-                    fontWeight: FontWeight.w800,
+                GlassCard(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        runCardTitle,
+                        style: pageTheme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 120,
+                        child: _RunInputsWeeklyMileageMiniChart(
+                          points: _runMileageSummary.weeklyPoints,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${_runMileageSummary.last7DaysMiles.toStringAsFixed(1)} mi last 7 days',
+                        style: pageTheme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        todaysRunStatusTitle,
+                        style: pageTheme.textTheme.bodySmall,
+                      ),
+                      if (todaysRunStatusDetail != null)
+                        Text(
+                          todaysRunStatusDetail,
+                          style: pageTheme.textTheme.bodySmall,
+                        ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 10),
-                const ClinicalBanner(
-                  text:
-                      'Log manual runs or import Garmin CSV. Interval mode supports work/rest segment tracking.',
                 ),
                 const SizedBox(height: 10),
                 GlassCard(
@@ -767,7 +1059,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                         )
                       else ...[
                         Text(
-                          _prescribedRunType!.trim(),
+                          _formatRunTypeLabel(_prescribedRunType),
                           style: pageTheme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w600,
                             fontSize: 12.5,
@@ -811,116 +1103,21 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 14),
-                SectionHeader(
-                  text: 'Logged Runs (${toYmd(_selectedDate)})',
-                  trailing: _loggedRunsForSelectedDate.isEmpty
-                      ? null
-                      : Text(
-                          '${_loggedRunsForSelectedDate.length}',
-                          style: pageTheme.textTheme.labelLarge,
-                        ),
-                ),
-                const SizedBox(height: 8),
-                GlassCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_loadingRunType)
-                        const Text('Loading runs...')
-                      else if (_loggedRunsForSelectedDate.isEmpty)
-                        const Text('No logged runs for this date yet.')
-                      else
-                        ..._loggedRunsForSelectedDate.map((run) {
-                          final session = run.session;
-                          final isEditing = session.id == _editingRunSessionId;
-                          final durationText = session.durationS == null
-                              ? 'unknown'
-                              : _formatSecondsAsHms(session.durationS!);
-                          final subtitleParts = <String>[
-                            _formatRunStartTime(session.startTime),
-                            '${session.source} • $durationText',
-                            _formatPaceFromDurationAndDistance(
-                              durationS: session.durationS,
-                              distanceM: session.distanceM,
-                            ),
-                            if (run.segments.isNotEmpty)
-                              '${run.segments.length} segment${run.segments.length == 1 ? '' : 's'}',
-                          ];
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.03),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isEditing
-                                    ? pageTheme.colorScheme.primary
-                                        .withValues(alpha: 0.5)
-                                    : Colors.white.withValues(alpha: 0.12),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        (session.title?.trim().isNotEmpty ??
-                                                false)
-                                            ? session.title!.trim()
-                                            : ((session.activityType
-                                                        ?.trim()
-                                                        .isNotEmpty ??
-                                                    false)
-                                                ? session.activityType!.trim()
-                                                : 'Run'),
-                                        style: pageTheme.textTheme.titleSmall
-                                            ?.copyWith(
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                    if (isEditing)
-                                      const Chip(label: Text('Editing')),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(subtitleParts.join(' | ')),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    FilledButton.tonal(
-                                      onPressed: () =>
-                                          _loadRunIntoManualForm(run),
-                                      child: const Text('Load for Edit'),
-                                    ),
-                                    if (isEditing)
-                                      OutlinedButton(
-                                        onPressed: _startNewManualEntry,
-                                        child: const Text('Stop Editing'),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                    ],
-                  ),
-                ),
                 const SizedBox(height: 16),
-                const SectionHeader(text: 'Manual Entry'),
+                const SectionHeader(text: 'Capture Run'),
                 const SizedBox(height: 8),
                 GlassCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Manual Run Entry',
-                          style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        'Enter Your Run',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                      ),
                       if (editingRun != null) ...[
                         const SizedBox(height: 8),
                         Container(
@@ -975,7 +1172,9 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                       if (_loadingRunType)
                         const Text('Checking prescribed run type...')
                       else if (_prescribedRunType != null)
-                        Text('Prescribed run type: $_prescribedRunType'),
+                        Text(
+                          'Prescribed run type: ${_formatRunTypeLabel(_prescribedRunType)}',
+                        ),
                       const SizedBox(height: 6),
                       SwitchListTile.adaptive(
                         contentPadding: EdgeInsets.zero,
@@ -1213,6 +1412,107 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                SectionHeader(
+                  text: 'Logged Runs (${toYmd(_selectedDate)})',
+                  trailing: _loggedRunsForSelectedDate.isEmpty
+                      ? null
+                      : Text(
+                          '${_loggedRunsForSelectedDate.length}',
+                          style: pageTheme.textTheme.labelLarge,
+                        ),
+                ),
+                const SizedBox(height: 8),
+                GlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_loadingRunType)
+                        const Text('Loading runs...')
+                      else if (_loggedRunsForSelectedDate.isEmpty)
+                        const Text('No logged runs for this date yet.')
+                      else
+                        ..._loggedRunsForSelectedDate.map((run) {
+                          final session = run.session;
+                          final isEditing = session.id == _editingRunSessionId;
+                          final durationText = session.durationS == null
+                              ? 'unknown'
+                              : _formatSecondsAsHms(session.durationS!);
+                          final subtitleParts = <String>[
+                            _formatRunStartTime(session.startTime),
+                            '${session.source} • $durationText',
+                            _formatPaceFromDurationAndDistance(
+                              durationS: session.durationS,
+                              distanceM: session.distanceM,
+                            ),
+                            if (run.segments.isNotEmpty)
+                              '${run.segments.length} segment${run.segments.length == 1 ? '' : 's'}',
+                          ];
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.03),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isEditing
+                                    ? pageTheme.colorScheme.primary
+                                        .withValues(alpha: 0.5)
+                                    : Colors.white.withValues(alpha: 0.12),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        (session.title?.trim().isNotEmpty ??
+                                                false)
+                                            ? session.title!.trim()
+                                            : ((session.activityType
+                                                        ?.trim()
+                                                        .isNotEmpty ??
+                                                    false)
+                                                ? session.activityType!.trim()
+                                                : 'Run'),
+                                        style: pageTheme.textTheme.titleSmall
+                                            ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isEditing)
+                                      const Chip(label: Text('Editing')),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(subtitleParts.join(' | ')),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    FilledButton.tonal(
+                                      onPressed: () =>
+                                          _loadRunIntoManualForm(run),
+                                      child: const Text('Load for Edit'),
+                                    ),
+                                    if (isEditing)
+                                      OutlinedButton(
+                                        onPressed: _startNewManualEntry,
+                                        child: const Text('Stop Editing'),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
                 const SectionHeader(text: 'Garmin Import'),
                 const SizedBox(height: 8),
                 GlassCard(
@@ -1283,6 +1583,227 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         ),
       ),
     );
+  }
+}
+
+class _RunInputsWeeklyMileageMiniChart extends StatelessWidget {
+  const _RunInputsWeeklyMileageMiniChart({required this.points});
+
+  final List<_RunWeeklyMileagePoint> points;
+
+  String _weekTickLabel(String ymd) {
+    final date = parseYmd(ymd);
+    return '${date.month}/${date.day}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final safePoints = points.isEmpty
+        ? const <_RunWeeklyMileagePoint>[
+            _RunWeeklyMileagePoint(weekStartYmd: '2000-01-03', totalMiles: 0),
+          ]
+        : points;
+    final maxMiles = safePoints.fold<double>(
+      0,
+      (maxVal, p) => math.max(maxVal, p.totalMiles),
+    );
+    final yMax = maxMiles <= 0 ? 1.0 : (maxMiles * 1.15);
+    final midIndex = safePoints.length ~/ 2;
+    final axisTextStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+          fontSize: 9,
+          color: Colors.white.withValues(alpha: 0.8),
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: 28,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      yMax >= 10
+                          ? yMax.toStringAsFixed(0)
+                          : yMax.toStringAsFixed(1),
+                      style: axisTextStyle,
+                    ),
+                    Text('mi', style: axisTextStyle),
+                    Text('0', style: axisTextStyle),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white.withValues(alpha: 0.04),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 2),
+                    child: CustomPaint(
+                      painter: _RunInputsWeeklyMileageChartPainter(
+                        miles: safePoints.map((p) => p.totalMiles).toList(),
+                        maxMiles: yMax,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            const SizedBox(width: 32),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _weekTickLabel(safePoints.first.weekStartYmd),
+                      style: axisTextStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _weekTickLabel(safePoints[midIndex].weekStartYmd),
+                      style: axisTextStyle,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _weekTickLabel(safePoints.last.weekStartYmd),
+                      style: axisTextStyle,
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _RunInputsWeeklyMileageChartPainter extends CustomPainter {
+  const _RunInputsWeeklyMileageChartPainter({
+    required this.miles,
+    required this.maxMiles,
+  });
+
+  final List<double> miles;
+  final double maxMiles;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (miles.isEmpty || size.width <= 0 || size.height <= 0) {
+      return;
+    }
+
+    final gridPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.12)
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(size.width, size.height),
+      gridPaint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height * 0.5),
+      Offset(size.width, size.height * 0.5),
+      gridPaint,
+    );
+    canvas.drawLine(
+      const Offset(0, 0),
+      Offset(size.width, 0),
+      gridPaint,
+    );
+
+    final n = miles.length;
+    final effectiveMax = maxMiles <= 0 ? 1.0 : maxMiles;
+    final normalized = miles
+        .map((m) => (m / effectiveMax).clamp(0.0, 1.0).toDouble())
+        .toList();
+
+    final path = Path();
+    for (var i = 0; i < n; i++) {
+      final x = n == 1 ? size.width / 2 : size.width * (i / (n - 1));
+      final y = size.height - (normalized[i] * size.height);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    final areaPath = Path.from(path)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          ClinicalPalette.accent.withValues(alpha: 0.30),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final linePaint = Paint()
+      ..color = const Color(0xFFF38E71)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 1.8;
+
+    canvas.drawPath(areaPath, fillPaint);
+    canvas.drawPath(path, linePaint);
+
+    final dotPaint = Paint()..color = const Color(0xFFF38E71);
+    for (var i = 0; i < n; i++) {
+      final x = n == 1 ? size.width / 2 : size.width * (i / (n - 1));
+      final y = size.height - (normalized[i] * size.height);
+      canvas.drawCircle(Offset(x, y), 1.8, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(
+      covariant _RunInputsWeeklyMileageChartPainter oldDelegate) {
+    if (oldDelegate.maxMiles != maxMiles ||
+        oldDelegate.miles.length != miles.length) {
+      return true;
+    }
+    for (var i = 0; i < miles.length; i++) {
+      if (oldDelegate.miles[i] != miles[i]) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 

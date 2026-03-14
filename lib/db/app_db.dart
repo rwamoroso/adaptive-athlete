@@ -620,7 +620,7 @@ class AppDb extends _$AppDb {
   final Uuid _uuid = const Uuid();
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -715,6 +715,10 @@ class AppDb extends _$AppDb {
             await _dedupeWorkoutDaysByDateAndRepointReferences();
             await _ensureWorkoutDaysDateUniqueIndex();
           }
+          if (from < 14) {
+            await _ensureAthletePlanningProfilesTable();
+            await _ensureAthletePlanningProfilesBiometricsColumn();
+          }
         },
         beforeOpen: (details) async {
           await _dedupeWorkoutDaysByDateAndRepointReferences();
@@ -736,6 +740,7 @@ class AppDb extends _$AppDb {
           await _ensureCloudWorkspaceInvitesTable();
           await _ensureAppContextStateTable();
           await _ensureAthletePlanningProfilesTable();
+          await _ensureAthletePlanningProfilesBiometricsColumn();
           await _ensureWeeklyPlanBuildRequestsTable();
         },
       );
@@ -1447,11 +1452,35 @@ class AppDb extends _$AppDb {
         available_equipment_json TEXT NOT NULL,
         contraindications_json TEXT NOT NULL,
         schedule_constraints_json TEXT NOT NULL,
+        biometrics_json TEXT NOT NULL DEFAULT '{}',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         UNIQUE(workspace_id, athlete_profile_id)
       )
     ''');
+  }
+
+  Future<void> _ensureAthletePlanningProfilesBiometricsColumn() async {
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'athlete_planning_profiles' LIMIT 1",
+    ).getSingleOrNull();
+    if (exists == null) {
+      return;
+    }
+    final columns =
+        await customSelect('PRAGMA table_info(athlete_planning_profiles)')
+            .get();
+    final hasColumn = columns.any(
+      (row) =>
+          (row.data['name']?.toString().toLowerCase() ?? '') ==
+          'biometrics_json',
+    );
+    if (hasColumn) {
+      return;
+    }
+    await customStatement(
+      "ALTER TABLE athlete_planning_profiles ADD COLUMN biometrics_json TEXT NOT NULL DEFAULT '{}'",
+    );
   }
 
   Future<void> _ensureWeeklyPlanBuildRequestsTable() async {
@@ -2883,6 +2912,7 @@ class AppDb extends _$AppDb {
     required String availableEquipmentJson,
     required String contraindicationsJson,
     required String scheduleConstraintsJson,
+    required String biometricsJson,
   }) async {
     final now = unixMsNow();
     final existing = await getAthletePlanningProfile(
@@ -2899,6 +2929,7 @@ class AppDb extends _$AppDb {
       availableEquipmentJson: Value(availableEquipmentJson),
       contraindicationsJson: Value(contraindicationsJson),
       scheduleConstraintsJson: Value(scheduleConstraintsJson),
+      biometricsJson: Value(biometricsJson),
       updatedAt: Value(now),
     );
 
@@ -2916,6 +2947,7 @@ class AppDb extends _$AppDb {
           availableEquipmentJson: availableEquipmentJson,
           contraindicationsJson: contraindicationsJson,
           scheduleConstraintsJson: scheduleConstraintsJson,
+          biometricsJson: Value(biometricsJson),
           createdAt: now,
           updatedAt: now,
         ),
@@ -4898,10 +4930,17 @@ class AppDb extends _$AppDb {
       context: 'STRENGTH_SET',
       min: 1,
     );
-    final weight = _parseAiWeeklyOptionalDouble(
+    final unit = (kv['unit'] ?? '').trim().toLowerCase();
+    const allowedUnits = {'lb', 'kg', 'bw', 'unknown'};
+    if (!allowedUnits.contains(unit)) {
+      throw StateError(
+        'Line $lineNo: STRENGTH_SET.unit must be one of ${allowedUnits.join(', ')}.',
+      );
+    }
+    final weight = _parseAiWeeklyStrengthWeight(
       kv['weight'],
+      unit: unit,
       lineNo: lineNo,
-      context: 'STRENGTH_SET.weight',
     );
     final reps = _parseAiWeeklyOptionalInt(
       kv['reps'],
@@ -4915,13 +4954,6 @@ class AppDb extends _$AppDb {
       context: 'STRENGTH_SET.rir',
       min: 0,
     );
-    final unit = (kv['unit'] ?? '').trim().toLowerCase();
-    const allowedUnits = {'lb', 'kg', 'bw', 'unknown'};
-    if (!allowedUnits.contains(unit)) {
-      throw StateError(
-        'Line $lineNo: STRENGTH_SET.unit must be one of ${allowedUnits.join(', ')}.',
-      );
-    }
 
     return _ParsedPlannedStrengthRow(
       exerciseCanonical: exerciseCanonical,
@@ -5057,20 +5089,34 @@ class AppDb extends _$AppDb {
     return parsed;
   }
 
-  double? _parseAiWeeklyOptionalDouble(
+  double? _parseAiWeeklyStrengthWeight(
     String? raw, {
+    required String unit,
     required int lineNo,
-    required String context,
   }) {
     final trimmed = (raw ?? '').trim();
     if (trimmed.isEmpty) {
       return null;
     }
+
     final parsed = double.tryParse(trimmed);
-    if (parsed == null) {
-      throw StateError('Line $lineNo: $context must be numeric or blank.');
+    if (parsed != null) {
+      return parsed;
     }
-    return parsed;
+
+    final normalized = trimmed.toLowerCase();
+    const bodyweightAliases = {
+      'bw',
+      'bodyweight',
+      'body weight',
+      'body-weight'
+    };
+    if (bodyweightAliases.contains(normalized) && unit == 'bw') {
+      return null;
+    }
+
+    throw StateError(
+        'Line $lineNo: STRENGTH_SET.weight must be numeric or blank.');
   }
 
   List<List<dynamic>> _decodeRows(List<List>? rows) {

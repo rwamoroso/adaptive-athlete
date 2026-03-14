@@ -14242,6 +14242,14 @@ class $AthletePlanningProfilesTable extends AthletePlanningProfiles
   late final GeneratedColumn<String> scheduleConstraintsJson =
       GeneratedColumn<String>('schedule_constraints_json', aliasedName, false,
           type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _biometricsJsonMeta =
+      const VerificationMeta('biometricsJson');
+  @override
+  late final GeneratedColumn<String> biometricsJson = GeneratedColumn<String>(
+      'biometrics_json', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('{}'));
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -14267,6 +14275,7 @@ class $AthletePlanningProfilesTable extends AthletePlanningProfiles
         availableEquipmentJson,
         contraindicationsJson,
         scheduleConstraintsJson,
+        biometricsJson,
         createdAt,
         updatedAt
       ];
@@ -14367,6 +14376,12 @@ class $AthletePlanningProfilesTable extends AthletePlanningProfiles
     } else if (isInserting) {
       context.missing(_scheduleConstraintsJsonMeta);
     }
+    if (data.containsKey('biometrics_json')) {
+      context.handle(
+          _biometricsJsonMeta,
+          biometricsJson.isAcceptableOrUnknown(
+              data['biometrics_json']!, _biometricsJsonMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -14413,6 +14428,8 @@ class $AthletePlanningProfilesTable extends AthletePlanningProfiles
       scheduleConstraintsJson: attachedDatabase.typeMapping.read(
           DriftSqlType.string,
           data['${effectivePrefix}schedule_constraints_json'])!,
+      biometricsJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}biometrics_json'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -14439,6 +14456,7 @@ class AthletePlanningProfile extends DataClass
   final String availableEquipmentJson;
   final String contraindicationsJson;
   final String scheduleConstraintsJson;
+  final String biometricsJson;
   final int createdAt;
   final int updatedAt;
   const AthletePlanningProfile(
@@ -14453,6 +14471,7 @@ class AthletePlanningProfile extends DataClass
       required this.availableEquipmentJson,
       required this.contraindicationsJson,
       required this.scheduleConstraintsJson,
+      required this.biometricsJson,
       required this.createdAt,
       required this.updatedAt});
   @override
@@ -14470,6 +14489,7 @@ class AthletePlanningProfile extends DataClass
     map['contraindications_json'] = Variable<String>(contraindicationsJson);
     map['schedule_constraints_json'] =
         Variable<String>(scheduleConstraintsJson);
+    map['biometrics_json'] = Variable<String>(biometricsJson);
     map['created_at'] = Variable<int>(createdAt);
     map['updated_at'] = Variable<int>(updatedAt);
     return map;
@@ -14488,6 +14508,7 @@ class AthletePlanningProfile extends DataClass
       availableEquipmentJson: Value(availableEquipmentJson),
       contraindicationsJson: Value(contraindicationsJson),
       scheduleConstraintsJson: Value(scheduleConstraintsJson),
+      biometricsJson: Value(biometricsJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -14511,6 +14532,7 @@ class AthletePlanningProfile extends DataClass
           serializer.fromJson<String>(json['contraindicationsJson']),
       scheduleConstraintsJson:
           serializer.fromJson<String>(json['scheduleConstraintsJson']),
+      biometricsJson: serializer.fromJson<String>(json['biometricsJson']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
     );
@@ -14532,6 +14554,7 @@ class AthletePlanningProfile extends DataClass
       'contraindicationsJson': serializer.toJson<String>(contraindicationsJson),
       'scheduleConstraintsJson':
           serializer.toJson<String>(scheduleConstraintsJson),
+      'biometricsJson': serializer.toJson<String>(biometricsJson),
       'createdAt': serializer.toJson<int>(createdAt),
       'updatedAt': serializer.toJson<int>(updatedAt),
     };
@@ -14549,6 +14572,7 @@ class AthletePlanningProfile extends DataClass
           String? availableEquipmentJson,
           String? contraindicationsJson,
           String? scheduleConstraintsJson,
+          String? biometricsJson,
           int? createdAt,
           int? updatedAt}) =>
       AthletePlanningProfile(
@@ -14566,6 +14590,7 @@ class AthletePlanningProfile extends DataClass
             contraindicationsJson ?? this.contraindicationsJson,
         scheduleConstraintsJson:
             scheduleConstraintsJson ?? this.scheduleConstraintsJson,
+        biometricsJson: biometricsJson ?? this.biometricsJson,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -14600,6 +14625,9 @@ class AthletePlanningProfile extends DataClass
       scheduleConstraintsJson: data.scheduleConstraintsJson.present
           ? data.scheduleConstraintsJson.value
           : this.scheduleConstraintsJson,
+      biometricsJson: data.biometricsJson.present
+          ? data.biometricsJson.value
+          : this.biometricsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -14619,6 +14647,7 @@ class AthletePlanningProfile extends DataClass
           ..write('availableEquipmentJson: $availableEquipmentJson, ')
           ..write('contraindicationsJson: $contraindicationsJson, ')
           ..write('scheduleConstraintsJson: $scheduleConstraintsJson, ')
+          ..write('biometricsJson: $biometricsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -14638,6 +14667,7 @@ class AthletePlanningProfile extends DataClass
       availableEquipmentJson,
       contraindicationsJson,
       scheduleConstraintsJson,
+      biometricsJson,
       createdAt,
       updatedAt);
   @override
@@ -14655,6 +14685,7 @@ class AthletePlanningProfile extends DataClass
           other.availableEquipmentJson == this.availableEquipmentJson &&
           other.contraindicationsJson == this.contraindicationsJson &&
           other.scheduleConstraintsJson == this.scheduleConstraintsJson &&
+          other.biometricsJson == this.biometricsJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -14672,6 +14703,7 @@ class AthletePlanningProfilesCompanion
   final Value<String> availableEquipmentJson;
   final Value<String> contraindicationsJson;
   final Value<String> scheduleConstraintsJson;
+  final Value<String> biometricsJson;
   final Value<int> createdAt;
   final Value<int> updatedAt;
   final Value<int> rowid;
@@ -14687,6 +14719,7 @@ class AthletePlanningProfilesCompanion
     this.availableEquipmentJson = const Value.absent(),
     this.contraindicationsJson = const Value.absent(),
     this.scheduleConstraintsJson = const Value.absent(),
+    this.biometricsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -14703,6 +14736,7 @@ class AthletePlanningProfilesCompanion
     required String availableEquipmentJson,
     required String contraindicationsJson,
     required String scheduleConstraintsJson,
+    this.biometricsJson = const Value.absent(),
     required int createdAt,
     required int updatedAt,
     this.rowid = const Value.absent(),
@@ -14731,6 +14765,7 @@ class AthletePlanningProfilesCompanion
     Expression<String>? availableEquipmentJson,
     Expression<String>? contraindicationsJson,
     Expression<String>? scheduleConstraintsJson,
+    Expression<String>? biometricsJson,
     Expression<int>? createdAt,
     Expression<int>? updatedAt,
     Expression<int>? rowid,
@@ -14750,6 +14785,7 @@ class AthletePlanningProfilesCompanion
         'contraindications_json': contraindicationsJson,
       if (scheduleConstraintsJson != null)
         'schedule_constraints_json': scheduleConstraintsJson,
+      if (biometricsJson != null) 'biometrics_json': biometricsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -14768,6 +14804,7 @@ class AthletePlanningProfilesCompanion
       Value<String>? availableEquipmentJson,
       Value<String>? contraindicationsJson,
       Value<String>? scheduleConstraintsJson,
+      Value<String>? biometricsJson,
       Value<int>? createdAt,
       Value<int>? updatedAt,
       Value<int>? rowid}) {
@@ -14786,6 +14823,7 @@ class AthletePlanningProfilesCompanion
           contraindicationsJson ?? this.contraindicationsJson,
       scheduleConstraintsJson:
           scheduleConstraintsJson ?? this.scheduleConstraintsJson,
+      biometricsJson: biometricsJson ?? this.biometricsJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -14831,6 +14869,9 @@ class AthletePlanningProfilesCompanion
       map['schedule_constraints_json'] =
           Variable<String>(scheduleConstraintsJson.value);
     }
+    if (biometricsJson.present) {
+      map['biometrics_json'] = Variable<String>(biometricsJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
     }
@@ -14857,6 +14898,7 @@ class AthletePlanningProfilesCompanion
           ..write('availableEquipmentJson: $availableEquipmentJson, ')
           ..write('contraindicationsJson: $contraindicationsJson, ')
           ..write('scheduleConstraintsJson: $scheduleConstraintsJson, ')
+          ..write('biometricsJson: $biometricsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -22423,6 +22465,7 @@ typedef $$AthletePlanningProfilesTableCreateCompanionBuilder
   required String availableEquipmentJson,
   required String contraindicationsJson,
   required String scheduleConstraintsJson,
+  Value<String> biometricsJson,
   required int createdAt,
   required int updatedAt,
   Value<int> rowid,
@@ -22440,6 +22483,7 @@ typedef $$AthletePlanningProfilesTableUpdateCompanionBuilder
   Value<String> availableEquipmentJson,
   Value<String> contraindicationsJson,
   Value<String> scheduleConstraintsJson,
+  Value<String> biometricsJson,
   Value<int> createdAt,
   Value<int> updatedAt,
   Value<int> rowid,
@@ -22492,6 +22536,10 @@ class $$AthletePlanningProfilesTableFilterComposer
 
   ColumnFilters<String> get scheduleConstraintsJson => $composableBuilder(
       column: $table.scheduleConstraintsJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get biometricsJson => $composableBuilder(
+      column: $table.biometricsJson,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get createdAt => $composableBuilder(
@@ -22550,6 +22598,10 @@ class $$AthletePlanningProfilesTableOrderingComposer
       column: $table.scheduleConstraintsJson,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get biometricsJson => $composableBuilder(
+      column: $table.biometricsJson,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -22598,6 +22650,9 @@ class $$AthletePlanningProfilesTableAnnotationComposer
 
   GeneratedColumn<String> get scheduleConstraintsJson => $composableBuilder(
       column: $table.scheduleConstraintsJson, builder: (column) => column);
+
+  GeneratedColumn<String> get biometricsJson => $composableBuilder(
+      column: $table.biometricsJson, builder: (column) => column);
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -22648,6 +22703,7 @@ class $$AthletePlanningProfilesTableTableManager extends RootTableManager<
             Value<String> availableEquipmentJson = const Value.absent(),
             Value<String> contraindicationsJson = const Value.absent(),
             Value<String> scheduleConstraintsJson = const Value.absent(),
+            Value<String> biometricsJson = const Value.absent(),
             Value<int> createdAt = const Value.absent(),
             Value<int> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -22664,6 +22720,7 @@ class $$AthletePlanningProfilesTableTableManager extends RootTableManager<
             availableEquipmentJson: availableEquipmentJson,
             contraindicationsJson: contraindicationsJson,
             scheduleConstraintsJson: scheduleConstraintsJson,
+            biometricsJson: biometricsJson,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,
@@ -22680,6 +22737,7 @@ class $$AthletePlanningProfilesTableTableManager extends RootTableManager<
             required String availableEquipmentJson,
             required String contraindicationsJson,
             required String scheduleConstraintsJson,
+            Value<String> biometricsJson = const Value.absent(),
             required int createdAt,
             required int updatedAt,
             Value<int> rowid = const Value.absent(),
@@ -22696,6 +22754,7 @@ class $$AthletePlanningProfilesTableTableManager extends RootTableManager<
             availableEquipmentJson: availableEquipmentJson,
             contraindicationsJson: contraindicationsJson,
             scheduleConstraintsJson: scheduleConstraintsJson,
+            biometricsJson: biometricsJson,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,

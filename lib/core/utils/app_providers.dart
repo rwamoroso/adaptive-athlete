@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../db/app_db.dart';
 import '../../features/ai/ai_analyze_service.dart';
@@ -185,6 +186,115 @@ class AppSyncStatusNotifier extends StateNotifier<AppSyncStatus> {
   }
 }
 
+class RestCountdownState {
+  const RestCountdownState({
+    required this.visible,
+    required this.remainingSeconds,
+    required this.totalSeconds,
+    required this.dismissibleEpoch,
+  });
+
+  const RestCountdownState.idle()
+      : visible = false,
+        remainingSeconds = 0,
+        totalSeconds = 0,
+        dismissibleEpoch = 0;
+
+  final bool visible;
+  final int remainingSeconds;
+  final int totalSeconds;
+  final int dismissibleEpoch;
+
+  bool get isRunning => visible && remainingSeconds > 0;
+
+  RestCountdownState copyWith({
+    bool? visible,
+    int? remainingSeconds,
+    int? totalSeconds,
+    int? dismissibleEpoch,
+  }) {
+    return RestCountdownState(
+      visible: visible ?? this.visible,
+      remainingSeconds: remainingSeconds ?? this.remainingSeconds,
+      totalSeconds: totalSeconds ?? this.totalSeconds,
+      dismissibleEpoch: dismissibleEpoch ?? this.dismissibleEpoch,
+    );
+  }
+}
+
+class RestCountdownNotifier extends StateNotifier<RestCountdownState> {
+  RestCountdownNotifier() : super(const RestCountdownState.idle());
+
+  Timer? _ticker;
+
+  void start(int seconds) {
+    final clamped = seconds < 1 ? 1 : seconds;
+    state = RestCountdownState(
+      visible: true,
+      remainingSeconds: clamped,
+      totalSeconds: clamped,
+      dismissibleEpoch: state.dismissibleEpoch + 1,
+    );
+    _enableWakeLock();
+    _startTicker();
+  }
+
+  void dismiss() {
+    _ticker?.cancel();
+    _ticker = null;
+    state = const RestCountdownState.idle();
+    _disableWakeLock();
+  }
+
+  void _startTicker() {
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!state.visible) {
+        _ticker?.cancel();
+        _ticker = null;
+        return;
+      }
+      final remaining = state.remainingSeconds - 1;
+      if (remaining <= 0) {
+        _ticker?.cancel();
+        _ticker = null;
+        state = state.copyWith(remainingSeconds: 0);
+        _disableWakeLock();
+        return;
+      }
+
+      state = state.copyWith(remainingSeconds: remaining);
+    });
+  }
+
+  void _enableWakeLock() {
+    unawaited(_setWakeLock(enabled: true));
+  }
+
+  void _disableWakeLock() {
+    unawaited(_setWakeLock(enabled: false));
+  }
+
+  Future<void> _setWakeLock({required bool enabled}) async {
+    try {
+      if (enabled) {
+        await WakelockPlus.enable();
+      } else {
+        await WakelockPlus.disable();
+      }
+    } catch (_) {
+      // Ignore wake lock failures on unsupported platforms.
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _disableWakeLock();
+    super.dispose();
+  }
+}
+
 final appDbProvider = Provider<AppDb>((ref) {
   final db = AppDb();
   ref.onDispose(db.close);
@@ -201,6 +311,11 @@ final supabaseBootstrapProvider = Provider<SupabaseBootstrap>(
 final syncStatusProvider =
     StateNotifierProvider<AppSyncStatusNotifier, AppSyncStatus>(
   (_) => AppSyncStatusNotifier(),
+);
+
+final restCountdownProvider =
+    StateNotifierProvider<RestCountdownNotifier, RestCountdownState>(
+  (_) => RestCountdownNotifier(),
 );
 
 final aiWeeklyPlanResponseProvider = StateProvider<String>((_) => '');

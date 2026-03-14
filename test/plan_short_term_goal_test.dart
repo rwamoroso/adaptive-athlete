@@ -75,7 +75,13 @@ void main() {
     await _pumpPlanScreen(tester, db, plannerService);
 
     expect(find.text('Advanced Planning Tools'), findsNothing);
-    await tester.tap(find.byIcon(Icons.build_outlined).first);
+    final advancedTab = find.text('Advanced').last.hitTestable();
+    await tester.dragUntilVisible(
+      advancedTab,
+      find.byType(ListView).first,
+      const Offset(0, -300),
+    );
+    await tester.tap(advancedTab);
     await tester.pumpAndSettle();
 
     expect(find.text('Advanced Planning Tools'), findsOneWidget);

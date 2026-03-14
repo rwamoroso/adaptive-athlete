@@ -24,8 +24,10 @@ Uint8List _buildStandardWorkbookBytes({bool runConflict = false}) {
   tenWeekPlan.cell(CellIndex.indexByString('A1')).value = TextCellValue('Week');
   tenWeekPlan.cell(CellIndex.indexByString('B1')).value =
       TextCellValue('Week Start');
-  tenWeekPlan.cell(CellIndex.indexByString('C1')).value = TextCellValue('Week End');
-  tenWeekPlan.cell(CellIndex.indexByString('A2')).value = TextCellValue('Week 1');
+  tenWeekPlan.cell(CellIndex.indexByString('C1')).value =
+      TextCellValue('Week End');
+  tenWeekPlan.cell(CellIndex.indexByString('A2')).value =
+      TextCellValue('Week 1');
   tenWeekPlan.cell(CellIndex.indexByString('B2')).value =
       TextCellValue('2026-02-09');
   tenWeekPlan.cell(CellIndex.indexByString('C2')).value =
@@ -82,19 +84,23 @@ Uint8List _buildStandardWorkbookBytes({bool runConflict = false}) {
       );
       daySheet.cell(CellIndex.indexByString('A9')).value =
           TextCellValue('Prescribed Exercise');
-      daySheet.cell(CellIndex.indexByString('B9')).value = TextCellValue('Rank');
+      daySheet.cell(CellIndex.indexByString('B9')).value =
+          TextCellValue('Rank');
       daySheet.cell(CellIndex.indexByString('C9')).value =
           TextCellValue('Alternative Exercise');
-      daySheet.cell(CellIndex.indexByString('D9')).value = TextCellValue('Tier');
+      daySheet.cell(CellIndex.indexByString('D9')).value =
+          TextCellValue('Tier');
       daySheet.cell(CellIndex.indexByString('E9')).value =
           TextCellValue('Rationale');
-      daySheet.cell(CellIndex.indexByString('F9')).value = TextCellValue('Notes');
+      daySheet.cell(CellIndex.indexByString('F9')).value =
+          TextCellValue('Notes');
       daySheet.cell(CellIndex.indexByString('A10')).value =
           TextCellValue('Bench Press');
       daySheet.cell(CellIndex.indexByString('B10')).value = IntCellValue(1);
       daySheet.cell(CellIndex.indexByString('C10')).value =
           TextCellValue('Dumbbell Bench Press');
-      daySheet.cell(CellIndex.indexByString('D10')).value = TextCellValue('strong');
+      daySheet.cell(CellIndex.indexByString('D10')).value =
+          TextCellValue('strong');
       daySheet.cell(CellIndex.indexByString('E10')).value =
           TextCellValue('Preserves horizontal press pattern');
       daySheet.cell(CellIndex.indexByString('F10')).value =
@@ -204,7 +210,9 @@ void main() {
     expect(strengthSets.length, 1);
     expect(strengthSets.first.exerciseCanonical, 'Bench Press');
     final alternatives = await db.select(db.planExerciseAlternatives).get();
-    expect(alternatives.length, 2);
+    expect(alternatives.length, 4);
+    expect(alternatives.where((a) => a.planDayId != null).length, 2);
+    expect(alternatives.where((a) => a.planDayId == null).length, 2);
     expect(
       alternatives.any((a) =>
           a.prescribedExerciseCanonical == 'Bench Press' &&
@@ -286,7 +294,8 @@ void main() {
         names.firstWhere((n) => n.toLowerCase().startsWith('day 1'));
     final day1Rows = _sheetTextRows(exported, day1SheetName);
     final flattened = day1Rows.expand((r) => r).toList();
-    expect(flattened, contains('Exercise Alternatives (Substitute Suggestions)'));
+    expect(
+        flattened, contains('Exercise Alternatives (Substitute Suggestions)'));
     expect(flattened, contains('Prescribed Exercise'));
     expect(flattened, contains('Alternative Exercise'));
     expect(flattened, contains('Dumbbell Bench Press'));

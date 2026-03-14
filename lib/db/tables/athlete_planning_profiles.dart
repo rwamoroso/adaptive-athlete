@@ -12,6 +12,7 @@ class AthletePlanningProfiles extends Table {
   TextColumn get availableEquipmentJson => text()();
   TextColumn get contraindicationsJson => text()();
   TextColumn get scheduleConstraintsJson => text()();
+  TextColumn get biometricsJson => text().withDefault(const Constant('{}'))();
   IntColumn get createdAt => integer()();
   IntColumn get updatedAt => integer()();
 

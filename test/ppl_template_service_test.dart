@@ -56,7 +56,7 @@ void main() {
     expect(day1.sets[0].rir, 2);
 
     final coreSet = day1.sets[2];
-    expect(coreSet.exercise, 'Core: Pallof Press');
+    expect(coreSet.exercise, 'Pallof Press');
     expect(coreSet.weight, isNull);
     expect(coreSet.reps, 10);
     expect(coreSet.rir, 2);

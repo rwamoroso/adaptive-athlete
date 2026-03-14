@@ -1,19 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/utils/date_utils.dart';
+import 'biometrics_profile.dart';
+import 'biometrics_profile_screen.dart';
+import '../training/exercise_substitution_service.dart';
 import '../ui/clinical_theme.dart';
 import '../ui/clinical_widgets.dart';
 import 'weekly_planner_service.dart';
 
 class PlanBuilderWalkthroughDraft {
-  const PlanBuilderWalkthroughDraft({
+  PlanBuilderWalkthroughDraft({
     required this.primaryGoal,
     required this.runTargetEnabled,
     required this.runDistanceMiles,
     required this.runPace,
     required this.experienceLevel,
+    required this.shortTermGoalText,
+    required this.shortTermGoalWeeks,
+    required DateTime weekStartDate,
     required this.splitType,
-  });
+    required Set<int> trainingWeekdays,
+    required Set<String> availableEquipment,
+    required Set<String> contraindications,
+    required this.scheduleConstraints,
+    required this.weeklyModifier,
+    required this.propagateLongTerm,
+    required this.additionalInstructions,
+    required this.useCustomPromptText,
+    required this.customPromptText,
+    required Map<String, dynamic> biometrics,
+  })  : weekStartDate = DateTime(
+          weekStartDate.year,
+          weekStartDate.month,
+          weekStartDate.day,
+        ),
+        trainingWeekdays = Set<int>.unmodifiable(trainingWeekdays),
+        availableEquipment = Set<String>.unmodifiable(availableEquipment),
+        contraindications = Set<String>.unmodifiable(contraindications),
+        biometrics = Map<String, dynamic>.unmodifiable(biometrics);
 
   static const String runGoal = 'run_goal';
   static const String strengthGoal = 'strength';
@@ -25,7 +50,20 @@ class PlanBuilderWalkthroughDraft {
   final String runDistanceMiles;
   final String runPace;
   final String experienceLevel;
+  final String shortTermGoalText;
+  final String shortTermGoalWeeks;
+  final DateTime weekStartDate;
   final SplitType splitType;
+  final Set<int> trainingWeekdays;
+  final Set<String> availableEquipment;
+  final Set<String> contraindications;
+  final String scheduleConstraints;
+  final WeeklyPlanModifier weeklyModifier;
+  final bool propagateLongTerm;
+  final String additionalInstructions;
+  final bool useCustomPromptText;
+  final String customPromptText;
+  final Map<String, dynamic> biometrics;
 
   bool get isRunGoal => primaryGoal == runGoal;
 
@@ -35,7 +73,20 @@ class PlanBuilderWalkthroughDraft {
     String? runDistanceMiles,
     String? runPace,
     String? experienceLevel,
+    String? shortTermGoalText,
+    String? shortTermGoalWeeks,
+    DateTime? weekStartDate,
     SplitType? splitType,
+    Set<int>? trainingWeekdays,
+    Set<String>? availableEquipment,
+    Set<String>? contraindications,
+    String? scheduleConstraints,
+    WeeklyPlanModifier? weeklyModifier,
+    bool? propagateLongTerm,
+    String? additionalInstructions,
+    bool? useCustomPromptText,
+    String? customPromptText,
+    Map<String, dynamic>? biometrics,
   }) {
     return PlanBuilderWalkthroughDraft(
       primaryGoal: primaryGoal ?? this.primaryGoal,
@@ -43,9 +94,28 @@ class PlanBuilderWalkthroughDraft {
       runDistanceMiles: runDistanceMiles ?? this.runDistanceMiles,
       runPace: runPace ?? this.runPace,
       experienceLevel: experienceLevel ?? this.experienceLevel,
+      shortTermGoalText: shortTermGoalText ?? this.shortTermGoalText,
+      shortTermGoalWeeks: shortTermGoalWeeks ?? this.shortTermGoalWeeks,
+      weekStartDate: weekStartDate ?? this.weekStartDate,
       splitType: splitType ?? this.splitType,
+      trainingWeekdays: trainingWeekdays ?? this.trainingWeekdays,
+      availableEquipment: availableEquipment ?? this.availableEquipment,
+      contraindications: contraindications ?? this.contraindications,
+      scheduleConstraints: scheduleConstraints ?? this.scheduleConstraints,
+      weeklyModifier: weeklyModifier ?? this.weeklyModifier,
+      propagateLongTerm: propagateLongTerm ?? this.propagateLongTerm,
+      additionalInstructions:
+          additionalInstructions ?? this.additionalInstructions,
+      useCustomPromptText: useCustomPromptText ?? this.useCustomPromptText,
+      customPromptText: customPromptText ?? this.customPromptText,
+      biometrics: biometrics ?? this.biometrics,
     );
   }
+}
+
+enum _PromptWorkspaceView {
+  response,
+  fullPrompt,
 }
 
 class PlanBuilderWalkthroughScreen extends StatefulWidget {
@@ -53,16 +123,27 @@ class PlanBuilderWalkthroughScreen extends StatefulWidget {
     super.key,
     required this.initialDraft,
     required this.initialStep,
+    required this.initialManualResponseText,
     required this.onDraftChanged,
+    required this.onManualResponseChanged,
     required this.onStepChanged,
     required this.onCompleted,
+    required this.onSaveIntakeRequested,
+    required this.onBuildPromptRequested,
+    required this.onApplyManualResponseRequested,
   });
 
   final PlanBuilderWalkthroughDraft initialDraft;
   final int initialStep;
+  final String initialManualResponseText;
   final ValueChanged<PlanBuilderWalkthroughDraft> onDraftChanged;
+  final ValueChanged<String> onManualResponseChanged;
   final ValueChanged<int> onStepChanged;
   final VoidCallback onCompleted;
+  final Future<bool> Function() onSaveIntakeRequested;
+  final Future<String?> Function() onBuildPromptRequested;
+  final Future<bool> Function(String responseText)
+      onApplyManualResponseRequested;
 
   @override
   State<PlanBuilderWalkthroughScreen> createState() =>
@@ -71,16 +152,33 @@ class PlanBuilderWalkthroughScreen extends StatefulWidget {
 
 class _PlanBuilderWalkthroughScreenState
     extends State<PlanBuilderWalkthroughScreen> {
+  static const String _defaultPromptWorkspaceStatus =
+      'Save your intake, build the prompt snapshot, and copy it into your AI workflow.';
   static const int _introStep = 0;
   static const int _goalStep = 1;
   static const int _experienceStep = 2;
   static const int _splitStep = 3;
-  static const int _lastStep = _splitStep;
+  static const int _weeklySetupStep = 4;
+  static const int _biometricsStep = 5;
+  static const int _promptWorkspaceStep = 6;
+  static const int _lastStep = _promptWorkspaceStep;
 
   late int _step;
   late PlanBuilderWalkthroughDraft _draft;
   late final TextEditingController _runDistanceController;
   late final TextEditingController _runPaceController;
+  late final TextEditingController _shortTermGoalController;
+  late final TextEditingController _shortTermGoalWeeksController;
+  late final TextEditingController _scheduleConstraintsController;
+  late final TextEditingController _additionalInstructionsController;
+  late final TextEditingController _customPromptController;
+  late final TextEditingController _manualAiResponseController;
+  bool _savingIntake = false;
+  bool _buildingPrompt = false;
+  bool _manualApplying = false;
+  String? _generatedPrompt;
+  String _promptWorkspaceStatus = _defaultPromptWorkspaceStatus;
+  _PromptWorkspaceView _promptWorkspaceView = _PromptWorkspaceView.response;
 
   @override
   void initState() {
@@ -90,12 +188,30 @@ class _PlanBuilderWalkthroughScreenState
     _runDistanceController =
         TextEditingController(text: _draft.runDistanceMiles);
     _runPaceController = TextEditingController(text: _draft.runPace);
+    _shortTermGoalController =
+        TextEditingController(text: _draft.shortTermGoalText);
+    _shortTermGoalWeeksController =
+        TextEditingController(text: _draft.shortTermGoalWeeks);
+    _scheduleConstraintsController =
+        TextEditingController(text: _draft.scheduleConstraints);
+    _additionalInstructionsController =
+        TextEditingController(text: _draft.additionalInstructions);
+    _customPromptController =
+        TextEditingController(text: _draft.customPromptText);
+    _manualAiResponseController =
+        TextEditingController(text: widget.initialManualResponseText);
   }
 
   @override
   void dispose() {
     _runDistanceController.dispose();
     _runPaceController.dispose();
+    _shortTermGoalController.dispose();
+    _shortTermGoalWeeksController.dispose();
+    _scheduleConstraintsController.dispose();
+    _additionalInstructionsController.dispose();
+    _customPromptController.dispose();
+    _manualAiResponseController.dispose();
     super.dispose();
   }
 
@@ -109,8 +225,45 @@ class _PlanBuilderWalkthroughScreenState
   }
 
   void _updateDraft(PlanBuilderWalkthroughDraft nextDraft) {
-    setState(() => _draft = nextDraft);
+    setState(() {
+      _draft = nextDraft;
+      _generatedPrompt = null;
+      _promptWorkspaceStatus = _defaultPromptWorkspaceStatus;
+    });
     widget.onDraftChanged(nextDraft);
+  }
+
+  bool get _hasRunTarget =>
+      _draft.runDistanceMiles.trim().isNotEmpty ||
+      _draft.runPace.trim().isNotEmpty;
+
+  void _updateRunGoalDraft({
+    String? distanceMiles,
+    String? pace,
+  }) {
+    final nextDistance = distanceMiles ?? _draft.runDistanceMiles;
+    final nextPace = pace ?? _draft.runPace;
+    _updateDraft(
+      _draft.copyWith(
+        runDistanceMiles: nextDistance,
+        runPace: nextPace,
+        runTargetEnabled:
+            nextDistance.trim().isNotEmpty || nextPace.trim().isNotEmpty,
+      ),
+    );
+  }
+
+  String _runGoalSummaryText() {
+    final distance = _draft.runDistanceMiles.trim();
+    final pace = _draft.runPace.trim();
+    if (distance.isEmpty && pace.isEmpty) {
+      return 'Run goal';
+    }
+    if (distance.isEmpty) {
+      return 'Run goal @ $pace';
+    }
+    final distanceLabel = '$distance miles';
+    return pace.isEmpty ? distanceLabel : '$distanceLabel @ $pace';
   }
 
   void _goBack() {
@@ -142,8 +295,16 @@ class _PlanBuilderWalkthroughScreenState
     Navigator.of(context).pop(true);
   }
 
-  String _splitRequirementText(SplitType split) {
-    final requirement = switch (split) {
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  ({int min, int max}) _splitTrainingDayRequirement(SplitType split) {
+    return switch (split) {
       SplitType.runOnly => (min: 4, max: 7),
       SplitType.fullBody3d => (min: 3, max: 3),
       SplitType.upperLower4d => (min: 4, max: 4),
@@ -154,10 +315,57 @@ class _PlanBuilderWalkthroughScreenState
       SplitType.broSplit => (min: 5, max: 5),
       SplitType.customHybrid => (min: 4, max: 7),
     };
+  }
+
+  String _splitRequirementText(SplitType split) {
+    final requirement = _splitTrainingDayRequirement(split);
     if (requirement.min == requirement.max) {
       return 'Recommended: ${requirement.min} training day${requirement.min == 1 ? '' : 's'} per week.';
     }
     return 'Recommended: ${requirement.min}-${requirement.max} training days per week.';
+  }
+
+  String _splitRequiredDaysText(SplitType split) {
+    final requirement = _splitTrainingDayRequirement(split);
+    if (requirement.min == requirement.max) {
+      return 'Split requirement: ${requirement.min} training day${requirement.min == 1 ? '' : 's'}.';
+    }
+    return 'Split requirement: ${requirement.min}-${requirement.max} training days.';
+  }
+
+  String _weekdayLabel(int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return 'Monday';
+      case DateTime.tuesday:
+        return 'Tuesday';
+      case DateTime.wednesday:
+        return 'Wednesday';
+      case DateTime.thursday:
+        return 'Thursday';
+      case DateTime.friday:
+        return 'Friday';
+      case DateTime.saturday:
+        return 'Saturday';
+      case DateTime.sunday:
+        return 'Sunday';
+      default:
+        return 'Day';
+    }
+  }
+
+  bool _selectedWeekdaysMeetSplitRequirement() {
+    final requirement = _splitTrainingDayRequirement(_draft.splitType);
+    final count = _draft.trainingWeekdays.length;
+    return count >= requirement.min && count <= requirement.max;
+  }
+
+  String _selectedWeekdaySummary() {
+    if (_draft.trainingWeekdays.isEmpty) {
+      return 'No weekdays selected.';
+    }
+    final selected = _draft.trainingWeekdays.toList()..sort();
+    return selected.map(_weekdayLabel).join(', ');
   }
 
   InputDecoration _walkthroughDropdownDecoration(
@@ -481,55 +689,104 @@ class _PlanBuilderWalkthroughScreenState
         ),
         if (_draft.isRunGoal) ...[
           const SizedBox(height: 10),
-          const Text('Do you have a running distance or pace target?'),
-          const SizedBox(height: 6),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment<bool>(value: true, label: Text('Yes')),
-              ButtonSegment<bool>(value: false, label: Text('Not yet')),
-            ],
-            selected: {_draft.runTargetEnabled},
-            onSelectionChanged: (selection) {
-              _updateDraft(_draft.copyWith(runTargetEnabled: selection.first));
-            },
-          ),
-          if (_draft.runTargetEnabled) ...[
-            const SizedBox(height: 8),
-            Row(
+          GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _runDistanceController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                    ],
-                    decoration: const InputDecoration(
-                      labelText: 'Distance (miles)',
-                      hintText: 'Example: 5',
-                    ),
-                    onChanged: (value) =>
-                        _updateDraft(_draft.copyWith(runDistanceMiles: value)),
-                  ),
+                Text(
+                  'Run Target',
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _runPaceController,
-                    decoration: const InputDecoration(
-                      labelText: 'Target Pace',
-                      hintText: 'Example: 9:15-9:10/mi',
+                const SizedBox(height: 4),
+                Text(
+                  'Tell us exactly what you are training toward so the prompt can anchor the plan to a real outcome.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _runDistanceController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Distance (miles) *',
+                          hintText: 'Example: 5',
+                        ),
+                        onChanged: (value) =>
+                            _updateRunGoalDraft(distanceMiles: value),
+                      ),
                     ),
-                    onChanged: (value) =>
-                        _updateDraft(_draft.copyWith(runPace: value)),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _runPaceController,
+                        decoration: const InputDecoration(
+                          labelText: 'Target Pace (optional)',
+                          hintText: 'Example: 8:00/mi',
+                        ),
+                        onChanged: (value) => _updateRunGoalDraft(pace: value),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _hasRunTarget
+                      ? 'Current target: ${_runGoalSummaryText()}'
+                      : 'Example target: 5 miles @ 8:00/mi.',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
-          ],
+          ),
         ],
+        const SizedBox(height: 10),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Short-Term Goal',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _shortTermGoalController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Short-Term Goal (optional)',
+                  hintText:
+                      'Example: Abs showing for beach weekend, or train for a 10K.',
+                ),
+                onChanged: (value) =>
+                    _updateDraft(_draft.copyWith(shortTermGoalText: value)),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _shortTermGoalWeeksController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Timeline (weeks)',
+                  hintText: 'Example: 6',
+                ),
+                onChanged: (value) =>
+                    _updateDraft(_draft.copyWith(shortTermGoalWeeks: value)),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'If short-term goal is entered, timeline is required (1-52).',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -539,14 +796,6 @@ class _PlanBuilderWalkthroughScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionHeader(text: 'Step 2 — Experience Level'),
-        const SizedBox(height: 8),
-        const GlassCard(
-          child: Text(
-            'Beginner: New to structured training or inconsistent recently.\n'
-            'Intermediate: Training consistently with good movement basics.\n'
-            'Advanced: Long consistent history and strong recovery habits.',
-          ),
-        ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           key: ValueKey<String>('experience_${_draft.experienceLevel}'),
@@ -567,6 +816,40 @@ class _PlanBuilderWalkthroughScreenState
             _updateDraft(_draft.copyWith(experienceLevel: value));
           },
         ),
+        const SizedBox(height: 8),
+        const GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '🌱 Beginner',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for athletes who are new to structured training or returning after a long break. Workouts emphasize learning proper technique, building foundational strength, and developing consistent habits while allowing generous recovery between sessions.',
+              ),
+              SizedBox(height: 10),
+              Text(
+                '⚙️ Intermediate',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for athletes with consistent training experience who are ready for more structured progression. Training increases in volume and intensity, with more targeted programming designed to steadily improve strength, endurance, and performance.',
+              ),
+              SizedBox(height: 10),
+              Text(
+                '🚀 Advanced',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for highly experienced athletes who have already built a strong training base. Workouts use higher volume, specialized programming, and more precise progression strategies to continue driving performance and adaptation.',
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -575,13 +858,7 @@ class _PlanBuilderWalkthroughScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(text: 'Step 3 — Split Selection'),
-        const SizedBox(height: 8),
-        const GlassCard(
-          child: Text(
-            'Split selection controls how training stress is distributed through the week, and helps balance progression with recovery.',
-          ),
-        ),
+        const SectionHeader(text: 'Step 3 - Split Selection'),
         const SizedBox(height: 8),
         DropdownButtonFormField<SplitType>(
           key: ValueKey<SplitType>(_draft.splitType),
@@ -610,11 +887,730 @@ class _PlanBuilderWalkthroughScreenState
         ),
         const SizedBox(height: 8),
         const GlassCard(
-          child: Text(
-            'Run Only: cardio-focused blocks.\n'
-            'Full Body / Upper-Lower / PHUL: great for structured progression and recovery.\n'
-            'PPL / Arnold / Bro Split: higher-volume lifting frequency.\n'
-            'Hybrid Run+Lift / Custom Hybrid: combine quality running with strength work.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '🏃 Run Only',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for athletes focused entirely on running performance or endurance development. Training emphasizes aerobic capacity, pacing control, interval work, and long-run progression with minimal or optional strength work.',
+              ),
+              SizedBox(height: 10),
+              Text(
+                '🏋️ Full Body (3d)',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for beginners or athletes who want efficient strength training with fewer gym days. Each workout trains the entire body, allowing frequent stimulation of all major muscle groups while providing ample recovery between sessions.',
+              ),
+              SizedBox(height: 10),
+              Text(
+                '🔄 Upper / Lower (4d)',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for balanced strength and muscle development with moderate training frequency. Upper body and lower body sessions alternate across the week, allowing higher volume per muscle group while maintaining recovery.',
+              ),
+              SizedBox(height: 10),
+              Text(
+                '⚙️ Push / Pull / Legs (5–6d)',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for experienced lifters who want high training frequency and targeted muscle development. Workouts are divided by movement pattern—pushing muscles, pulling muscles, and lower body—allowing more volume and specialization.',
+              ),
+              SizedBox(height: 10),
+              Text(
+                '⚡ PHUL (Power Hypertrophy Upper Lower)',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for athletes who want both strength and muscle growth. The week combines heavier “power” sessions with higher-volume hypertrophy sessions to stimulate multiple adaptation pathways.',
+              ),
+              SizedBox(height: 10),
+              Text(
+                '🦾 Arnold Split',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for advanced hypertrophy training with high weekly volume. Popularized by Arnold Schwarzenegger, this split pairs chest/back, shoulders/arms, and legs across six sessions to maximize muscle stimulus and frequency.',
+              ),
+              SizedBox(height: 10),
+              Text(
+                '💪 Bro Split',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for lifters who prefer high volume on one muscle group per day. Each session focuses intensely on a single body part (chest day, back day, leg day, etc.), allowing maximal local fatigue and recovery before the next session.',
+              ),
+              SizedBox(height: 10),
+              Text(
+                '🏃‍♂️🏋️ Hybrid Run + Lift',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for athletes who want to develop endurance and strength simultaneously. Running sessions are strategically paired with strength workouts so both systems improve without interfering with recovery.',
+              ),
+              SizedBox(height: 10),
+              Text(
+                '🧠 Custom Hybrid',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Best for athletes with unique schedules or specialized goals. The AI builds a flexible mix of running, strength, and recovery sessions tailored to your availability, equipment, and performance priorities.',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWeeklySetupStep(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(text: 'Step 4 - Weekly Setup'),
+        const SizedBox(height: 8),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _splitRequiredDaysText(_draft.splitType),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: _selectedWeekdaysMeetSplitRequirement()
+                          ? null
+                          : Colors.orange.shade300,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Workout Weekdays',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              Text(
+                _selectedWeekdaySummary(),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 4),
+              for (final weekday in const <int>[
+                DateTime.monday,
+                DateTime.tuesday,
+                DateTime.wednesday,
+                DateTime.thursday,
+                DateTime.friday,
+                DateTime.saturday,
+                DateTime.sunday,
+              ])
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  value: _draft.trainingWeekdays.contains(weekday),
+                  title: Text(_weekdayLabel(weekday)),
+                  onChanged: (selected) {
+                    if (selected == null) {
+                      return;
+                    }
+                    final nextWeekdays = <int>{..._draft.trainingWeekdays};
+                    if (selected) {
+                      nextWeekdays.add(weekday);
+                    } else {
+                      nextWeekdays.remove(weekday);
+                    }
+                    _updateDraft(
+                      _draft.copyWith(trainingWeekdays: nextWeekdays),
+                    );
+                  },
+                ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<WeeklyPlanModifier>(
+                key: ValueKey<WeeklyPlanModifier>(_draft.weeklyModifier),
+                initialValue: _draft.weeklyModifier,
+                dropdownColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                decoration:
+                    _walkthroughDropdownDecoration(context, 'Weekly Modifier'),
+                items: WeeklyPlanModifier.values
+                    .map(
+                      (modifier) => DropdownMenuItem<WeeklyPlanModifier>(
+                        value: modifier,
+                        child: Text(modifier.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) {
+                    return;
+                  }
+                  _updateDraft(_draft.copyWith(weeklyModifier: value));
+                },
+              ),
+              const SizedBox(height: 4),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _draft.propagateLongTerm,
+                title: const Text('Also update long-term expectations'),
+                subtitle: const Text(
+                  'Off by default. If enabled, 10-week expectations may be updated.',
+                ),
+                onChanged: (value) {
+                  _updateDraft(_draft.copyWith(propagateLongTerm: value));
+                },
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Available Equipment',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final item in ExerciseSubstitutionService.knownEquipment)
+                    FilterChip(
+                      label: Text(item),
+                      selected: _draft.availableEquipment.contains(item),
+                      onSelected: (_) => _toggleEquipment(item),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Movement Contraindications',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final item
+                      in ExerciseSubstitutionService.knownContraindications)
+                    FilterChip(
+                      label: Text(item),
+                      selected: _draft.contraindications.contains(item),
+                      onSelected: (_) => _toggleContraindication(item),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _scheduleConstraintsController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Schedule Constraints',
+                  hintText: 'Travel days, preferred rest days, time limits',
+                ),
+                onChanged: (value) =>
+                    _updateDraft(_draft.copyWith(scheduleConstraints: value)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _biometricsSummaryText() {
+    final payload = BiometricsCalculator.computePromptPayloadFromMap(
+      rawInput: _draft.biometrics,
+      daysPerWeek: _draft.trainingWeekdays.length,
+    );
+    if (payload == null) {
+      return 'Biometrics not configured yet.';
+    }
+    final bodyFat = payload['body_fat_percent'];
+    final bmi = payload['bmi'];
+    final tdee = payload['estimated_tdee_kcal'];
+    return 'Configured • BF $bodyFat% • BMI $bmi • TDEE ~$tdee kcal';
+  }
+
+  Future<void> _openBiometricsEditor() async {
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => BiometricsProfileScreen(
+          initialBiometrics: _draft.biometrics,
+          daysPerWeek: _draft.trainingWeekdays.length,
+        ),
+      ),
+    );
+    if (!mounted || result == null) {
+      return;
+    }
+    _updateDraft(_draft.copyWith(biometrics: result));
+  }
+
+  Future<void> _saveIntakeProfile() async {
+    setState(() => _savingIntake = true);
+    try {
+      final saved = await widget.onSaveIntakeRequested();
+      if (!mounted || !saved) {
+        return;
+      }
+      setState(() {
+        _promptWorkspaceStatus = 'Athlete intake saved for this profile.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _savingIntake = false);
+      }
+    }
+  }
+
+  Future<void> _buildPromptSnapshot() async {
+    setState(() => _buildingPrompt = true);
+    try {
+      final prompt = await widget.onBuildPromptRequested();
+      if (!mounted || prompt == null || prompt.trim().isEmpty) {
+        return;
+      }
+      setState(() {
+        _generatedPrompt = prompt;
+        _promptWorkspaceStatus =
+            'Prompt snapshot generated. Copy it to the clipboard or return to plan.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _buildingPrompt = false);
+      }
+    }
+  }
+
+  Future<void> _copyPromptToClipboard() async {
+    final text = (_generatedPrompt ?? '').trim();
+    if (text.isEmpty) {
+      _showMessage('Build a prompt snapshot first.');
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _promptWorkspaceStatus = 'Prompt copied to clipboard.';
+    });
+    _showMessage('Prompt copied to clipboard.');
+  }
+
+  Future<void> _applyManualAiResponse() async {
+    final text = _manualAiResponseController.text.trim();
+    if (text.isEmpty) {
+      _showMessage('Paste AI weekly plan text before applying.');
+      return;
+    }
+    setState(() => _manualApplying = true);
+    try {
+      final applied = await widget.onApplyManualResponseRequested(text);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _promptWorkspaceStatus = applied
+            ? 'Manual AI weekly plan applied.'
+            : 'Manual AI response was not applied.';
+      });
+      if (applied) {
+        _showMessage('Manual AI weekly plan applied.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _manualApplying = false);
+      }
+    }
+  }
+
+  DateTime get _weekEndDate =>
+      _draft.weekStartDate.add(const Duration(days: 6));
+
+  Future<void> _pickWeekStartDate() async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _draft.weekStartDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (selected == null) {
+      return;
+    }
+    _updateDraft(_draft.copyWith(weekStartDate: selected));
+  }
+
+  void _toggleEquipment(String item) {
+    final next = <String>{..._draft.availableEquipment};
+    if (!next.add(item)) {
+      next.remove(item);
+    }
+    _updateDraft(_draft.copyWith(availableEquipment: next));
+  }
+
+  void _toggleContraindication(String item) {
+    final next = <String>{..._draft.contraindications};
+    if (!next.add(item)) {
+      next.remove(item);
+    }
+    _updateDraft(_draft.copyWith(contraindications: next));
+  }
+
+  Widget _buildBiometricsStep(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(text: 'Step 5 - Biometrics'),
+        const SizedBox(height: 8),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Add biometrics so AI can calibrate body-composition context and energy estimates for weekly + long-term planning.',
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _biometricsSummaryText(),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: PrimaryPillButton(
+                  text: 'Open Biometric Profile',
+                  icon: Icons.monitor_weight_outlined,
+                  variant: PillButtonVariant.tonal,
+                  onPressed: _openBiometricsEditor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPromptWorkspaceStep(BuildContext context) {
+    final theme = Theme.of(context);
+    final biometricsReady = BiometricsCalculator.computePromptPayloadFromMap(
+          rawInput: _draft.biometrics,
+          daysPerWeek: _draft.trainingWeekdays.length,
+        ) !=
+        null;
+    final goalSummary =
+        _draft.isRunGoal ? _runGoalSummaryText() : _draft.primaryGoal;
+    final shortTermSummary = _draft.shortTermGoalText.trim().isEmpty
+        ? 'Not set'
+        : _draft.shortTermGoalWeeks.trim().isEmpty
+            ? _draft.shortTermGoalText.trim()
+            : '${_draft.shortTermGoalText.trim()} (${_draft.shortTermGoalWeeks.trim()} weeks)';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(text: 'Step 6 - Prompt Workspace'),
+        const SizedBox(height: 8),
+        const ClinicalBanner(
+          text:
+              'Lock in your intake, generate the weekly prompt snapshot, and copy it directly into your external AI workflow.',
+        ),
+        const SizedBox(height: 12),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Walkthrough Summary',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Chip(
+                      label:
+                          Text('Week Start: ${toYmd(_draft.weekStartDate)}')),
+                  Chip(label: Text('Week End: ${toYmd(_weekEndDate)}')),
+                  Chip(label: Text('Goal: $goalSummary')),
+                  Chip(label: Text('Short-term: $shortTermSummary')),
+                  Chip(label: Text('Split: ${_draft.splitType.label}')),
+                  Chip(
+                    label: Text(
+                      'Days: ${_draft.trainingWeekdays.length} selected',
+                    ),
+                  ),
+                  Chip(
+                    label: Text(
+                      _draft.propagateLongTerm
+                          ? '10-week: Update'
+                          : '10-week: Keep current',
+                    ),
+                  ),
+                  Chip(label: Text('Modifier: ${_draft.weeklyModifier.label}')),
+                  Chip(
+                    label: Text(
+                      biometricsReady
+                          ? 'Biometrics: Ready'
+                          : 'Biometrics: Missing',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _promptWorkspaceStatus,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Week Window',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Week start: ${toYmd(_draft.weekStartDate)}\nWeek end: ${toYmd(_weekEndDate)}',
+                      style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 150,
+                    child: PrimaryPillButton(
+                      text: 'Change Date',
+                      variant: PillButtonVariant.outlined,
+                      icon: Icons.calendar_today_outlined,
+                      onPressed: _pickWeekStartDate,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _draft.propagateLongTerm,
+                title: const Text('Also update long-term expectations'),
+                subtitle: const Text(
+                  'Enable this if you want the weekly AI output to also update 10-week expectations.',
+                ),
+                onChanged: (value) {
+                  _updateDraft(_draft.copyWith(propagateLongTerm: value));
+                },
+              ),
+              Text(
+                'Building or copying the prompt does not update the 10-week plan by itself. Long-range changes happen when AI output is generated and applied with this setting enabled.',
+                style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _additionalInstructionsController,
+                minLines: 2,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Additional Planning Instructions',
+                  hintText: 'Optional constraints or focus areas for this week',
+                ),
+                onChanged: (value) => _updateDraft(
+                  _draft.copyWith(additionalInstructions: value),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _draft.useCustomPromptText,
+                title: const Text('Use custom prompt text for this run'),
+                subtitle: const Text(
+                  'Enable to edit the raw prompt before building or copying.',
+                ),
+                onChanged: (value) {
+                  _updateDraft(_draft.copyWith(useCustomPromptText: value));
+                },
+              ),
+              if (_draft.useCustomPromptText) ...[
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _customPromptController,
+                  minLines: 8,
+                  maxLines: 14,
+                  decoration: const InputDecoration(
+                    labelText: 'Raw Prompt Override',
+                    border: OutlineInputBorder(),
+                  ),
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  onChanged: (value) =>
+                      _updateDraft(_draft.copyWith(customPromptText: value)),
+                ),
+              ],
+              const SizedBox(height: 12),
+              const Text(
+                'Use the same save/build flow from the main plan workspace.',
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: PrimaryPillButton(
+                  text: _savingIntake ? 'Saving...' : 'Save Athlete Intake',
+                  variant: PillButtonVariant.tonal,
+                  icon: Icons.save_outlined,
+                  onPressed: _savingIntake ? null : _saveIntakeProfile,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: PrimaryPillButton(
+                  text: _buildingPrompt
+                      ? 'Building Prompt...'
+                      : 'Build Prompt Snapshot',
+                  variant: PillButtonVariant.outlined,
+                  icon: Icons.auto_awesome_outlined,
+                  onPressed: _buildingPrompt ? null : _buildPromptSnapshot,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: PrimaryPillButton(
+                  text: 'Copy Prompt',
+                  variant: PillButtonVariant.outlined,
+                  icon: Icons.copy_all_outlined,
+                  onPressed:
+                      _generatedPrompt == null ? null : _copyPromptToClipboard,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SegmentedButton<_PromptWorkspaceView>(
+                segments: const [
+                  ButtonSegment<_PromptWorkspaceView>(
+                    value: _PromptWorkspaceView.response,
+                    label: Text('Response'),
+                    icon: Icon(Icons.assignment_return_outlined),
+                  ),
+                  ButtonSegment<_PromptWorkspaceView>(
+                    value: _PromptWorkspaceView.fullPrompt,
+                    label: Text('Full Prompt'),
+                    icon: Icon(Icons.description_outlined),
+                  ),
+                ],
+                selected: {_promptWorkspaceView},
+                onSelectionChanged: (selection) {
+                  setState(() => _promptWorkspaceView = selection.first);
+                },
+              ),
+              const SizedBox(height: 8),
+              if (_promptWorkspaceView == _PromptWorkspaceView.response) ...[
+                Text(
+                  'Paste Weekly AI Plan Response Here.',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _generatedPrompt == null
+                      ? 'Build and copy the prompt, then paste the AI response back here.'
+                      : 'Prompt ready. Paste the AI response here when it comes back.',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _manualAiResponseController,
+                  minLines: 8,
+                  maxLines: 14,
+                  decoration: const InputDecoration(
+                    labelText: 'Paste Weekly AI Plan Response Here.',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                  onChanged: widget.onManualResponseChanged,
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    text: _manualApplying
+                        ? 'Applying...'
+                        : 'Apply Pasted Weekly Plan Text',
+                    variant: PillButtonVariant.tonal,
+                    icon: Icons.playlist_add_check_circle_outlined,
+                    onPressed: _manualApplying ? null : _applyManualAiResponse,
+                  ),
+                ),
+              ] else ...[
+                Text(
+                  'Full Prompt',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _generatedPrompt == null
+                      ? 'Build a prompt snapshot to preview the exact text before you return to the main plan screen.'
+                      : 'Review or copy the full prompt text here.',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(minHeight: 160),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: _generatedPrompt == null
+                      ? Text(
+                          'Build a prompt snapshot to preview the exact text before you return to the main plan screen.',
+                          style: theme.textTheme.bodyMedium,
+                        )
+                      : SelectableText(
+                          _generatedPrompt!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontFamily: 'monospace',
+                            height: 1.35,
+                          ),
+                        ),
+                ),
+              ],
+            ],
           ),
         ),
       ],
@@ -631,6 +1627,12 @@ class _PlanBuilderWalkthroughScreenState
         return _buildExperienceStep(context);
       case _splitStep:
         return _buildSplitStep(context);
+      case _weeklySetupStep:
+        return _buildWeeklySetupStep(context);
+      case _biometricsStep:
+        return _buildBiometricsStep(context);
+      case _promptWorkspaceStep:
+        return _buildPromptWorkspaceStep(context);
       default:
         return _buildIntroStep(context);
     }
@@ -641,7 +1643,7 @@ class _PlanBuilderWalkthroughScreenState
     final isLastStep = _step == _lastStep;
     final nextLabel = switch (_step) {
       _introStep => 'Start',
-      _splitStep => 'Return To Plan',
+      _promptWorkspaceStep => 'Return To Plan',
       _ => 'Next',
     };
 
@@ -651,7 +1653,7 @@ class _PlanBuilderWalkthroughScreenState
         builder: (themedContext) {
           return Scaffold(
             appBar: AppBar(
-              title: Text('Progressive Overload Walkthrough (${_step + 1}/4)'),
+              title: Text('Progressive Overload Walkthrough (${_step + 1}/7)'),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: _goBack,

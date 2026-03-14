@@ -796,13 +796,25 @@ class SyncService {
   }
 
   Future<void> _pullAthletePlanningProfiles() async {
+    final existingProfiles = (await db.select(db.athletePlanningProfiles).get())
+        .where((row) =>
+            row.workspaceId == _context.workspaceId &&
+            row.athleteProfileId == _context.athleteProfileId)
+        .fold<Map<String, AthletePlanningProfile>>(
+      <String, AthletePlanningProfile>{},
+      (map, row) {
+        map[row.id] = row;
+        return map;
+      },
+    );
     final rows = await _fetchRows('athlete_planning_profiles');
     await db.batch((batch) {
       for (final r in rows) {
+        final id = _requiredString(r, 'id');
         batch.insert(
           db.athletePlanningProfiles,
           AthletePlanningProfilesCompanion(
-            id: Value(_requiredString(r, 'id')),
+            id: Value(id),
             workspaceId: Value(_requiredString(r, 'workspace_id')),
             athleteProfileId: Value(_requiredString(r, 'athlete_profile_id')),
             primaryGoal: Value(_requiredString(r, 'primary_goal')),
@@ -816,6 +828,12 @@ class SyncService {
                 Value(_requiredString(r, 'contraindications_json')),
             scheduleConstraintsJson:
                 Value(_requiredString(r, 'schedule_constraints_json')),
+            biometricsJson: Value(
+              _resolvedPlanningProfileBiometricsJson(
+                r,
+                fallback: existingProfiles[id]?.biometricsJson,
+              ),
+            ),
             createdAt: Value(_requiredInt(r, 'created_at')),
             updatedAt: Value(_requiredInt(r, 'updated_at')),
           ),
@@ -1318,24 +1336,76 @@ class SyncService {
     if (rows.isEmpty) {
       return;
     }
-    await client.from('athlete_planning_profiles').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'primary_goal': r.primaryGoal,
-                    'goal_target_json': r.goalTargetJson,
-                    'experience_level': r.experienceLevel,
-                    'preferred_split': r.preferredSplit,
-                    'days_per_week': r.daysPerWeek,
-                    'available_equipment_json': r.availableEquipmentJson,
-                    'contraindications_json': r.contraindicationsJson,
-                    'schedule_constraints_json': r.scheduleConstraintsJson,
-                    'created_at': r.createdAt,
-                    'updated_at': r.updatedAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
+    Future<void> upsertRows({required bool includeBiometrics}) async {
+      await client.from('athlete_planning_profiles').upsert(
+            rows
+                .map(
+                  (r) => _athletePlanningProfileCloudRow(
+                    r,
+                    includeBiometrics: includeBiometrics,
+                  ),
+                )
+                .toList(),
+            onConflict: 'id',
+          );
+    }
+
+    try {
+      await upsertRows(includeBiometrics: true);
+    } on PostgrestException catch (error) {
+      if (!_isMissingRemoteColumn(
+        error,
+        table: 'athlete_planning_profiles',
+        column: 'biometrics_json',
+      )) {
+        rethrow;
+      }
+      await upsertRows(includeBiometrics: false);
+    }
+  }
+
+  Map<String, dynamic> _athletePlanningProfileCloudRow(
+    AthletePlanningProfile row, {
+    required bool includeBiometrics,
+  }) {
+    final payload = _scopedRow({
+      'id': row.id,
+      'primary_goal': row.primaryGoal,
+      'goal_target_json': row.goalTargetJson,
+      'experience_level': row.experienceLevel,
+      'preferred_split': row.preferredSplit,
+      'days_per_week': row.daysPerWeek,
+      'available_equipment_json': row.availableEquipmentJson,
+      'contraindications_json': row.contraindicationsJson,
+      'schedule_constraints_json': row.scheduleConstraintsJson,
+      'created_at': row.createdAt,
+      'updated_at': row.updatedAt,
+    });
+    if (includeBiometrics) {
+      payload['biometrics_json'] = row.biometricsJson;
+    }
+    return payload;
+  }
+
+  String _resolvedPlanningProfileBiometricsJson(
+    Map<String, dynamic> row, {
+    String? fallback,
+  }) {
+    if (row.containsKey('biometrics_json')) {
+      return row['biometrics_json']?.toString() ?? '{}';
+    }
+    return fallback ?? '{}';
+  }
+
+  bool _isMissingRemoteColumn(
+    PostgrestException error, {
+    required String table,
+    required String column,
+  }) {
+    final message = error.message.toLowerCase();
+    return error.code == 'PGRST204' &&
+        message.contains("'${table.toLowerCase()}'") &&
+        message.contains("'${column.toLowerCase()}'");
   }
 
   Future<void> _upsertWeeklyPlanBuildRequests() async {

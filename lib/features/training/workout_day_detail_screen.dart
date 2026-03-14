@@ -72,11 +72,6 @@ class _WorkoutDayDetailScreenState
   bool _addingExercise = false;
   String? _pendingScrollExercise;
   int _tilesEpoch = 0;
-  Timer? _restTicker;
-  bool _restVisible = false;
-  int _restRemainingSeconds = 0;
-  int _restTotalSeconds = _defaultRestSeconds;
-  int _restDismissibleEpoch = 0;
 
   @override
   void initState() {
@@ -99,7 +94,6 @@ class _WorkoutDayDetailScreenState
 
   @override
   void dispose() {
-    _restTicker?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -438,31 +432,11 @@ class _WorkoutDayDetailScreenState
   }
 
   void _startRestCountdown(int seconds) {
-    final clamped = seconds < 1 ? 1 : seconds;
-    _restTicker?.cancel();
-    setState(() {
-      _restVisible = true;
-      _restTotalSeconds = clamped;
-      _restRemainingSeconds = clamped;
-      _restDismissibleEpoch++;
-    });
-    _restTicker = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_restRemainingSeconds <= 1) {
-        timer.cancel();
-        setState(() => _restRemainingSeconds = 0);
-        return;
-      }
-      setState(() => _restRemainingSeconds--);
-    });
+    ref.read(restCountdownProvider.notifier).start(seconds);
   }
 
   void _dismissRestCountdown() {
-    _restTicker?.cancel();
-    setState(() => _restVisible = false);
+    ref.read(restCountdownProvider.notifier).dismiss();
   }
 
   String _formatCountdown(int totalSeconds) {
@@ -717,11 +691,14 @@ class _WorkoutDayDetailScreenState
     _refreshDetail();
   }
 
-  Widget _buildRestCountdownOverlay(BuildContext context) {
-    final progress = _restTotalSeconds == 0
+  Widget _buildRestCountdownOverlay(
+    BuildContext context,
+    RestCountdownState countdown,
+  ) {
+    final progress = countdown.totalSeconds == 0
         ? 0.0
-        : _restRemainingSeconds / _restTotalSeconds;
-    final done = _restRemainingSeconds == 0;
+        : countdown.remainingSeconds / countdown.totalSeconds;
+    final done = countdown.remainingSeconds == 0;
 
     return Positioned(
       top: 0,
@@ -736,7 +713,8 @@ class _WorkoutDayDetailScreenState
             child: Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Dismissible(
-                key: ValueKey<String>('rest-countdown-$_restDismissibleEpoch'),
+                key: ValueKey<String>(
+                    'rest-countdown-${countdown.dismissibleEpoch}'),
                 direction: DismissDirection.horizontal,
                 onDismissed: (_) => _dismissRestCountdown(),
                 child: GlassCard(
@@ -754,7 +732,7 @@ class _WorkoutDayDetailScreenState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        _formatCountdown(_restRemainingSeconds),
+                        _formatCountdown(countdown.remainingSeconds),
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w800,
                             ),
@@ -783,6 +761,7 @@ class _WorkoutDayDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    final restCountdown = ref.watch(restCountdownProvider);
     return Theme(
       data: buildClinicalTheme(),
       child: Scaffold(
@@ -1247,7 +1226,8 @@ class _WorkoutDayDetailScreenState
                 );
               },
             ),
-            if (_restVisible) _buildRestCountdownOverlay(context),
+            if (restCountdown.visible)
+              _buildRestCountdownOverlay(context, restCountdown),
           ],
         ),
       ),

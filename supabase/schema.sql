@@ -346,6 +346,7 @@ create table if not exists public.athlete_planning_profiles (
   available_equipment_json text not null,
   contraindications_json text not null,
   schedule_constraints_json text not null,
+  biometrics_json text not null default '{}',
   created_at bigint not null,
   updated_at bigint not null
 );
@@ -379,6 +380,8 @@ alter table public.run_sessions add column if not exists elapsed_time_s integer;
 alter table public.run_sessions add column if not exists source_priority integer default 0;
 alter table public.run_sessions add column if not exists import_file_name text;
 alter table public.run_sessions add column if not exists raw_metrics_json text;
+alter table public.athlete_planning_profiles
+  add column if not exists biometrics_json text not null default '{}';
 alter table public.actual_strength_sets add column if not exists plan_day_id text;
 alter table public.plan_days add column if not exists session_type text;
 

@@ -51,6 +51,47 @@ String _buildAiPlanTextWithTenWeekBlock() {
   return b.toString();
 }
 
+String _buildAiPlanTextWithBodyweightWeightToken() {
+  final b = StringBuffer();
+  b.writeln('WEEK_PLAN_V1');
+  b.writeln('WEEK_START: 2026-03-08');
+  b.writeln('WEEK_END: 2026-03-14');
+  b.writeln();
+
+  b.writeln('DAY 1');
+  b.writeln('SESSION_TYPE: pull');
+  b.writeln('DAY_LABEL: Pull + Easy Run');
+  b.writeln('LIFT_FOCUS: Back and biceps');
+  b.writeln('RUN_TYPE: easy');
+  b.writeln('RUN_DURATION: 20 min');
+  b.writeln('RUN_TARGET_PACE: 9:30-10:00 per mile');
+  b.writeln('RUN_HR_GUARDRAILS: HR 120-140');
+  b.writeln('RUN_NOTES: Keep easy');
+  b.writeln(
+    'STRENGTH_SET: Pull-ups (weighted/assisted) | set=1 | weight=bw | reps=8 | rir=2 | unit=bw',
+  );
+  b.writeln(
+    'ALT: Pull-ups (weighted/assisted) | rank=1 | exercise=Lat Pulldown | tier=strong | rationale=Same vertical pull pattern',
+  );
+  b.writeln('END DAY 1');
+  b.writeln();
+
+  for (var day = 2; day <= 7; day++) {
+    b.writeln('DAY $day');
+    b.writeln('SESSION_TYPE: rest');
+    b.writeln('DAY_LABEL: Recovery Day $day');
+    b.writeln('LIFT_FOCUS:');
+    b.writeln('RUN_TYPE:');
+    b.writeln('RUN_DURATION:');
+    b.writeln('RUN_TARGET_PACE:');
+    b.writeln('RUN_HR_GUARDRAILS:');
+    b.writeln('RUN_NOTES:');
+    b.writeln('END DAY $day');
+    b.writeln();
+  }
+  return b.toString();
+}
+
 String _cellText(Data? cell) {
   final value = cell?.value;
   if (value == null) {
@@ -69,7 +110,9 @@ String _cellText(Data? cell) {
 }
 
 void main() {
-  test('AI weekly text import persists 10 week plan snapshot and export marks week', () async {
+  test(
+      'AI weekly text import persists 10 week plan snapshot and export marks week',
+      () async {
     final db = AppDb.forTesting(NativeDatabase.memory());
     final dir = await Directory.systemTemp.createTemp('ai-ten-week-export-');
     addTearDown(() async {
@@ -88,7 +131,8 @@ void main() {
           ..where((s) => s.tabName.equals('10 Week Plan')))
         .get();
     expect(snapshots.length, 1);
-    final decoded = jsonDecode(snapshots.single.snapshotJson) as Map<String, dynamic>;
+    final decoded =
+        jsonDecode(snapshots.single.snapshotJson) as Map<String, dynamic>;
     final rows = (decoded['rows'] as List).cast<List>();
     expect(rows.length, 11);
     expect(rows.first.first, 'Week');
@@ -128,5 +172,24 @@ void main() {
       perfRows.single.strengthProgressionEvaluation,
       'insufficient_data',
     );
+  });
+
+  test('AI weekly text import accepts weight=bw when unit=bw', () async {
+    final db = AppDb.forTesting(NativeDatabase.memory());
+    addTearDown(() async {
+      await db.close();
+    });
+
+    final text = _buildAiPlanTextWithBodyweightWeightToken();
+    final result = await db.importAiWeeklyPlanText(
+      text: text,
+      splitStartDate: DateTime(2026, 3, 8),
+    );
+    expect(result.insertedPlanDays, 7);
+
+    final sets = await db.select(db.planPrescribedStrengthSets).get();
+    expect(sets.length, 1);
+    expect(sets.single.weight, isNull);
+    expect(sets.single.unit, 'bw');
   });
 }

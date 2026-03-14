@@ -139,7 +139,8 @@ void main() {
     await _pumpUntilFound(tester, find.text('01:30'));
 
     await tester.pump(const Duration(seconds: 2));
-    expect(find.text('01:28'), findsOneWidget);
+    expect(_restCountdownDismissible(), findsOneWidget);
+    expect(find.text('Swipe to dismiss'), findsOneWidget);
 
     await _pumpUntilFound(tester, visibleConfirmButton);
     await tester.tap(visibleConfirmButton.first);
@@ -158,11 +159,12 @@ void main() {
     await _pumpUntilFound(tester, find.text('01:30'));
 
     await tester.pump(const Duration(seconds: 95));
-    expect(find.text('00:00'), findsOneWidget);
+    await _pumpUntilFound(tester, find.text('Rest complete'));
+    expect(_restCountdownDismissible(), findsOneWidget);
     expect(find.text('Rest complete'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 5));
-    expect(find.text('00:00'), findsOneWidget);
+    expect(_restCountdownDismissible(), findsOneWidget);
     expect(find.text('Rest complete'), findsOneWidget);
   });
 }

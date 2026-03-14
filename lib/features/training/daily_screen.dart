@@ -51,15 +51,12 @@ String _formatDistanceKm(double? meters) {
   return '${(meters / 1000).toStringAsFixed(1)} km';
 }
 
-String _formatDistanceMiles(double? meters, {int decimals = 1}) {
-  if (meters == null) {
-    return 'unknown';
-  }
-  return '${(meters / 1609.344).toStringAsFixed(decimals)} mi';
-}
-
 String _formatMiles(double miles, {int decimals = 1}) {
   return '${miles.toStringAsFixed(decimals)} mi';
+}
+
+String _formatMilesWord(double miles, {int decimals = 1}) {
+  return '${miles.toStringAsFixed(decimals)} Miles';
 }
 
 String _formatLoad(double value) {
@@ -67,6 +64,71 @@ String _formatLoad(double value) {
     return value.toStringAsFixed(0);
   }
   return value.toStringAsFixed(1);
+}
+
+String _toTitleCaseWords(String raw) {
+  final cleaned = raw.trim();
+  if (cleaned.isEmpty) {
+    return '';
+  }
+  return cleaned
+      .replaceAll(RegExp(r'[_-]+'), ' ')
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .map((part) {
+    final lower = part.toLowerCase();
+    if (lower.length == 1) {
+      return lower.toUpperCase();
+    }
+    return '${lower[0].toUpperCase()}${lower.substring(1)}';
+  }).join(' ');
+}
+
+String? _formatPaceMinPerMileFromTotals({
+  required int durationS,
+  required double distanceM,
+}) {
+  if (durationS <= 0 || distanceM <= 0) {
+    return null;
+  }
+  final miles = distanceM / 1609.344;
+  if (miles <= 0) {
+    return null;
+  }
+  final paceS = (durationS / miles).round();
+  if (paceS <= 0) {
+    return null;
+  }
+  final min = paceS ~/ 60;
+  final sec = paceS % 60;
+  return '$min:${sec.toString().padLeft(2, '0')} min/mi';
+}
+
+String _formatLiftFocusSummary(String? raw) {
+  final source = (raw ?? '').trim();
+  if (source.isEmpty) {
+    return '';
+  }
+  final cleaned = source.replaceAll(RegExp(r'[_-]+'), ' ').trim();
+  final lower = cleaned.toLowerCase();
+  if (lower.contains('hypertrophy')) {
+    final withoutKeyword = cleaned
+        .replaceAll(RegExp(r'\bhypertrophy\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (withoutKeyword.isEmpty) {
+      return 'Hypertrophy';
+    }
+    final parts = withoutKeyword
+        .split(RegExp(r'[/,]| and | & '))
+        .map((part) => _toTitleCaseWords(part))
+        .where((part) => part.trim().isNotEmpty)
+        .toList(growable: false);
+    final formattedFocus =
+        parts.isEmpty ? _toTitleCaseWords(withoutKeyword) : parts.join('/ ');
+    return 'Hypertrophy - $formattedFocus';
+  }
+  return _toTitleCaseWords(cleaned);
 }
 
 String _formatHeaderDate(String ymd) {
@@ -204,10 +266,14 @@ class _StrengthLoadCardSummary {
   const _StrengthLoadCardSummary({
     required this.dailyPoints,
     required this.last7DaysTotalLoad,
+    required this.currentWeekActualLoad,
+    required this.currentWeekPlannedLoad,
   });
 
   final List<_DailyTrendPoint> dailyPoints;
   final double last7DaysTotalLoad;
+  final double currentWeekActualLoad;
+  final double currentWeekPlannedLoad;
 }
 
 class _SleepTrendCardSummary {
@@ -737,6 +803,8 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
   ) async {
     final anchor = parseYmd(anchorYmd);
     final start = anchor.subtract(const Duration(days: 6));
+    final weekStart = _startOfWeek(anchor);
+    final weekEnd = weekStart.add(const Duration(days: 6));
     final rows = await db.customSelect(
       '''
       select wd.workout_date as workout_date,
@@ -765,9 +833,44 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
 
     final points =
         _buildLast7DailyPoints(anchorYmd: anchorYmd, valuesByDate: loadByDate);
+    var currentWeekActualLoad = 0.0;
+    for (var d = 0; d < 7; d++) {
+      currentWeekActualLoad +=
+          loadByDate[toYmd(weekStart.add(Duration(days: d)))] ?? 0.0;
+    }
+
+    final plannedRows = await db.customSelect(
+      '''
+      select coalesce(pss.weight, 0) as weight,
+             coalesce(pss.reps, 0) as reps
+      from plan_prescribed_strength_sets pss
+      join plan_days pd on pd.id = pss.plan_day_id
+      where pd.estimated_date >= ? and pd.estimated_date <= ?
+      ''',
+      variables: [
+        Variable.withString(toYmd(weekStart)),
+        Variable.withString(toYmd(weekEnd)),
+      ],
+    ).get();
+
+    var currentWeekPlannedLoad = 0.0;
+    for (final row in plannedRows) {
+      final weight = row.data['weight'];
+      final reps = row.data['reps'];
+      final weightVal =
+          weight is num ? weight.toDouble() : (double.tryParse('$weight') ?? 0);
+      final repsVal =
+          reps is num ? reps.toDouble() : (double.tryParse('$reps') ?? 0);
+      if (weightVal > 0 && repsVal > 0) {
+        currentWeekPlannedLoad += weightVal * repsVal;
+      }
+    }
+
     return _StrengthLoadCardSummary(
       dailyPoints: points,
       last7DaysTotalLoad: points.fold<double>(0, (sum, p) => sum + p.value),
+      currentWeekActualLoad: currentWeekActualLoad,
+      currentWeekPlannedLoad: currentWeekPlannedLoad,
     );
   }
 
@@ -927,6 +1030,8 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
                 _DailyTrendPoint(dateYmd: '2000-01-07', value: 0),
               ],
               last7DaysTotalLoad: 0,
+              currentWeekActualLoad: 0,
+              currentWeekPlannedLoad: 0,
             );
         final sleepTrendSummary = loaded?.sleepTrendSummary ??
             const _SleepTrendCardSummary(
@@ -950,6 +1055,12 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
                 : (safeDetail.runSessions.length / 7)
                     .clamp(0.0, 1.0)
                     .toDouble());
+        final strengthProgress = strengthLoadSummary.currentWeekPlannedLoad > 0
+            ? (strengthLoadSummary.currentWeekActualLoad /
+                    strengthLoadSummary.currentWeekPlannedLoad)
+                .clamp(0.0, 1.0)
+                .toDouble()
+            : 0.0;
         final totalRunDistance = safeDetail.runSessions.fold<double>(
           0,
           (sum, run) => sum + (run.session.distanceM ?? 0),
@@ -971,6 +1082,7 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
           strengthLoadSummary: strengthLoadSummary,
           sleepTrendSummary: sleepTrendSummary,
           runProgress: runProgress,
+          strengthProgress: strengthProgress,
           totalRunDistance: totalRunDistance,
           dailyPrescribedMiles: dailyPrescribedMiles,
           sessionTypeLabel: _sessionTypeLabel,
@@ -1015,6 +1127,7 @@ class _DailyClinicalContent extends StatelessWidget {
     required this.strengthLoadSummary,
     required this.sleepTrendSummary,
     required this.runProgress,
+    required this.strengthProgress,
     required this.totalRunDistance,
     required this.dailyPrescribedMiles,
     required this.sessionTypeLabel,
@@ -1039,6 +1152,7 @@ class _DailyClinicalContent extends StatelessWidget {
   final _StrengthLoadCardSummary strengthLoadSummary;
   final _SleepTrendCardSummary sleepTrendSummary;
   final double runProgress;
+  final double strengthProgress;
   final double totalRunDistance;
   final double dailyPrescribedMiles;
   final String Function(String?) sessionTypeLabel;
@@ -1066,9 +1180,6 @@ class _DailyClinicalContent extends StatelessWidget {
     return sessionTypeLabel(safeDetail.planSessionType);
   }
 
-  String _dailyGoalTitleOrFallback() =>
-      _dailyGoalTitle() ?? sessionTypeLabel(safeDetail.planSessionType);
-
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
@@ -1082,7 +1193,46 @@ class _DailyClinicalContent extends StatelessWidget {
             _buildHeader(context),
             const SizedBox(height: 14),
             const ClinicalBanner(
-              text: 'Adaptation Focus: Sustainable Progress & Recovery',
+              text: 'AI Monitored Progressive Overload Strategy',
+            ),
+            const SizedBox(height: 14),
+            const SectionHeader(text: 'Run Progress'),
+            const SizedBox(height: 8),
+            RunsTrack(value: runProgress),
+            const SizedBox(height: 6),
+            Text(
+              runMileageSummary.currentWeekPlannedMiles > 0
+                  ? 'Week progress: ${_formatMiles(runMileageSummary.currentWeekActualMiles)} / '
+                      '${_formatMiles(runMileageSummary.currentWeekPlannedMiles)} planned'
+                  : 'Week progress: planned mileage unavailable (showing session progress)',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${safeDetail.runSessions.length} session${safeDetail.runSessions.length == 1 ? '' : 's'} logged • '
+              '${totalRunDistance <= 0 ? 'No total distance' : _formatDistanceKm(totalRunDistance)}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            const SectionHeader(text: 'Strength Progress'),
+            const SizedBox(height: 8),
+            RunsTrack(
+              value: strengthProgress,
+              leftIcon: Icons.fitness_center_outlined,
+              rightIcon: Icons.monitor_weight_outlined,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              strengthLoadSummary.currentWeekPlannedLoad > 0
+                  ? 'Week load: ${_formatLoad(strengthLoadSummary.currentWeekActualLoad)} / '
+                      '${_formatLoad(strengthLoadSummary.currentWeekPlannedLoad)} planned'
+                  : 'Week load: ${_formatLoad(strengthLoadSummary.currentWeekActualLoad)} lifted (no planned load target)',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Last 7 days total lifted: ${_formatLoad(strengthLoadSummary.last7DaysTotalLoad)}',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 14),
             _buildMetricGrid(context),
@@ -1101,24 +1251,6 @@ class _DailyClinicalContent extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             _buildPrescribedRun(context),
-            const SizedBox(height: 16),
-            const SectionHeader(text: 'Runs'),
-            const SizedBox(height: 8),
-            RunsTrack(value: runProgress),
-            const SizedBox(height: 6),
-            Text(
-              runMileageSummary.currentWeekPlannedMiles > 0
-                  ? 'Week progress: ${_formatMiles(runMileageSummary.currentWeekActualMiles)} / '
-                      '${_formatMiles(runMileageSummary.currentWeekPlannedMiles)} planned'
-                  : 'Week progress: planned mileage unavailable (showing session progress)',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${safeDetail.runSessions.length} session${safeDetail.runSessions.length == 1 ? '' : 's'} logged • '
-              '${totalRunDistance <= 0 ? 'No total distance' : _formatDistanceKm(totalRunDistance)}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
             const SizedBox(height: 8),
             _buildRunsList(context),
             const SizedBox(height: 8),
@@ -1136,152 +1268,271 @@ class _DailyClinicalContent extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final textScale = MediaQuery.textScalerOf(context).scale(1);
-        final compact = constraints.maxWidth < 680 || textScale > 1.15;
-        final title = Text(
-          'ATHLETIC ADAPTATION PROGRESS - ${_formatHeaderDate(selectedDate)}',
-          maxLines: compact ? 3 : 2,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                letterSpacing: 1,
-                fontWeight: FontWeight.w800,
-                height: 1.15,
-              ),
-        );
-
-        final pickDateButton = SizedBox(
-          width: compact ? double.infinity : 160,
-          child: PrimaryPillButton(
-            text: 'Pick Date',
-            icon: Icons.calendar_month_outlined,
-            variant: PillButtonVariant.outlined,
-            onPressed: onPickDate,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: Text(
+            'AI Athlete',
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  letterSpacing: 0.8,
+                  fontWeight: FontWeight.w800,
+                  height: 1.15,
+                ),
           ),
-        );
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: double.infinity,
+          child: Text(
+            _formatHeaderDate(selectedDate),
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontWeight: FontWeight.w500,
+                ),
+          ),
+        ),
+      ],
+    );
+  }
 
-        if (compact) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildDashboardMetricCard({
+    required BuildContext context,
+    required String title,
+    required String valueText,
+    required IconData leadingIcon,
+    String? titleSubText,
+    String? subtitleText,
+    Widget? expandedContent,
+    double expandedContentHeight = 76,
+    double? titleFontSize,
+    VoidCallback? onTap,
+  }) {
+    final theme = Theme.of(context);
+    return GlassCard(
+      onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              title,
-              const SizedBox(height: 12),
-              pickDateButton,
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: titleFontSize,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                leadingIcon,
+                size: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ],
-          );
-        }
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: title),
-            const SizedBox(width: 12),
-            pickDateButton,
+          ),
+          if (titleSubText != null && titleSubText.trim().isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              titleSubText,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.92),
+              ),
+            ),
           ],
-        );
-      },
+          if (expandedContent != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: expandedContentHeight,
+              child: expandedContent,
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            valueText,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (subtitleText != null && subtitleText.trim().isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              subtitleText,
+              style: theme.textTheme.bodySmall,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required String text,
+    required VoidCallback? onPressed,
+    PillButtonVariant variant = PillButtonVariant.outlined,
+    IconData? icon,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: PrimaryPillButton(
+        text: text,
+        icon: icon,
+        variant: variant,
+        onPressed: onPressed,
+      ),
+    );
+  }
+
+  Widget _buildActionGrid(
+    BuildContext context, {
+    required bool compact,
+    required List<Widget> buttons,
+  }) {
+    if (compact) {
+      return GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 2.7,
+        children: buttons,
+      );
+    }
+    return Row(
+      children: [
+        for (var i = 0; i < buttons.length; i++) ...[
+          Expanded(child: buttons[i]),
+          if (i != buttons.length - 1) const SizedBox(width: 10),
+        ],
+      ],
     );
   }
 
   Widget _buildMetricGrid(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final textScale = MediaQuery.textScalerOf(context).scale(1);
         final prescribedRunTypeTitle =
             (safeDetail.prescribedRun?.runType ?? '').trim();
         final prescribedLiftFocusTitle =
             (safeDetail.prescribedRun?.liftFocus ?? '').trim();
-        final runTitleBase =
-            prescribedRunTypeTitle.isEmpty ? 'Run' : prescribedRunTypeTitle;
+        final runTitleBase = prescribedRunTypeTitle.isEmpty
+            ? 'Run'
+            : _toTitleCaseWords(prescribedRunTypeTitle);
         final runCardTitle = dailyPrescribedMiles > 0
-            ? '$runTitleBase - ${dailyPrescribedMiles.toStringAsFixed(1)} miles'
+            ? '$runTitleBase - ${dailyPrescribedMiles.toStringAsFixed(1)} Miles'
             : runTitleBase;
-        final splitCardTitle = prescribedLiftFocusTitle.isEmpty
-            ? 'Split'
-            : prescribedLiftFocusTitle;
-        // Keep top cards stacked on handset/tablet widths; two-up layout is too
-        // compressed once trend charts are shown.
-        final singleColumn = constraints.maxWidth < 900 || textScale >= 1.25;
-        final ratio = singleColumn ? 2.05 : 1.75;
+        final splitSessionType = sessionTypeLabel(safeDetail.planSessionType);
+        final splitSessionLabel = splitSessionType.toLowerCase() == 'unknown'
+            ? null
+            : splitSessionType;
+        final splitFocusDescription =
+            _formatLiftFocusSummary(prescribedLiftFocusTitle);
+        final todayRunDurationS = safeDetail.runSessions.fold<int>(
+          0,
+          (sum, run) => sum + (run.session.durationS ?? 0),
+        );
+        final todayRunDistanceM = totalRunDistance > 0 ? totalRunDistance : 0.0;
+        final todayRunPace = _formatPaceMinPerMileFromTotals(
+          durationS: todayRunDurationS,
+          distanceM: todayRunDistanceM,
+        );
+        final todayRunStatus = todayRunDistanceM > 0
+            ? (todayRunPace == null
+                ? 'Today\'s Run Logged\n${_formatMilesWord(todayRunDistanceM / 1609.344)}'
+                : 'Today\'s Run Logged\n${_formatMilesWord(todayRunDistanceM / 1609.344)} @ $todayRunPace')
+            : 'No Run Logged';
+        final ratio = constraints.maxWidth < 760 ? 0.76 : 0.96;
         return GridView.count(
-          crossAxisCount: singleColumn ? 1 : 2,
+          crossAxisCount: 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           childAspectRatio: ratio,
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
           children: [
-            MetricTile(
+            _buildDashboardMetricCard(
+              context: context,
               title: 'Sleep',
               leadingIcon: Icons.bedtime_outlined,
               valueText: _formatMinutesAsHoursMinutes(sleepMin),
               subtitleText: 'Tap to view/edit • 7-day sleep trend',
-              trailingWidget: SizedBox(
-                width: 176,
-                height: 66,
-                child: _DailyTrendMiniChart(
-                  points: sleepTrendSummary.dailyPoints,
-                  yUnitLabel: 'h',
-                  yDecimals: 1,
-                  lineColor: const Color(0xFFF08A7F),
-                  fillColor: const Color(0xFFF08A7F),
-                ),
+              expandedContent: _DailyTrendMiniChart(
+                points: sleepTrendSummary.dailyPoints,
+                yUnitLabel: 'h',
+                yDecimals: 1,
+                lineColor: const Color(0xFFF08A7F),
+                fillColor: const Color(0xFFF08A7F),
               ),
               onTap: () => onOpenSleepEditor(sleepNight),
             ),
-            MetricTile(
+            _buildDashboardMetricCard(
+              context: context,
               title: runCardTitle,
               leadingIcon: Icons.directions_run_rounded,
+              titleFontSize: 14,
               valueText:
                   '${_formatMiles(runMileageSummary.last7DaysMiles)} last 7 days',
-              subtitleText:
-                  '${_dailyGoalTitle() == null ? '' : '${_dailyGoalTitle()!} • '}'
-                  '${safeDetail.runSessions.length} session${safeDetail.runSessions.length == 1 ? '' : 's'} today'
-                  '${dailyPrescribedMiles > 0 ? ' • ${_formatMiles(dailyPrescribedMiles)} prescribed' : ''}'
-                  '${totalRunDistance > 0 ? ' • ${_formatDistanceMiles(totalRunDistance)} actual today' : ''}'
-                  ' • Tap to log/edit',
-              trailingWidget: SizedBox(
-                width: 264,
-                height: 66,
-                child: _WeeklyMileageMiniChart(
-                  points: runMileageSummary.weeklyPoints,
-                ),
+              subtitleText: todayRunStatus,
+              expandedContent: _WeeklyMileageMiniChart(
+                points: runMileageSummary.weeklyPoints,
               ),
               onTap: onRunInputs,
             ),
-            MetricTile(
-              title: splitCardTitle,
+            _buildDashboardMetricCard(
+              context: context,
+              title: 'Split',
               leadingIcon: Icons.fitness_center_outlined,
+              titleSubText: splitSessionLabel,
               valueText:
                   '7-day load: ${_formatLoad(strengthLoadSummary.last7DaysTotalLoad)}',
               subtitleText: safeDetail.planDayNumber == null
-                  ? 'No split linked • Tap to open workout detail'
-                  : 'Day ${safeDetail.planDayNumber} • ${_dailyGoalTitleOrFallback()} • Tap to open workout detail',
-              trailingWidget: SizedBox(
-                width: 176,
-                height: 66,
-                child: _DailyTrendMiniChart(
-                  points: strengthLoadSummary.dailyPoints,
-                  yUnitLabel: 'load',
-                  yDecimals: 0,
-                  lineColor: const Color(0xFFE4B6FF),
-                  fillColor: const Color(0xFFE4B6FF),
-                ),
+                  ? 'No split linked'
+                  : (splitFocusDescription.isNotEmpty
+                      ? 'Day ${safeDetail.planDayNumber} • $splitFocusDescription'
+                      : 'Day ${safeDetail.planDayNumber}'),
+              expandedContent: _DailyTrendMiniChart(
+                points: strengthLoadSummary.dailyPoints,
+                yUnitLabel: 'load',
+                yDecimals: 0,
+                lineColor: const Color(0xFFE4B6FF),
+                fillColor: const Color(0xFFE4B6FF),
               ),
               onTap: onOpenWorkoutDetail,
             ),
-            MetricTile(
+            _buildDashboardMetricCard(
+              context: context,
               title: 'Health Alerts',
               leadingIcon: Icons.health_and_safety_outlined,
               valueText: gate.progressionAllowed
                   ? 'Recovery stable'
                   : 'Needs recovery',
               subtitleText: '${gate.reasoning}; artifacts: $excluded',
-              trailingWidget: _AlertIconStrip(
-                progressionAllowed: gate.progressionAllowed,
-                artifacts: excluded,
+              expandedContent: Align(
+                alignment: Alignment.centerLeft,
+                child: _AlertIconStrip(
+                  progressionAllowed: gate.progressionAllowed,
+                  artifacts: excluded,
+                ),
               ),
+              expandedContentHeight: 24,
             ),
           ],
         );
@@ -1379,60 +1630,30 @@ class _DailyClinicalContent extends StatelessWidget {
         final splitActionHandler = isCurrentRest ? onUndoRest : onMarkRest;
         final textScale = MediaQuery.textScalerOf(context).scale(1);
         final compact = constraints.maxWidth < 680 || textScale > 1.15;
-        if (!canUseSplitAction) {
-          return SizedBox(
-            width: double.infinity,
-            child: PrimaryPillButton(
-              text: 'Run Mock AI Analysis',
-              variant: PillButtonVariant.outlined,
-              onPressed: onRunMockAi,
+        final buttons = <Widget>[
+          _buildActionButton(
+            text: 'Change Day',
+            icon: Icons.calendar_month_outlined,
+            variant: PillButtonVariant.outlined,
+            onPressed: onPickDate,
+          ),
+          if (canUseSplitAction)
+            _buildActionButton(
+              text: splitActionText,
+              icon: splitActionIcon,
+              variant: PillButtonVariant.tonal,
+              onPressed: splitActionHandler,
             ),
-          );
-        }
-        if (compact) {
-          return Column(
-            children: [
-              SizedBox(
-                width: double.infinity,
-                child: PrimaryPillButton(
-                  text: splitActionText,
-                  icon: splitActionIcon,
-                  variant: PillButtonVariant.tonal,
-                  onPressed: splitActionHandler,
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: PrimaryPillButton(
-                  text: 'Run Mock AI Analysis',
-                  variant: PillButtonVariant.outlined,
-                  onPressed: onRunMockAi,
-                ),
-              ),
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            Expanded(
-              child: PrimaryPillButton(
-                text: splitActionText,
-                icon: splitActionIcon,
-                variant: PillButtonVariant.tonal,
-                onPressed: splitActionHandler,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: PrimaryPillButton(
-                text: 'Run Mock AI Analysis',
-                variant: PillButtonVariant.outlined,
-                onPressed: onRunMockAi,
-              ),
-            ),
-          ],
+          _buildActionButton(
+            text: 'Run Mock AI Analysis',
+            variant: PillButtonVariant.outlined,
+            onPressed: onRunMockAi,
+          ),
+        ];
+        return _buildActionGrid(
+          context,
+          compact: compact,
+          buttons: buttons,
         );
       },
     );

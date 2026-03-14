@@ -10,6 +10,8 @@ import '../../core/utils/app_providers.dart';
 import '../../core/utils/date_utils.dart';
 import '../training/exercise_substitution_service.dart';
 import '../ui/clinical_widgets.dart';
+import 'biometrics_profile.dart';
+import 'biometrics_profile_screen.dart';
 import 'plan_builder_walkthrough_screen.dart';
 import 'ppl_template_service.dart';
 import 'weekly_planner_service.dart';
@@ -201,6 +203,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   SplitType _preferredSplit = SplitType.runOnly;
   final Set<String> _selectedEquipment = <String>{};
   final Set<String> _selectedContraindications = <String>{};
+  Map<String, dynamic> _biometrics = <String, dynamic>{};
 
   DateTime _startDate = DateTime.now();
   SplitType _selectedSplit = SplitType.runOnly;
@@ -838,6 +841,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         ..addAll(profile.contraindications);
       _scheduleConstraintsController.text =
           profile.scheduleConstraints['notes']?.toString() ?? '';
+      _biometrics = Map<String, dynamic>.from(profile.biometrics);
     });
   }
 
@@ -856,6 +860,8 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         'notes': _scheduleConstraintsController.text.trim(),
         'preferred_training_weekdays': _selectedWeekdaysSorted(),
       },
+      biometrics: BiometricsCalculator.normalizeInputMap(_biometrics) ??
+          const <String, dynamic>{},
     );
   }
 
@@ -892,21 +898,23 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     );
   }
 
-  Future<void> _saveIntakeProfile() async {
+  Future<bool> _saveIntakeProfileInternal() async {
     setState(() => _profileSaving = true);
     try {
       await ref
           .read(weeklyPlannerServiceProvider)
           .upsertPlanningProfile(_buildPlanningProfileFromForm());
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
         _status = 'Athlete intake saved for this profile.';
       });
       _showMessage('Athlete intake saved.');
+      return true;
     } catch (e) {
       _showMessage('Failed to save intake: $e');
+      return false;
     } finally {
       if (mounted) {
         setState(() => _profileSaving = false);
@@ -914,9 +922,14 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     }
   }
 
-  Future<void> _buildPromptSnapshot() async {
+  Future<void> _saveIntakeProfile() async {
+    await _saveIntakeProfileInternal();
+  }
+
+  Future<String?> _buildPromptSnapshotInternal() async {
     setState(() => _buildingPrompt = true);
     try {
+      _warnIfBiometricsMissing();
       await ref
           .read(weeklyPlannerServiceProvider)
           .upsertPlanningProfile(_buildPlanningProfileFromForm());
@@ -926,7 +939,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
           await ref.read(weeklyPlannerServiceProvider).generatePlan(request);
 
       if (!mounted) {
-        return;
+        return null;
       }
       setState(() {
         _generatedPrompt = result.promptText;
@@ -936,8 +949,10 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         _status = 'Prompt snapshot generated. Copy it or run one-tap AI.';
       });
       _showMessage('Prompt snapshot generated.');
+      return result.promptText;
     } catch (e) {
       _showMessage('Prompt build failed: $e');
+      return null;
     } finally {
       if (mounted) {
         setState(() => _buildingPrompt = false);
@@ -945,9 +960,14 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     }
   }
 
+  Future<void> _buildPromptSnapshot() async {
+    await _buildPromptSnapshotInternal();
+  }
+
   Future<void> _runOneTapAiBuild() async {
     setState(() => _oneTapGenerating = true);
     try {
+      _warnIfBiometricsMissing();
       await ref
           .read(weeklyPlannerServiceProvider)
           .upsertPlanningProfile(_buildPlanningProfileFromForm());
@@ -1004,12 +1024,24 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     _showMessage('Prompt copied to clipboard.');
   }
 
-  Future<void> _applyManualAiResponse() async {
-    final text = _manualAiResponseController.text.trim();
+  void _syncManualAiResponseText(String text) {
+    if (_manualAiResponseController.text != text) {
+      _manualAiResponseController.text = text;
+    }
+    ref.read(aiWeeklyPlanResponseProvider.notifier).state = text;
+  }
+
+  Future<bool> _applyManualAiResponseInternal(String rawText) async {
+    final text = rawText.trim();
     if (text.isEmpty) {
       _showMessage('Paste AI weekly plan text before applying.');
-      return;
+      return false;
     }
+
+    if (_manualAiResponseController.text != rawText) {
+      _manualAiResponseController.text = rawText;
+    }
+    ref.read(aiWeeklyPlanResponseProvider.notifier).state = rawText;
 
     setState(() => _manualApplying = true);
     try {
@@ -1023,7 +1055,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
           .applyGeneratedPlanText(request: request, generatedText: text);
 
       if (!mounted) {
-        return;
+        return false;
       }
       ref.read(aiWeeklyPlanResponseProvider.notifier).state = text;
       setState(() {
@@ -1031,13 +1063,19 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       });
       _refreshSchedulePreview();
       _showMessage('Manual AI weekly plan applied.');
+      return true;
     } catch (e) {
       _showMessage('Manual AI apply failed: $e');
+      return false;
     } finally {
       if (mounted) {
         setState(() => _manualApplying = false);
       }
     }
+  }
+
+  Future<void> _applyManualAiResponse() async {
+    await _applyManualAiResponseInternal(_manualAiResponseController.text);
   }
 
   Future<void> _pickTemplateFile() async {
@@ -1299,6 +1337,51 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Map<String, dynamic>? _biometricsPromptPayload() {
+    return BiometricsCalculator.computePromptPayloadFromMap(
+      rawInput: _biometrics,
+      daysPerWeek: _daysPerWeek,
+    );
+  }
+
+  String _biometricsSummaryText() {
+    final payload = _biometricsPromptPayload();
+    if (payload == null) {
+      return 'Biometrics not configured';
+    }
+    final bodyFat = payload['body_fat_percent'];
+    final bmi = payload['bmi'];
+    final tdee = payload['estimated_tdee_kcal'];
+    return 'Configured • BF $bodyFat% • BMI $bmi • TDEE ~$tdee kcal';
+  }
+
+  Future<void> _openBiometricsEditor() async {
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => BiometricsProfileScreen(
+          initialBiometrics: _biometrics,
+          daysPerWeek: _daysPerWeek,
+        ),
+      ),
+    );
+    if (!mounted || result == null) {
+      return;
+    }
+    setState(() {
+      _biometrics = result;
+    });
+    _showMessage('Biometrics saved in plan intake.');
+  }
+
+  void _warnIfBiometricsMissing() {
+    if (_biometricsPromptPayload() != null) {
+      return;
+    }
+    _showMessage(
+      'Biometrics are not configured yet. Continuing without BIOMETRICS_V1 context.',
+    );
+  }
+
   PlanBuilderWalkthroughDraft _walkthroughDraftFromForm() {
     final distance = _runGoalDistanceController.text.trim();
     final pace = _runGoalPaceController.text.trim();
@@ -1308,11 +1391,32 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       runDistanceMiles: distance,
       runPace: pace,
       experienceLevel: _experienceLevel,
+      shortTermGoalText: _shortTermGoalController.text.trim(),
+      shortTermGoalWeeks: _shortTermGoalWeeksController.text.trim(),
+      weekStartDate:
+          DateTime(_startDate.year, _startDate.month, _startDate.day),
       splitType: _selectedSplit,
+      trainingWeekdays: _selectedTrainingWeekdays,
+      availableEquipment: _selectedEquipment,
+      contraindications: _selectedContraindications,
+      scheduleConstraints: _scheduleConstraintsController.text.trim(),
+      weeklyModifier: _selectedModifier,
+      propagateLongTerm: _propagateLongTerm,
+      additionalInstructions: _additionalInstructionsController.text.trim(),
+      useCustomPromptText: _useCustomPromptText,
+      customPromptText: _promptEditorController.text,
+      biometrics: _biometrics,
     );
   }
 
   void _applyWalkthroughDraft(PlanBuilderWalkthroughDraft draft) {
+    final normalizedDraftStartDate = DateTime(
+      draft.weekStartDate.year,
+      draft.weekStartDate.month,
+      draft.weekStartDate.day,
+    );
+    final startDateChanged =
+        toYmd(_startDate) != toYmd(normalizedDraftStartDate);
     setState(() {
       _onPrimaryGoalChanged(draft.primaryGoal);
       if (_normalizePrimaryGoal(draft.primaryGoal) == _runGoal) {
@@ -1322,17 +1426,35 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         } else if (_runGoalDistanceController.text.trim().isEmpty) {
           _runGoalDistanceController.text = '5';
         }
-
-        if (draft.runTargetEnabled) {
-          _runGoalPaceController.text = draft.runPace.trim();
-        } else {
-          _runGoalPaceController.clear();
-        }
+        _runGoalPaceController.text = draft.runPace.trim();
       }
 
       _experienceLevel = draft.experienceLevel;
+      _shortTermGoalController.text = draft.shortTermGoalText;
+      _shortTermGoalWeeksController.text = draft.shortTermGoalWeeks;
+      _startDate = normalizedDraftStartDate;
       _preferredSplit = draft.splitType;
       _selectedSplit = draft.splitType;
+      _daysPerWeek = draft.trainingWeekdays.length.clamp(3, 7);
+      _selectedTrainingWeekdays
+        ..clear()
+        ..addAll(draft.trainingWeekdays);
+      _selectedEquipment
+        ..clear()
+        ..addAll(draft.availableEquipment);
+      _selectedContraindications
+        ..clear()
+        ..addAll(draft.contraindications);
+      _scheduleConstraintsController.text = draft.scheduleConstraints;
+      _selectedModifier = draft.weeklyModifier;
+      _propagateLongTerm = draft.propagateLongTerm;
+      _additionalInstructionsController.text = draft.additionalInstructions;
+      _useCustomPromptText = draft.useCustomPromptText;
+      _promptEditorController.text = draft.customPromptText;
+      _biometrics = Map<String, dynamic>.from(draft.biometrics);
+      if (startDateChanged) {
+        _schedulePreviewFuture = _loadSchedulePreview();
+      }
     });
   }
 
@@ -1385,13 +1507,18 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         builder: (_) => PlanBuilderWalkthroughScreen(
           initialDraft: _walkthroughDraftFromForm(),
           initialStep: initialStep,
+          initialManualResponseText: _manualAiResponseController.text,
           onDraftChanged: _applyWalkthroughDraft,
+          onManualResponseChanged: _syncManualAiResponseText,
           onStepChanged: (step) {
             _walkthroughLastStepIndex = step;
           },
           onCompleted: () {
             _walkthroughLastStepIndex = null;
           },
+          onSaveIntakeRequested: _saveIntakeProfileInternal,
+          onBuildPromptRequested: _buildPromptSnapshotInternal,
+          onApplyManualResponseRequested: _applyManualAiResponseInternal,
         ),
       ),
     );
@@ -1469,6 +1596,21 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
             variant: PillButtonVariant.tonal,
             onPressed: _openShortTermGoalEditor,
           ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: PrimaryPillButton(
+            text: 'Biometric Profile',
+            icon: Icons.monitor_weight_outlined,
+            variant: PillButtonVariant.tonal,
+            onPressed: _openBiometricsEditor,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _biometricsSummaryText(),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 14),
         const SectionHeader(text: 'Step 1 — Athletic Goal Setting'),
