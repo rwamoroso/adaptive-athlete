@@ -30,6 +30,9 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="adaptiveathlete"
+                    android:host="join" />
+                <data
+                    android:scheme="adaptiveathlete"
                     android:host="reset-password" />
             </intent-filter>
         </activity>

@@ -26,6 +26,34 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     super.dispose();
   }
 
+  void _refreshScopedProviders() {
+    ref.invalidate(currentAuthUserIdProvider);
+    ref.invalidate(appStorageScopeProvider);
+    ref.invalidate(appDbProvider);
+    ref.invalidate(activeWorkspaceContextProvider);
+  }
+
+  Future<void> _continueAfterAuth() async {
+    _refreshScopedProviders();
+    final settings = ref.read(settingsProvider);
+    if (!settings.localOnly) {
+      await ref.read(workspaceServiceProvider).bootstrapAndGetContext();
+    }
+    if (!mounted) {
+      return;
+    }
+    final pendingToken =
+        await ref.read(workspaceServiceProvider).getPendingInviteToken();
+    if (!mounted) {
+      return;
+    }
+    if (pendingToken != null && pendingToken.trim().isNotEmpty) {
+      context.go('/join?token=${Uri.encodeComponent(pendingToken)}');
+    } else {
+      context.go('/home');
+    }
+  }
+
   String _supabaseNotReadyMessage(SupabaseBootstrap bootstrap) {
     final details = bootstrap.error;
     if (details == null || details.isEmpty) {
@@ -51,19 +79,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      await ref.read(workspaceServiceProvider).bootstrapAndGetContext();
-      if (mounted) {
-        final pendingToken =
-            await ref.read(workspaceServiceProvider).getPendingInviteToken();
-        if (!mounted) {
-          return;
-        }
-        if (pendingToken != null && pendingToken.trim().isNotEmpty) {
-          context.go('/join?token=${Uri.encodeComponent(pendingToken)}');
-        } else {
-          context.go('/home');
-        }
-      }
+      await _continueAfterAuth();
     } catch (e) {
       setState(() => _message = e.toString());
     } finally {
@@ -86,12 +102,24 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     });
 
     try {
-      await Supabase.instance.client.auth.signUp(
+      final response = await Supabase.instance.client.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      setState(() =>
-          _message = 'Sign-up requested. Check email confirmation if enabled.');
+      if (response.session != null) {
+        await _continueAfterAuth();
+        return;
+      }
+
+      final pendingToken =
+          await ref.read(workspaceServiceProvider).getPendingInviteToken();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _message = pendingToken != null && pendingToken.isNotEmpty
+          ? 'Account created. Check your email confirmation if enabled, then '
+              'sign in again to finish accepting the invite.'
+          : 'Account created. Check your email confirmation if enabled.');
     } catch (e) {
       setState(() => _message = e.toString());
     } finally {
@@ -189,6 +217,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   OutlinedButton(
                     onPressed: _loading ? null : _signUp,
                     child: const Text('Sign up'),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'New users create their own password during sign up.',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 8),
                   TextButton(

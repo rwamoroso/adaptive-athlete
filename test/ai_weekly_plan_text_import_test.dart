@@ -92,6 +92,62 @@ String _buildAiPlanTextWithBodyweightWeightToken() {
   return b.toString();
 }
 
+String _buildPromptWrappedAiPlanResponse() {
+  final b = StringBuffer();
+  b.writeln(
+      '# Adaptive Athlete Weekly Plan Prompt (Workbook-Compatible Text, v1)');
+  b.writeln();
+  b.writeln('Fallback text format (Workbook-Compatible Text, v1):');
+  b.writeln();
+  b.writeln('TEN_WEEK_PLAN_UPDATE_V1');
+  b.writeln(
+    'TEN_WEEK_ROW: week=<Week N> | week_start=YYYY-MM-DD | week_end=YYYY-MM-DD | run_focus=<text> | strength_focus=<text> | strength_progression_expectation=<text> | primary_progression_target=<text> | recovery_emphasis=<text> | deload=yes|no | notes=<text or blank>',
+  );
+  b.writeln('END_TEN_WEEK_PLAN_UPDATE_V1');
+  b.writeln();
+  b.writeln('WEEK_PLAN_V1');
+  b.writeln('WEEK_START: YYYY-MM-DD');
+  b.writeln('WEEK_END: YYYY-MM-DD');
+  b.writeln('DAY 1');
+  b.writeln(
+      'SESSION_TYPE: push|pull|legs|upper|lower|full_body|hybrid|conditioning|rest|unknown');
+  b.writeln('END DAY 7');
+  b.writeln();
+  b.writeln('=== APP_CONTEXT_V1 ===');
+  b.writeln('Prompt metadata trimmed for test.');
+  b.writeln('=== END_APP_CONTEXT_V1 ===');
+  b.writeln();
+  b.write(_buildAiPlanTextWithTenWeekBlock());
+  return b.toString();
+}
+
+String _buildPromptOnlyText() {
+  final b = StringBuffer();
+  b.writeln(
+      '# Adaptive Athlete Weekly Plan Prompt (Workbook-Compatible Text, v1)');
+  b.writeln();
+  b.writeln('Fallback text format (Workbook-Compatible Text, v1):');
+  b.writeln();
+  b.writeln('TEN_WEEK_PLAN_UPDATE_V1');
+  b.writeln(
+    'TEN_WEEK_ROW: week=<Week N> | week_start=YYYY-MM-DD | week_end=YYYY-MM-DD | run_focus=<text> | strength_focus=<text> | strength_progression_expectation=<text> | primary_progression_target=<text> | recovery_emphasis=<text> | deload=yes|no | notes=<text or blank>',
+  );
+  b.writeln('END_TEN_WEEK_PLAN_UPDATE_V1');
+  b.writeln();
+  b.writeln('WEEK_PLAN_V1');
+  b.writeln('WEEK_START: YYYY-MM-DD');
+  b.writeln('WEEK_END: YYYY-MM-DD');
+  b.writeln('DAY 1');
+  b.writeln(
+      'SESSION_TYPE: push|pull|legs|upper|lower|full_body|hybrid|conditioning|rest|unknown');
+  b.writeln('END DAY 7');
+  b.writeln();
+  b.writeln('=== APP_CONTEXT_V1 ===');
+  b.writeln('Prompt metadata only.');
+  b.writeln('=== END_APP_CONTEXT_V1 ===');
+  return b.toString();
+}
+
 String _cellText(Data? cell) {
   final value = cell?.value;
   if (value == null) {
@@ -191,5 +247,44 @@ void main() {
     expect(sets.length, 1);
     expect(sets.single.weight, isNull);
     expect(sets.single.unit, 'bw');
+  });
+
+  test('AI weekly text import extracts valid plan from wrapped prompt text',
+      () async {
+    final db = AppDb.forTesting(NativeDatabase.memory());
+    addTearDown(() async {
+      await db.close();
+    });
+
+    final result = await db.importAiWeeklyPlanText(
+      text: _buildPromptWrappedAiPlanResponse(),
+      splitStartDate: DateTime(2026, 2, 23),
+    );
+
+    expect(result.insertedPlanDays, 7);
+    final longRangeWeeks = await db.select(db.planLongRangeWeeks).get();
+    expect(longRangeWeeks.length, 10);
+  });
+
+  test('AI weekly text import gives clear error for prompt-only text',
+      () async {
+    final db = AppDb.forTesting(NativeDatabase.memory());
+    addTearDown(() async {
+      await db.close();
+    });
+
+    expect(
+      () => db.importAiWeeklyPlanText(
+        text: _buildPromptOnlyText(),
+        splitStartDate: DateTime(2026, 2, 23),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('Paste only the model output that starts with'),
+        ),
+      ),
+    );
   });
 }

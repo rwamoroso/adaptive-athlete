@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
@@ -15,6 +16,46 @@ import 'features/auth/join_workspace_screen.dart';
 import 'features/auth/reset_password_screen.dart';
 import 'features/sync/sync_service.dart';
 import 'features/training/home_shell.dart';
+
+String? normalizeAdaptiveAthleteDeepLink(Uri uri) {
+  final scheme = uri.scheme.toLowerCase();
+  final host = uri.host.toLowerCase();
+  final path = uri.path.toLowerCase();
+
+  final isJoinDeepLink = (scheme == 'adaptiveathlete') &&
+      (host == 'join' || path == '/join' || path == '/join/');
+  if (isJoinDeepLink) {
+    final token = uri.queryParameters['token'];
+    if (token == null || token.trim().isEmpty) {
+      return '/join';
+    }
+    return '/join?token=${Uri.encodeQueryComponent(token)}';
+  }
+
+  final isResetPasswordDeepLink = (scheme == 'adaptiveathlete') &&
+      (host == 'reset-password' ||
+          path == '/reset-password' ||
+          path == '/reset-password/');
+  if (isResetPasswordDeepLink) {
+    return '/reset-password';
+  }
+
+  final needsJoinCanonicalization = path == '/join/';
+  if (needsJoinCanonicalization) {
+    final token = uri.queryParameters['token'];
+    if (token == null || token.trim().isEmpty) {
+      return '/join';
+    }
+    return '/join?token=${Uri.encodeQueryComponent(token)}';
+  }
+
+  final needsResetCanonicalization = path == '/reset-password/';
+  if (needsResetCanonicalization) {
+    return '/reset-password';
+  }
+
+  return null;
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,46 +105,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       : GoRouterRefreshStream(Stream<void>.empty());
   ref.onDispose(refresh.dispose);
 
-  String? normalizeDeepLink(Uri uri) {
-    final scheme = uri.scheme.toLowerCase();
-    final host = uri.host.toLowerCase();
-    final path = uri.path.toLowerCase();
-
-    final isJoinDeepLink = (scheme == 'adaptiveathlete') &&
-        (host == 'join' || path == '/join' || path == '/join/');
-    if (isJoinDeepLink) {
-      final token = uri.queryParameters['token'];
-      if (token == null || token.trim().isEmpty) {
-        return '/join';
-      }
-      return '/join?token=${Uri.encodeQueryComponent(token)}';
-    }
-
-    final isResetPasswordDeepLink = (scheme == 'adaptiveathlete') &&
-        (host == 'reset-password' ||
-            path == '/reset-password' ||
-            path == '/reset-password/');
-    if (isResetPasswordDeepLink) {
-      return '/reset-password';
-    }
-
-    final needsJoinCanonicalization = path == '/join/';
-    if (needsJoinCanonicalization) {
-      final token = uri.queryParameters['token'];
-      if (token == null || token.trim().isEmpty) {
-        return '/join';
-      }
-      return '/join?token=${Uri.encodeQueryComponent(token)}';
-    }
-
-    final needsResetCanonicalization = path == '/reset-password/';
-    if (needsResetCanonicalization) {
-      return '/reset-password';
-    }
-
-    return null;
-  }
-
   return GoRouter(
     initialLocation: '/home',
     refreshListenable: refresh,
@@ -129,7 +130,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/home', builder: (context, state) => const HomeShell()),
     ],
     redirect: (context, state) {
-      final normalizedDeepLink = normalizeDeepLink(state.uri);
+      final normalizedDeepLink = normalizeAdaptiveAthleteDeepLink(state.uri);
       if (normalizedDeepLink != null) {
         final currentWithQuery = state.uri.hasQuery
             ? '${state.matchedLocation}?${state.uri.query}'
@@ -175,8 +176,56 @@ class MyApp extends ConsumerStatefulWidget {
 
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   StreamSubscription<AuthState>? _authSubscription;
+  StreamSubscription<Uri>? _deepLinkSubscription;
+  Uri? _lastHandledDeepLink;
   bool _autoSyncInFlight = false;
   DateTime? _lastAutoSyncAt;
+
+  void _refreshScopedStorage() {
+    ref.invalidate(currentAuthUserIdProvider);
+    ref.invalidate(appStorageScopeProvider);
+    ref.invalidate(appDbProvider);
+    ref.invalidate(activeWorkspaceContextProvider);
+  }
+
+  Future<void> _initDeepLinks() async {
+    final appLinks = AppLinks();
+
+    try {
+      final initialUri = await appLinks.getInitialLink();
+      if (initialUri != null) {
+        _handleIncomingDeepLink(initialUri);
+      }
+    } catch (e) {
+      debugPrint('Failed to read initial deep link: $e');
+    }
+
+    _deepLinkSubscription = appLinks.uriLinkStream.listen(
+      _handleIncomingDeepLink,
+      onError: (Object error) {
+        debugPrint('Deep link stream error: $error');
+      },
+    );
+  }
+
+  void _handleIncomingDeepLink(Uri uri) {
+    final normalized = normalizeAdaptiveAthleteDeepLink(uri);
+    if (!mounted || normalized == null) {
+      return;
+    }
+
+    if (_lastHandledDeepLink?.toString() == uri.toString()) {
+      return;
+    }
+    _lastHandledDeepLink = uri;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      ref.read(routerProvider).go(normalized);
+    });
+  }
 
   void _scheduleAutoSync({
     required String reason,
@@ -258,6 +307,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (!kIsWeb) {
+      unawaited(_initDeepLinks());
+    }
     final bootstrap = ref.read(supabaseBootstrapProvider);
     if (bootstrap.initialized) {
       _authSubscription =
@@ -270,12 +322,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           return;
         }
         if (event.event == AuthChangeEvent.signedIn) {
+          _refreshScopedStorage();
           _scheduleAutoSync(reason: 'signed_in', force: true);
           return;
         }
         if (event.event == AuthChangeEvent.signedOut) {
-          unawaited(ref.read(appDbProvider).clearAppContextState());
-          ref.invalidate(activeWorkspaceContextProvider);
+          _refreshScopedStorage();
           _scheduleSyncStatusReset();
         }
       });
@@ -297,6 +349,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _authSubscription?.cancel();
+    _deepLinkSubscription?.cancel();
     super.dispose();
   }
 

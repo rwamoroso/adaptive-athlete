@@ -59,6 +59,92 @@ String _formatMilesWord(double miles, {int decimals = 1}) {
   return '${miles.toStringAsFixed(decimals)} Miles';
 }
 
+bool _isExplicitNonRunningCardioType(String? raw) {
+  final value = (raw ?? '').trim().toLowerCase();
+  if (value.isEmpty) {
+    return false;
+  }
+  const keywords = <String>[
+    'stair',
+    'stepper',
+    'bike',
+    'cycle',
+    'cycling',
+    'spin',
+    'row',
+    'rower',
+    'erg',
+    'ellipt',
+    'swim',
+    'pool',
+    'ski',
+    'walk',
+    'hike',
+    'incline',
+    'sled',
+    'rope',
+    'versa',
+    'airdyne',
+    'echo bike',
+    'assault bike',
+  ];
+  return keywords.any(value.contains);
+}
+
+bool _isRunningLikeCardioType(String? raw) {
+  final value = (raw ?? '').trim().toLowerCase();
+  if (value.isEmpty || _isExplicitNonRunningCardioType(value)) {
+    return false;
+  }
+  if (value.contains('run') ||
+      value.contains('jog') ||
+      value.contains('sprint')) {
+    return true;
+  }
+  const runningDescriptors = <String>[
+    'easy',
+    'tempo',
+    'interval',
+    'repeat',
+    'fartlek',
+    'recovery',
+    'long',
+    'threshold',
+    'track',
+    'hill',
+    'stride',
+  ];
+  return runningDescriptors.any(value.contains);
+}
+
+String _formatCardioTypeLabel(
+  String? raw, {
+  bool includeRunSuffix = false,
+}) {
+  final cleaned = _toTitleCaseWords((raw ?? '').trim());
+  if (cleaned.isEmpty) {
+    return '';
+  }
+  if (includeRunSuffix &&
+      _isRunningLikeCardioType(raw) &&
+      !cleaned.toLowerCase().contains('run')) {
+    return '$cleaned Run';
+  }
+  return cleaned;
+}
+
+String _cardioSessionTitle(RunSessionWithSegments run) {
+  final title = run.session.title?.trim();
+  if (title != null && title.isNotEmpty) {
+    return title;
+  }
+  final activityType = run.session.activityType?.trim();
+  if (activityType != null && activityType.isNotEmpty) {
+    return activityType;
+  }
+  return 'Cardio Session';
+}
+
 String _formatLoad(double value) {
   if (value.abs() >= 1000) {
     return value.toStringAsFixed(0);
@@ -1196,7 +1282,7 @@ class _DailyClinicalContent extends StatelessWidget {
               text: 'AI Monitored Progressive Overload Strategy',
             ),
             const SizedBox(height: 14),
-            const SectionHeader(text: 'Run Progress'),
+            const SectionHeader(text: 'Cardio Progress'),
             const SizedBox(height: 8),
             RunsTrack(value: runProgress),
             const SizedBox(height: 6),
@@ -1246,8 +1332,8 @@ class _DailyClinicalContent extends StatelessWidget {
             const ClinicalDivider(),
             SectionHeader(
               text: _dailyGoalTitle() == null
-                  ? 'Prescribed Run'
-                  : 'Prescribed Run • ${_dailyGoalTitle()!}',
+                  ? 'Prescribed Cardio'
+                  : 'Prescribed Cardio • ${_dailyGoalTitle()!}',
             ),
             const SizedBox(height: 8),
             _buildPrescribedRun(context),
@@ -1429,13 +1515,14 @@ class _DailyClinicalContent extends StatelessWidget {
   Widget _buildMetricGrid(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final prescribedRunTypeTitle =
-            (safeDetail.prescribedRun?.runType ?? '').trim();
+        final prescribedRunTypeTitle = _formatCardioTypeLabel(
+          safeDetail.prescribedRun?.runType,
+          includeRunSuffix: true,
+        );
         final prescribedLiftFocusTitle =
             (safeDetail.prescribedRun?.liftFocus ?? '').trim();
-        final runTitleBase = prescribedRunTypeTitle.isEmpty
-            ? 'Run'
-            : _toTitleCaseWords(prescribedRunTypeTitle);
+        final runTitleBase =
+            prescribedRunTypeTitle.isEmpty ? 'Cardio' : prescribedRunTypeTitle;
         final runCardTitle = dailyPrescribedMiles > 0
             ? '$runTitleBase - ${dailyPrescribedMiles.toStringAsFixed(1)} Miles'
             : runTitleBase;
@@ -1454,11 +1541,15 @@ class _DailyClinicalContent extends StatelessWidget {
           durationS: todayRunDurationS,
           distanceM: todayRunDistanceM,
         );
-        final todayRunStatus = todayRunDistanceM > 0
-            ? (todayRunPace == null
-                ? 'Today\'s Run Logged\n${_formatMilesWord(todayRunDistanceM / 1609.344)}'
-                : 'Today\'s Run Logged\n${_formatMilesWord(todayRunDistanceM / 1609.344)} @ $todayRunPace')
-            : 'No Run Logged';
+        final hasLoggedCardio =
+            safeDetail.runSessions.isNotEmpty || todayRunDurationS > 0;
+        final todayRunStatus = hasLoggedCardio
+            ? (todayRunDistanceM > 0
+                ? (todayRunPace == null
+                    ? 'Today\'s Cardio Logged\n${_formatMilesWord(todayRunDistanceM / 1609.344)}'
+                    : 'Today\'s Cardio Logged\n${_formatMilesWord(todayRunDistanceM / 1609.344)} @ $todayRunPace')
+                : 'Today\'s Cardio Logged\n${_formatDuration(todayRunDurationS)}')
+            : 'No Cardio Logged';
         final ratio = constraints.maxWidth < 760 ? 0.76 : 0.96;
         return GridView.count(
           crossAxisCount: 2,
@@ -1486,7 +1577,7 @@ class _DailyClinicalContent extends StatelessWidget {
             _buildDashboardMetricCard(
               context: context,
               title: runCardTitle,
-              leadingIcon: Icons.directions_run_rounded,
+              leadingIcon: Icons.monitor_heart_outlined,
               titleFontSize: 14,
               valueText:
                   '${_formatMiles(runMileageSummary.last7DaysMiles)} last 7 days',
@@ -1600,7 +1691,7 @@ class _DailyClinicalContent extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Runs: ${aiSummary!.extractedDataSummary.runsSummary} | '
+              'Cardio: ${aiSummary!.extractedDataSummary.runsSummary} | '
               'Sleep: ${aiSummary!.extractedDataSummary.sleepSummary} | '
               'Strength: ${aiSummary!.extractedDataSummary.strengthSummary}',
               style: Theme.of(context).textTheme.bodySmall,
@@ -1664,12 +1755,12 @@ class _DailyClinicalContent extends StatelessWidget {
     final stackIcon = textScale > 1.2;
 
     final content = safeDetail.prescribedRun?.runType == null
-        ? const Text('No prescribed run linked to this day.')
+        ? const Text('No prescribed cardio linked to this day.')
         : Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Adaptation Prescription',
+                'Cardio Prescription',
                 style: Theme.of(context)
                     .textTheme
                     .titleMedium
@@ -1678,18 +1769,21 @@ class _DailyClinicalContent extends StatelessWidget {
               const SizedBox(height: 6),
               _LabeledLine(
                 label: 'Type',
-                value: safeDetail.prescribedRun?.runType ?? 'unknown',
+                value: _formatCardioTypeLabel(
+                  safeDetail.prescribedRun?.runType,
+                  includeRunSuffix: true,
+                ),
               ),
               _LabeledLine(
                 label: 'Duration',
                 value: safeDetail.prescribedRun?.durationText ?? 'unknown',
               ),
               _LabeledLine(
-                label: 'Pace',
+                label: 'Pace / Speed',
                 value: safeDetail.prescribedRun?.targetPace ?? 'unknown',
               ),
               _LabeledLine(
-                label: 'HR Zone',
+                label: 'Effort / HR',
                 value:
                     safeDetail.prescribedRun?.effortHrGuardrails ?? 'unknown',
               ),
@@ -1709,7 +1803,7 @@ class _DailyClinicalContent extends StatelessWidget {
         color: Colors.white.withValues(alpha: 0.08),
         shape: BoxShape.circle,
       ),
-      child: const Icon(Icons.directions_run),
+      child: const Icon(Icons.monitor_heart_outlined),
     );
 
     return GlassCard(
@@ -1735,7 +1829,9 @@ class _DailyClinicalContent extends StatelessWidget {
 
   Widget _buildRunsList(BuildContext context) {
     if (safeDetail.runSessions.isEmpty) {
-      return const GlassCard(child: Text('No runs logged for this date.'));
+      return const GlassCard(
+        child: Text('No cardio sessions logged for this date.'),
+      );
     }
 
     return Column(
@@ -1759,7 +1855,7 @@ class _DailyClinicalContent extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  run.session.title ?? 'untitled run',
+                  _cardioSessionTitle(run),
                   style: Theme.of(context)
                       .textTheme
                       .titleMedium
@@ -2545,7 +2641,7 @@ class _DailyLoadError extends StatelessWidget {
                   ),
                   OutlinedButton(
                     onPressed: onOpenRunInputs,
-                    child: const Text('Open Run Inputs'),
+                    child: const Text('Open Cardio Inputs'),
                   ),
                 ],
               ),

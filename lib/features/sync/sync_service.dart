@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/utils/device_scoped_store.dart';
 import '../../db/app_db.dart';
 import '../workspace/workspace_service.dart';
 
@@ -9,14 +10,19 @@ class SyncService {
     required this.db,
     required this.client,
     WorkspaceService? workspaceService,
-  }) : workspaceService =
-            workspaceService ?? WorkspaceService(db: db, client: client);
+  }) : workspaceService = workspaceService ??
+            WorkspaceService(
+              db: db,
+              client: client,
+              deviceStore: const DeviceScopedStore(),
+            );
 
   final AppDb db;
   final SupabaseClient client;
   final WorkspaceService workspaceService;
   late final _ScopedSyncContext _context;
   final Map<String, String> _workoutDayIdRemap = <String, String>{};
+  String _activeStep = 'starting sync';
 
   Future<String> syncNow() async {
     final user = client.auth.currentUser;
@@ -24,45 +30,68 @@ class SyncService {
       return 'Sign in first to sync with Supabase.';
     }
 
+    _activeStep = 'loading workspace context';
     try {
-      final activeContext = await workspaceService.requireContext();
+      final activeContext = await _runStep(
+          'loading workspace context', workspaceService.requireContext);
       _context = _ScopedSyncContext(
         workspaceId: activeContext.workspaceId,
         athleteProfileId: activeContext.profileId,
       );
       if (activeContext.needsCloudClaim &&
           activeContext.role.toLowerCase() == 'owner') {
-        await workspaceService.claimLegacyRowsForActiveProfile(
-          context: activeContext,
+        await _runStep(
+          'claiming legacy cloud rows',
+          () => workspaceService.claimLegacyRowsForActiveProfile(
+            context: activeContext,
+          ),
         );
       }
 
-      final hasLocalRows = await _hasAnyLocalRows();
-      final hasCloudRows = await _hasAnyCloudRows();
+      final hasLocalRows =
+          await _runStep('checking local data', _hasAnyLocalRows);
+      final hasCloudRows =
+          await _runStep('checking cloud data', _hasAnyCloudRows);
       if (hasCloudRows) {
-        await _pullFromSupabase();
-        await _pruneEmptyLocalPlanCycles();
+        await _runStep('pulling cloud data', _pullFromSupabase);
+        await _runStep(
+          'pruning empty local plan cycles',
+          _pruneEmptyLocalPlanCycles,
+        );
         if (hasLocalRows) {
-          await _pushToSupabase();
-          await _pullFromSupabase();
-          await _pruneEmptyLocalPlanCycles();
+          await _runStep('pushing merged local data', _pushToSupabase);
+          await _runStep('refreshing cloud data', _pullFromSupabase);
+          await _runStep(
+            'pruning empty local plan cycles',
+            _pruneEmptyLocalPlanCycles,
+          );
           return 'Sync complete: cloud pulled, local merged, then cloud refreshed locally.';
         }
-        await _pushToSupabase();
-        return 'Sync complete: cloud pulled to local, then local pushed to cloud.';
+
+        // A fresh-device restore only needs the cloud snapshot locally.
+        // Re-pushing unchanged rows back to Supabase adds failure surface.
+        return 'Sync complete: cloud pulled to local.';
       }
 
       if (hasLocalRows) {
-        await _pushToSupabase();
-        await _pullFromSupabase();
-        await _pruneEmptyLocalPlanCycles();
+        await _runStep('pushing local data to cloud', _pushToSupabase);
+        await _runStep('refreshing cloud data', _pullFromSupabase);
+        await _runStep(
+          'pruning empty local plan cycles',
+          _pruneEmptyLocalPlanCycles,
+        );
         return 'Sync complete: local pushed to empty cloud, then cloud pulled to local.';
       }
 
       return 'Sync complete: nothing to sync yet.';
     } catch (e) {
-      return 'Sync failed: $e';
+      return 'Sync failed during $_activeStep: $e';
     }
+  }
+
+  Future<T> _runStep<T>(String step, Future<T> Function() action) async {
+    _activeStep = step;
+    return action();
   }
 
   Future<bool> _hasAnyLocalRows() async {
@@ -100,6 +129,7 @@ class SyncService {
       'athlete_planning_profiles',
     ];
     for (final table in tables) {
+      _activeStep = 'checking cloud table $table';
       final response = await client
           .from(table)
           .select('id')
@@ -114,51 +144,96 @@ class SyncService {
   }
 
   Future<void> _pushToSupabase() async {
-    await _upsertWorkoutDays();
-    await _upsertActualStrengthSets();
-    await _upsertPrescribedStrengthSets();
-    await _upsertSleepNights();
-    await _upsertRunSessions();
-    await _upsertRunSegments();
-    await _upsertRunSessionDetails();
-    await _upsertRunOverrideAudit();
-    await _upsertRuleTriggers();
-    await _upsertAiAudit();
-    await _upsertPlanCycles();
-    await _upsertPlanDays();
-    await _upsertExerciseSubstitutions();
-    await _upsertPlanPrescribedStrengthSets();
-    await _upsertPlanPrescribedRuns();
-    await _upsertPlanExerciseAlternatives();
-    await _upsertPlanSummarySnapshots();
-    await _upsertPlanImportAudit();
-    await _upsertAthletePlanningProfiles();
-    await _upsertWeeklyPlanBuildRequests();
+    await _runStep('pushing workout days', _upsertWorkoutDays);
+    await _runStep('pushing actual strength sets', _upsertActualStrengthSets);
+    await _runStep(
+      'pushing prescribed strength sets',
+      _upsertPrescribedStrengthSets,
+    );
+    await _runStep('pushing sleep nights', _upsertSleepNights);
+    await _runStep('pushing run sessions', _upsertRunSessions);
+    await _runStep('pushing run segments', _upsertRunSegments);
+    await _runStep('pushing run session details', _upsertRunSessionDetails);
+    await _runStep('pushing run override audit', _upsertRunOverrideAudit);
+    await _runStep('pushing rule triggers', _upsertRuleTriggers);
+    await _runStep('pushing ai audit', _upsertAiAudit);
+    await _runStep('pushing plan cycles', _upsertPlanCycles);
+    await _runStep('pushing plan days', _upsertPlanDays);
+    await _runStep(
+      'pushing exercise substitutions',
+      _upsertExerciseSubstitutions,
+    );
+    await _runStep(
+      'pushing plan prescribed strength sets',
+      _upsertPlanPrescribedStrengthSets,
+    );
+    await _runStep('pushing plan prescribed runs', _upsertPlanPrescribedRuns);
+    await _runStep(
+      'pushing plan exercise alternatives',
+      _upsertPlanExerciseAlternatives,
+    );
+    await _runStep(
+      'pushing plan summary snapshots',
+      _upsertPlanSummarySnapshots,
+    );
+    await _runStep('pushing plan import audit', _upsertPlanImportAudit);
+    await _runStep(
+      'pushing athlete planning profiles',
+      _upsertAthletePlanningProfiles,
+    );
+    await _runStep(
+      'pushing weekly plan build requests',
+      _upsertWeeklyPlanBuildRequests,
+    );
   }
 
   Future<void> _pullFromSupabase() async {
     _workoutDayIdRemap.clear();
-    await _pullWorkoutDays();
-    await _pullPlanCycles();
-    await _pullPlanDays();
-    await _pullExerciseSubstitutions();
-    await _pullPlanPrescribedStrengthSets();
-    await _pullPlanPrescribedRuns();
-    await _pullPlanExerciseAlternatives();
-    await _pullPlanSummarySnapshots();
-    await _pullPlanImportAudit();
-    await _pullAthletePlanningProfiles();
-    await _pullWeeklyPlanBuildRequests();
-    await _pullActualStrengthSets();
-    await _pullPrescribedStrengthSets();
-    await _pullSleepNights();
-    await _pullRunSessions();
-    await _pullRunSegments();
-    await _pullRunSessionDetails();
-    await _pullRunOverrideAudit();
-    await _pullRuleTriggers();
-    await _pullAiAudit();
-    await db.enforceWorkoutDayDateUniqueness();
+    await _runStep('pulling workout days', _pullWorkoutDays);
+    await _runStep('pulling plan cycles', _pullPlanCycles);
+    await _runStep('pulling plan days', _pullPlanDays);
+    await _runStep(
+      'pulling exercise substitutions',
+      _pullExerciseSubstitutions,
+    );
+    await _runStep(
+      'pulling plan prescribed strength sets',
+      _pullPlanPrescribedStrengthSets,
+    );
+    await _runStep('pulling plan prescribed runs', _pullPlanPrescribedRuns);
+    await _runStep(
+      'pulling plan exercise alternatives',
+      _pullPlanExerciseAlternatives,
+    );
+    await _runStep(
+      'pulling plan summary snapshots',
+      _pullPlanSummarySnapshots,
+    );
+    await _runStep('pulling plan import audit', _pullPlanImportAudit);
+    await _runStep(
+      'pulling athlete planning profiles',
+      _pullAthletePlanningProfiles,
+    );
+    await _runStep(
+      'pulling weekly plan build requests',
+      _pullWeeklyPlanBuildRequests,
+    );
+    await _runStep('pulling actual strength sets', _pullActualStrengthSets);
+    await _runStep(
+      'pulling prescribed strength sets',
+      _pullPrescribedStrengthSets,
+    );
+    await _runStep('pulling sleep nights', _pullSleepNights);
+    await _runStep('pulling run sessions', _pullRunSessions);
+    await _runStep('pulling run segments', _pullRunSegments);
+    await _runStep('pulling run session details', _pullRunSessionDetails);
+    await _runStep('pulling run override audit', _pullRunOverrideAudit);
+    await _runStep('pulling rule triggers', _pullRuleTriggers);
+    await _runStep('pulling ai audit', _pullAiAudit);
+    await _runStep(
+      'deduplicating local workout days',
+      db.enforceWorkoutDayDateUniqueness,
+    );
   }
 
   Future<Set<String>> _localPlanCycleIdsWithPrescribedContent() async {

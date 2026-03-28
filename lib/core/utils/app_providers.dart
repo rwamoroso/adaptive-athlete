@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'app_storage_scope.dart';
+import 'device_scoped_store.dart';
 import '../../db/app_db.dart';
 import '../../features/ai/ai_analyze_service.dart';
 import '../../features/plan/weekly_plan_prompt_service.dart';
@@ -295,18 +297,62 @@ class RestCountdownNotifier extends StateNotifier<RestCountdownState> {
   }
 }
 
-final appDbProvider = Provider<AppDb>((ref) {
-  final db = AppDb();
-  ref.onDispose(db.close);
-  return db;
-});
-
 final settingsProvider =
     StateNotifierProvider<AppSettingsNotifier, AppSettings>(
         (ref) => AppSettingsNotifier());
 
 final supabaseBootstrapProvider = Provider<SupabaseBootstrap>(
     (_) => const SupabaseBootstrap(initialized: false));
+
+final authUserIdProvider = StreamProvider<String?>((ref) async* {
+  final bootstrap = ref.watch(supabaseBootstrapProvider);
+  if (!bootstrap.initialized) {
+    yield null;
+    return;
+  }
+
+  final client = Supabase.instance.client;
+  yield client.auth.currentUser?.id;
+  yield* client.auth.onAuthStateChange.map(
+    (event) => event.session?.user.id ?? client.auth.currentUser?.id,
+  );
+});
+
+final currentAuthUserIdProvider = Provider<String?>((ref) {
+  final bootstrap = ref.watch(supabaseBootstrapProvider);
+  if (!bootstrap.initialized) {
+    return null;
+  }
+
+  final authUserId = ref.watch(authUserIdProvider).valueOrNull;
+  return authUserId ?? Supabase.instance.client.auth.currentUser?.id;
+});
+
+final deviceScopedStoreProvider = Provider<DeviceScopedStore>((_) {
+  return const DeviceScopedStore();
+});
+
+final appStorageScopeProvider = Provider<AppStorageScope>((ref) {
+  final localOnly =
+      ref.watch(settingsProvider.select((settings) => settings.localOnly));
+  final currentUserId = ref.watch(currentAuthUserIdProvider);
+  if (localOnly || currentUserId == null || currentUserId.trim().isEmpty) {
+    return const AppStorageScope.guest();
+  }
+  return AppStorageScope.user(currentUserId);
+});
+
+final appDbProvider = Provider<AppDb>((ref) {
+  final scope = ref.watch(appStorageScopeProvider);
+  final deviceStore = ref.watch(deviceScopedStoreProvider);
+  final db = AppDb(
+    scope: scope,
+    deviceStore: deviceStore,
+  );
+  unawaited(db.finalizePendingLegacyMigration());
+  ref.onDispose(db.close);
+  return db;
+});
 
 final syncStatusProvider =
     StateNotifierProvider<AppSyncStatusNotifier, AppSyncStatus>(
@@ -325,41 +371,45 @@ final aiAnalyzeServiceProvider =
 
 final exerciseSubstitutionServiceProvider =
     Provider<ExerciseSubstitutionService>((ref) {
-  return ExerciseSubstitutionService(db: ref.read(appDbProvider));
+  return ExerciseSubstitutionService(db: ref.watch(appDbProvider));
 });
 
 final weeklyPlanPromptServiceProvider =
     Provider<WeeklyPlanPromptService>((ref) {
-  return WeeklyPlanPromptService(db: ref.read(appDbProvider));
+  return WeeklyPlanPromptService(db: ref.watch(appDbProvider));
 });
 
 final weeklyPlannerServiceProvider = Provider<WeeklyPlannerService>((ref) {
   return WeeklyPlannerService(
-    db: ref.read(appDbProvider),
-    promptService: ref.read(weeklyPlanPromptServiceProvider),
+    db: ref.watch(appDbProvider),
+    promptService: ref.watch(weeklyPlanPromptServiceProvider),
     client: Supabase.instance.client,
   );
 });
 
 final workspaceServiceProvider = Provider<WorkspaceService>((ref) {
   return WorkspaceService(
-    db: ref.read(appDbProvider),
+    db: ref.watch(appDbProvider),
     client: Supabase.instance.client,
+    deviceStore: ref.watch(deviceScopedStoreProvider),
   );
 });
 
 final inviteServiceProvider = Provider<InviteService>((ref) {
-  return InviteService(workspaceService: ref.read(workspaceServiceProvider));
+  return InviteService(workspaceService: ref.watch(workspaceServiceProvider));
 });
 
 final activeWorkspaceContextProvider =
     FutureProvider<ActiveWorkspaceContext?>((ref) async {
   final bootstrap = ref.watch(supabaseBootstrapProvider);
+  final localOnly =
+      ref.watch(settingsProvider.select((settings) => settings.localOnly));
+  final currentUserId = ref.watch(currentAuthUserIdProvider);
   if (!bootstrap.initialized) {
     return null;
   }
-  if (Supabase.instance.client.auth.currentUser == null) {
+  if (localOnly || currentUserId == null || currentUserId.trim().isEmpty) {
     return null;
   }
-  return ref.read(workspaceServiceProvider).bootstrapAndGetContext();
+  return ref.watch(workspaceServiceProvider).bootstrapAndGetContext();
 });

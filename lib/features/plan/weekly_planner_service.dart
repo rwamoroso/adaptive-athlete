@@ -487,7 +487,8 @@ Goal-Specific Instructions:
 Goal-Specific Instructions:
 - Primary goal is broad cardio improvement without a fixed race-distance target.
 - Emphasize aerobic development, sustainable progression, and cardiovascular efficiency.
-- Use varied cardio prescriptions as needed; avoid forcing a specific distance/pace milestone.''',
+- Use varied cardio prescriptions as needed; avoid forcing a specific distance/pace milestone.
+- Choose the cardio modality that best fits the athlete and context, which may include running, stair stepper, incline walking, bike, rower, elliptical, swimming, or treadmill work.''',
       _ => '''
 Goal-Specific Instructions:
 - Treat Athlete Profile primary_goal as authoritative over any generic defaults in the base prompt.''',
@@ -501,6 +502,13 @@ Split-Specific Instructions:
 - Keep strength-focused fields blank or run-focused text only.
 - Include only run prescriptions and recovery structure for the 7-day week.'''
         : '';
+    const cardioCompatibilityInstructionBlock = '''
+Cardio Prescription Compatibility Rules:
+- Use the existing `RUN_*` fields as the cardio prescription slot for app compatibility, even when the modality is not running.
+- `RUN_TYPE` may prescribe running or another cardio modality/session, such as `easy_run`, `stair_stepper`, `bike_endurance`, `rower_intervals`, `elliptical_recovery`, or `incline_walk`.
+- Use `RUN_DURATION` for the full cardio prescription duration regardless of modality.
+- Leave `RUN_TARGET_PACE` blank when pace or speed is not meaningful for that modality.
+- For non-running cardio, bias `RUN_HR_GUARDRAILS` and `RUN_NOTES` toward effort, cadence, resistance, incline, RPM, or other modality-specific cues.''';
     const explanationInstructionBlock = '''
 Plan Explanation Output Requirements:
 - After the full WEEK_PLAN_V1 block (after END DAY 7), append:
@@ -534,6 +542,7 @@ Modifier Instructions:
 $modifierInstructions
 $goalInstructionBlock
 $splitInstructionBlock
+$cardioCompatibilityInstructionBlock
 $explanationInstructionBlock
 
 Long Range Context (JSON):

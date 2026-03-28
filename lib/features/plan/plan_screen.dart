@@ -575,7 +575,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                           children: [
                             if (days[i].runTitle != null)
                               Text(
-                                'Run: ${days[i].runTitle}',
+                                'Cardio: ${days[i].runTitle}',
                                 style: Theme.of(context).textTheme.bodyMedium,
                               ),
                             if (days[i].strengthTitle != null)
@@ -1574,7 +1574,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               'One guided flow for intake, weekly setup, generation, and apply.',
         ),
         const SizedBox(height: 12),
-        const SectionHeader(text: 'Weekly Run + Strength Schedule'),
+        const SectionHeader(text: 'Weekly Cardio + Strength Schedule'),
         const SizedBox(height: 8),
         _buildSchedulePreviewCard(context),
         const SizedBox(height: 10),

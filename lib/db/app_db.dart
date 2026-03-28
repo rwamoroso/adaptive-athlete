@@ -5,13 +5,16 @@ import 'package:csv/csv.dart';
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:excel/excel.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/parsing/exercise_normalizer.dart';
+import '../core/utils/app_storage_scope.dart';
 import '../core/utils/date_utils.dart';
+import '../core/utils/device_scoped_store.dart';
 import '../features/plan/ppl_template_service.dart';
 import '../features/training/garmin_csv_import_service.dart';
 import '../features/training/strength_history_import_service.dart';
@@ -613,10 +616,23 @@ class ManualRunSegmentInput {
   ],
 )
 class AppDb extends _$AppDb {
-  AppDb() : super(_openConnection());
+  AppDb({
+    required this.scope,
+    DeviceScopedStore? deviceStore,
+  })  : _deviceStore = deviceStore ?? const DeviceScopedStore(),
+        super(
+          _openConnection(
+            scope: scope,
+            deviceStore: deviceStore ?? const DeviceScopedStore(),
+          ),
+        );
 
-  AppDb.forTesting(super.connection);
+  AppDb.forTesting(super.connection)
+      : scope = const AppStorageScope.guest(),
+        _deviceStore = const DeviceScopedStore();
 
+  final AppStorageScope scope;
+  final DeviceScopedStore _deviceStore;
   final Uuid _uuid = const Uuid();
 
   @override
@@ -2528,6 +2544,99 @@ class AppDb extends _$AppDb {
     return planDay?.id;
   }
 
+  Future<String> ensurePlanDayForDate(String ymd) async {
+    final existing = await _resolvePlanDayIdForDate(ymd);
+    if (existing != null) {
+      return existing;
+    }
+
+    return transaction(() async {
+      final rechecked = await _resolvePlanDayIdForDate(ymd);
+      if (rechecked != null) {
+        return rechecked;
+      }
+
+      final weekStart = _startOfWeekYmd(ymd);
+      final weekStartDate = parseYmd(weekStart);
+      final weekEnd = toYmd(weekStartDate.add(const Duration(days: 6)));
+
+      final overlappingCycles = await findOverlappingPlanCycles(
+        rangeStartYmd: weekStart,
+        rangeEndYmd: weekEnd,
+      );
+      var cycle = overlappingCycles.isEmpty ? null : overlappingCycles.first;
+      if (cycle == null) {
+        final cycleId = _uuid.v4();
+        final createdAt = unixMsNow();
+        await into(planCycles).insert(
+          PlanCyclesCompanion.insert(
+            id: cycleId,
+            cycleKey: 'manual_${weekStart.replaceAll('-', '')}',
+            weekStart: weekStart,
+            weekEnd: weekEnd,
+            source: 'manual_ad_hoc_split',
+            createdAt: createdAt,
+          ),
+        );
+        cycle = PlanCycle(
+          id: cycleId,
+          cycleKey: 'manual_${weekStart.replaceAll('-', '')}',
+          weekStart: weekStart,
+          weekEnd: weekEnd,
+          source: 'manual_ad_hoc_split',
+          createdAt: createdAt,
+        );
+      }
+      final resolvedCycle = cycle;
+
+      final existingDays = await (select(planDays)
+            ..where((d) => d.planCycleId.equals(resolvedCycle.id)))
+          .get();
+      final dayByNumber = <int, PlanDay>{
+        for (final day in existingDays) day.dayNumber: day,
+      };
+      final createdAt = unixMsNow();
+      for (var dayNumber = 1; dayNumber <= 7; dayNumber++) {
+        if (dayByNumber.containsKey(dayNumber)) {
+          continue;
+        }
+        final estimatedDate =
+            toYmd(weekStartDate.add(Duration(days: dayNumber - 1)));
+        final dayId = _uuid.v4();
+        await into(planDays).insert(
+          PlanDaysCompanion.insert(
+            id: dayId,
+            planCycleId: resolvedCycle.id,
+            dayNumber: dayNumber,
+            sheetName: 'Day $dayNumber',
+            estimatedDate: Value(estimatedDate),
+            sessionType: const Value('unknown'),
+            createdAt: createdAt,
+          ),
+        );
+        dayByNumber[dayNumber] = PlanDay(
+          id: dayId,
+          planCycleId: cycle.id,
+          dayNumber: dayNumber,
+          sheetName: 'Day $dayNumber',
+          estimatedDate: estimatedDate,
+          sessionType: 'unknown',
+          shiftReason: null,
+          createdAt: createdAt,
+        );
+      }
+
+      final dayNumber =
+          parseYmd(ymd).difference(parseYmd(resolvedCycle.weekStart)).inDays +
+              1;
+      final planDay = dayByNumber[dayNumber];
+      if (planDay == null) {
+        throw StateError('Failed to create a split day for $ymd.');
+      }
+      return planDay.id;
+    });
+  }
+
   Future<void> insertActualStrengthSet({
     required String workoutDayId,
     required String exercise,
@@ -3023,6 +3132,50 @@ class AppDb extends _$AppDb {
         .go();
   }
 
+  Future<void> addPlanPrescribedStrengthExerciseForDate({
+    required String dateYmd,
+    required String exerciseCanonical,
+    required int setCount,
+    String unit = 'lb',
+  }) async {
+    if (setCount < 1) {
+      throw StateError('Set count must be at least 1.');
+    }
+
+    final planDayId = await _resolvePlanDayIdForDate(dateYmd);
+    if (planDayId == null) {
+      throw StateError('No split day found for $dateYmd.');
+    }
+
+    final canonicalExercise = ExerciseNormalizer.normalize(exerciseCanonical);
+    final existing = await (select(planPrescribedStrengthSets)
+          ..where((s) => s.planDayId.equals(planDayId))
+          ..where((s) => s.exerciseCanonical.equals(canonicalExercise))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing != null) {
+      return;
+    }
+
+    final createdAt = unixMsNow();
+    for (var setIndex = 1; setIndex <= setCount; setIndex++) {
+      await into(planPrescribedStrengthSets).insert(
+        PlanPrescribedStrengthSetsCompanion.insert(
+          id: _uuid.v4(),
+          planDayId: planDayId,
+          exerciseCanonical: canonicalExercise,
+          setIndex: setIndex,
+          unit: unit,
+          weight: const Value(null),
+          reps: const Value(null),
+          rir: const Value(null),
+          rawSetString: const Value(null),
+          createdAt: createdAt,
+        ),
+      );
+    }
+  }
+
   Future<RunUpsertOutcome> insertOrUpdateManualRun({
     required String dateString,
     required int startTimeMs,
@@ -3030,6 +3183,9 @@ class AppDb extends _$AppDb {
     required double distanceM,
     required double? avgHr,
     required double? maxHr,
+    String? activityType,
+    String? title,
+    bool? treadmill,
     List<ManualRunSegmentInput> manualSegments =
         const <ManualRunSegmentInput>[],
   }) async {
@@ -3041,6 +3197,13 @@ class AppDb extends _$AppDb {
     final workoutDayId = await createOrGetWorkoutDayByDate(dateString);
     final mappedPlanDayId = await _resolvePlanDayIdForDate(dateString);
     final endTimeMs = startTimeMs + (durationS * 1000);
+    final normalizedActivityType = activityType?.trim();
+    final normalizedTitle = title?.trim();
+    final normalizedTreadmill = _resolveManualRunTreadmill(
+      treadmill: treadmill,
+      activityType: normalizedActivityType,
+      title: normalizedTitle,
+    );
 
     return transaction(() async {
       final existing = await (select(runSessions)
@@ -3061,7 +3224,17 @@ class AppDb extends _$AppDb {
             distanceM: Value(distanceM),
             avgHr: Value(avgHr),
             maxHr: Value(maxHr),
-            treadmill: const Value(false),
+            treadmill: Value(normalizedTreadmill ?? false),
+            title: Value(
+              normalizedTitle == null || normalizedTitle.isEmpty
+                  ? null
+                  : normalizedTitle,
+            ),
+            activityType: Value(
+              normalizedActivityType == null || normalizedActivityType.isEmpty
+                  ? null
+                  : normalizedActivityType,
+            ),
             rawMetricsJson: Value(rawMetricsJson),
             source: 'manual',
             sourcePriority: const Value(10),
@@ -3091,6 +3264,21 @@ class AppDb extends _$AppDb {
         );
       }
 
+      final effectiveTitle = normalizedTitle == null || normalizedTitle.isEmpty
+          ? existing.title
+          : normalizedTitle;
+      final effectiveActivityType =
+          normalizedActivityType == null || normalizedActivityType.isEmpty
+              ? existing.activityType
+              : normalizedActivityType;
+      final effectiveTreadmill = _resolveManualRunTreadmill(
+            treadmill: treadmill,
+            activityType: effectiveActivityType,
+            title: effectiveTitle,
+          ) ??
+          existing.treadmill ??
+          false;
+
       await (update(runSessions)..where((r) => r.id.equals(existing.id))).write(
         RunSessionsCompanion(
           workoutDayId: Value(workoutDayId),
@@ -3101,6 +3289,9 @@ class AppDb extends _$AppDb {
           distanceM: Value(distanceM),
           avgHr: Value(avgHr),
           maxHr: Value(maxHr),
+          treadmill: Value(effectiveTreadmill),
+          title: Value(effectiveTitle),
+          activityType: Value(effectiveActivityType),
           rawMetricsJson: Value(rawMetricsJson),
           source: const Value('manual'),
           sourcePriority: const Value(10),
@@ -3129,6 +3320,9 @@ class AppDb extends _$AppDb {
     required double distanceM,
     required double? avgHr,
     required double? maxHr,
+    String? activityType,
+    String? title,
+    bool? treadmill,
     List<ManualRunSegmentInput> manualSegments =
         const <ManualRunSegmentInput>[],
   }) async {
@@ -3140,6 +3334,13 @@ class AppDb extends _$AppDb {
     final workoutDayId = await createOrGetWorkoutDayByDate(dateString);
     final mappedPlanDayId = await _resolvePlanDayIdForDate(dateString);
     final endTimeMs = startTimeMs + (durationS * 1000);
+    final normalizedActivityType = activityType?.trim();
+    final normalizedTitle = title?.trim();
+    final normalizedTreadmill = _resolveManualRunTreadmill(
+      treadmill: treadmill,
+      activityType: normalizedActivityType,
+      title: normalizedTitle,
+    );
 
     return transaction(() async {
       final existing = await (select(runSessions)
@@ -3160,6 +3361,15 @@ class AppDb extends _$AppDb {
         );
       }
 
+      final effectiveTitle = normalizedTitle == null || normalizedTitle.isEmpty
+          ? existing.title
+          : normalizedTitle;
+      final effectiveActivityType =
+          normalizedActivityType == null || normalizedActivityType.isEmpty
+              ? existing.activityType
+              : normalizedActivityType;
+      final effectiveTreadmill = normalizedTreadmill ?? existing.treadmill;
+
       final wasHighPriority = existing.sourcePriority >= 100;
       if (wasHighPriority) {
         await insertRunOverrideAudit(
@@ -3179,6 +3389,9 @@ class AppDb extends _$AppDb {
             'distance_m': distanceM,
             'avg_hr': avgHr,
             'max_hr': maxHr,
+            'treadmill': effectiveTreadmill,
+            'title': effectiveTitle,
+            'activity_type': effectiveActivityType,
             'source': 'manual',
             'source_priority': 10,
           },
@@ -3198,7 +3411,9 @@ class AppDb extends _$AppDb {
           distanceM: Value(distanceM),
           avgHr: Value(avgHr),
           maxHr: Value(maxHr),
-          treadmill: const Value(false),
+          treadmill: Value(effectiveTreadmill ?? false),
+          title: Value(effectiveTitle),
+          activityType: Value(effectiveActivityType),
           rawMetricsJson: Value(rawMetricsJson),
           source: const Value('manual'),
           sourcePriority: const Value(10),
@@ -3217,6 +3432,25 @@ class AppDb extends _$AppDb {
         preservedGarmin: false,
       );
     });
+  }
+
+  bool? _resolveManualRunTreadmill({
+    bool? treadmill,
+    String? activityType,
+    String? title,
+  }) {
+    if (treadmill != null) {
+      return treadmill;
+    }
+    final activity = (activityType ?? '').trim().toLowerCase();
+    final rawTitle = (title ?? '').trim().toLowerCase();
+    if (activity.contains('treadmill') || rawTitle.contains('treadmill')) {
+      return true;
+    }
+    if (activity.isEmpty && rawTitle.isEmpty) {
+      return null;
+    }
+    return false;
   }
 
   List<ManualRunSegmentInput> _sanitizeManualRunSegments(
@@ -4428,6 +4662,119 @@ class AppDb extends _$AppDb {
   }
 
   _AiParsedPlanImportBundle _parseAiPlanImportBundleText(String text) {
+    final lines = _normalizeAiPlanImportInputLines(text);
+    final candidateTexts = _buildAiPlanImportCandidateTexts(lines);
+    StateError? firstParseError;
+
+    for (final candidate in candidateTexts) {
+      try {
+        return _parseAiPlanImportBundleTextStrict(candidate);
+      } on StateError catch (e) {
+        firstParseError ??= e;
+      }
+    }
+
+    final normalizedText = lines.join('\n');
+    try {
+      return _parseAiPlanImportBundleTextStrict(normalizedText);
+    } on StateError catch (e) {
+      if (_looksLikeAiWeeklyPromptOrWrappedText(lines)) {
+        throw StateError(
+          'Input appears to include the planning prompt or wrapper text before '
+          'the actual AI response. Paste only the model output that starts '
+          'with TEN_WEEK_PLAN_UPDATE_V1 or WEEK_PLAN_V1. Last parse error: '
+          '${firstParseError ?? e}',
+        );
+      }
+      throw firstParseError ?? e;
+    }
+  }
+
+  List<String> _normalizeAiPlanImportInputLines(String text) {
+    final lines = const LineSplitter().convert(text);
+    final normalized = <String>[];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (i == 0 && line.startsWith('\ufeff')) {
+        line = line.substring(1);
+      }
+      if (_isAiPlanMarkdownFenceLine(line.trim())) {
+        continue;
+      }
+      normalized.add(line);
+    }
+    return normalized;
+  }
+
+  bool _isAiPlanMarkdownFenceLine(String trimmed) {
+    if (trimmed.isEmpty) {
+      return false;
+    }
+    return RegExp(r'^`{3,}[a-zA-Z0-9_-]*$').hasMatch(trimmed) ||
+        RegExp(r'^~{3,}[a-zA-Z0-9_-]*$').hasMatch(trimmed);
+  }
+
+  List<String> _buildAiPlanImportCandidateTexts(List<String> lines) {
+    if (lines.isEmpty) {
+      return const <String>[];
+    }
+
+    final tenWeekStarts = <int>[];
+    final weeklyStarts = <int>[];
+    final endMarkers = <int>[];
+    for (var i = 0; i < lines.length; i++) {
+      final trimmed = lines[i].trim();
+      if (trimmed == 'TEN_WEEK_PLAN_UPDATE_V1') {
+        tenWeekStarts.add(i);
+      } else if (trimmed == 'WEEK_PLAN_V1') {
+        weeklyStarts.add(i);
+      }
+      if (trimmed == 'END_PLAN_EXPLANATION_V1' || trimmed == 'END DAY 7') {
+        endMarkers.add(i);
+      }
+    }
+
+    final startsInPriorityOrder = <int>[
+      ...tenWeekStarts.reversed,
+      ...weeklyStarts.reversed,
+    ];
+    final candidates = <String>[];
+    final seenRanges = <String>{};
+
+    void addCandidate(int start, int endInclusive) {
+      if (start < 0 || endInclusive < start || endInclusive >= lines.length) {
+        return;
+      }
+      final rangeKey = '$start:$endInclusive';
+      if (!seenRanges.add(rangeKey)) {
+        return;
+      }
+      candidates.add(lines.sublist(start, endInclusive + 1).join('\n'));
+    }
+
+    for (final start in startsInPriorityOrder) {
+      for (final end in endMarkers) {
+        if (end >= start) {
+          addCandidate(start, end);
+        }
+      }
+      addCandidate(start, lines.length - 1);
+    }
+    return candidates;
+  }
+
+  bool _looksLikeAiWeeklyPromptOrWrappedText(List<String> lines) {
+    if (lines.isEmpty) {
+      return false;
+    }
+    final normalized = lines.join('\n').toLowerCase();
+    return normalized.contains('adaptive athlete weekly plan prompt') ||
+        normalized.contains('=== app_context_v1 ===') ||
+        normalized.contains('fallback text format') ||
+        normalized.contains('workbook-compatible text');
+  }
+
+  _AiParsedPlanImportBundle _parseAiPlanImportBundleTextStrict(String text) {
     final lines = const LineSplitter().convert(text);
     final weeklyLines = <String>[];
     final tenWeekRows = <_AiParsedTenWeekPlanRow>[];
@@ -7890,14 +8237,143 @@ class AppDb extends _$AppDb {
     }
     return '';
   }
+
+  Future<void> finalizePendingLegacyMigration() async {
+    if (kIsWeb || !scope.isUser) {
+      return;
+    }
+
+    final pendingTargetDbName =
+        await _deviceStore.getLegacyMigrationPendingTargetDbName();
+    if (pendingTargetDbName != scope.databaseName) {
+      return;
+    }
+
+    await customSelect('SELECT 1').getSingle();
+
+    final legacyMainFile = await _legacyDatabaseMainFile();
+    if (legacyMainFile == null) {
+      await _deviceStore.completeLegacyMigration(
+        targetDbName: scope.databaseName,
+        migratedUserId: scope.userId,
+      );
+      return;
+    }
+    await _deleteIfExists(legacyMainFile);
+    await _deleteIfExists(File('${legacyMainFile.path}-wal'));
+    await _deleteIfExists(File('${legacyMainFile.path}-shm'));
+    await _deleteIfExists(File('${legacyMainFile.path}-journal'));
+
+    await _deviceStore.completeLegacyMigration(
+      targetDbName: scope.databaseName,
+      migratedUserId: scope.userId,
+    );
+  }
 }
 
-QueryExecutor _openConnection() {
+const _legacySharedDatabaseCandidateNames = <String>[
+  'adaptive_athlete_local.db.sqlite',
+  'adaptive_athlete_local.db',
+];
+
+QueryExecutor _openConnection({
+  required AppStorageScope scope,
+  required DeviceScopedStore deviceStore,
+}) {
   return driftDatabase(
-    name: 'adaptive_athlete_local.db',
+    name: scope.databaseName,
+    native: DriftNativeOptions(
+      databasePath: () async {
+        final docsDirectory = await getApplicationDocumentsDirectory();
+        final targetPath = p.join(docsDirectory.path, scope.databaseName);
+        await _prepareLegacyMigrationIfNeeded(
+          scope: scope,
+          deviceStore: deviceStore,
+          docsDirectory: docsDirectory,
+          targetPath: targetPath,
+        );
+        return targetPath;
+      },
+    ),
     web: DriftWebOptions(
       sqlite3Wasm: Uri.parse('sqlite3.wasm'),
       driftWorker: Uri.parse('drift_worker.js'),
     ),
   );
+}
+
+Future<void> _prepareLegacyMigrationIfNeeded({
+  required AppStorageScope scope,
+  required DeviceScopedStore deviceStore,
+  required Directory docsDirectory,
+  required String targetPath,
+}) async {
+  if (kIsWeb || !scope.isUser) {
+    return;
+  }
+
+  final pendingTargetDbName =
+      await deviceStore.getLegacyMigrationPendingTargetDbName();
+  if (pendingTargetDbName != null &&
+      pendingTargetDbName != scope.databaseName) {
+    return;
+  }
+
+  final targetFile = File(targetPath);
+  if (await targetFile.exists()) {
+    return;
+  }
+
+  final legacyMainFile = await _legacyDatabaseMainFile(
+    docsDirectory: docsDirectory,
+  );
+  if (legacyMainFile == null) {
+    return;
+  }
+
+  await _copyIfExists(legacyMainFile, targetFile);
+  await _copyIfExists(
+    File('${legacyMainFile.path}-wal'),
+    File('${targetFile.path}-wal'),
+  );
+  await _copyIfExists(
+    File('${legacyMainFile.path}-shm'),
+    File('${targetFile.path}-shm'),
+  );
+  await _copyIfExists(
+    File('${legacyMainFile.path}-journal'),
+    File('${targetFile.path}-journal'),
+  );
+
+  await deviceStore.markLegacyMigrationPending(
+    targetDbName: scope.databaseName,
+  );
+}
+
+Future<File?> _legacyDatabaseMainFile({
+  Directory? docsDirectory,
+}) async {
+  final resolvedDirectory =
+      docsDirectory ?? await getApplicationDocumentsDirectory();
+  for (final candidateName in _legacySharedDatabaseCandidateNames) {
+    final candidate = File(p.join(resolvedDirectory.path, candidateName));
+    if (await candidate.exists()) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+Future<void> _copyIfExists(File source, File target) async {
+  if (!await source.exists()) {
+    return;
+  }
+  await target.parent.create(recursive: true);
+  await source.copy(target.path);
+}
+
+Future<void> _deleteIfExists(File file) async {
+  if (await file.exists()) {
+    await file.delete();
+  }
 }

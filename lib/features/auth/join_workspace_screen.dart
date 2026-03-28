@@ -147,7 +147,9 @@ class _JoinWorkspaceScreenState extends ConsumerState<JoinWorkspaceScreen> {
       await workspaceService.setPendingInviteToken(token);
       setState(() {
         _busy = false;
-        _message = 'Sign in to accept this workspace invite.';
+        _message = 'Sign in to accept this workspace invite. '
+            'If you do not have an account yet, use Sign up with the invited '
+            'email and choose your own password.';
       });
       return;
     }
@@ -214,7 +216,7 @@ class _JoinWorkspaceScreenState extends ConsumerState<JoinWorkspaceScreen> {
                           },
                     child: Text(
                       Supabase.instance.client.auth.currentSession == null
-                          ? 'Go to sign in'
+                          ? 'Go to sign in / sign up'
                           : 'Go home',
                     ),
                   ),

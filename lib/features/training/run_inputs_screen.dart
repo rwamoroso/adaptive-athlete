@@ -17,6 +17,8 @@ enum DistanceUnit { miles, kilometers }
 
 enum IntervalSegmentType { interval, rest }
 
+enum _ManualCardioActivity { run, treadmillRun, stairStepper }
+
 class _RunWeeklyMileagePoint {
   const _RunWeeklyMileagePoint({
     required this.weekStartYmd,
@@ -91,6 +93,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   DistanceUnit _distanceUnit = DistanceUnit.miles;
+  _ManualCardioActivity _selectedManualActivity = _ManualCardioActivity.run;
   GarminActivityFilter _activityFilter = GarminActivityFilter.cardioOnly;
   bool _intervalLoggingEnabled = false;
   bool _intervalModeTouched = false;
@@ -122,7 +125,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   @override
   void initState() {
     super.initState();
-    _refreshRunTypeForSelectedDate();
+    _refreshRunTypeForSelectedDate(resetManualActivitySelection: true);
   }
 
   @override
@@ -144,6 +147,116 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         value.contains('fartlek');
   }
 
+  bool _isExplicitNonRunningCardioType(String? raw) {
+    final value = raw?.trim().toLowerCase() ?? '';
+    if (value.isEmpty) {
+      return false;
+    }
+    const keywords = <String>[
+      'stair',
+      'stepper',
+      'bike',
+      'cycle',
+      'cycling',
+      'spin',
+      'row',
+      'rower',
+      'erg',
+      'ellipt',
+      'swim',
+      'pool',
+      'ski',
+      'walk',
+      'hike',
+      'incline',
+      'sled',
+      'rope',
+      'versa',
+      'airdyne',
+      'echo bike',
+      'assault bike',
+    ];
+    return keywords.any(value.contains);
+  }
+
+  bool _isRunningLikeCardioType(String? raw) {
+    final value = raw?.trim().toLowerCase() ?? '';
+    if (value.isEmpty || _isExplicitNonRunningCardioType(value)) {
+      return false;
+    }
+    if (value.contains('run') ||
+        value.contains('jog') ||
+        value.contains('sprint')) {
+      return true;
+    }
+    const runningDescriptors = <String>[
+      'easy',
+      'tempo',
+      'interval',
+      'repeat',
+      'fartlek',
+      'recovery',
+      'long',
+      'threshold',
+      'track',
+      'hill',
+      'stride',
+    ];
+    return runningDescriptors.any(value.contains);
+  }
+
+  bool _isTreadmillCardioType(String? raw) {
+    final value = raw?.trim().toLowerCase() ?? '';
+    return value.contains('treadmill');
+  }
+
+  bool _isStairStepperCardioType(String? raw) {
+    final value = raw?.trim().toLowerCase() ?? '';
+    return value.contains('stair') || value.contains('stepper');
+  }
+
+  _ManualCardioActivity _inferManualCardioActivity({
+    RunSessionWithSegments? editingRun,
+    String? prescribedType,
+  }) {
+    final session = editingRun?.session;
+    if (session?.treadmill == true) {
+      return _ManualCardioActivity.treadmillRun;
+    }
+
+    final candidates = <String?>[
+      session?.title,
+      session?.activityType,
+      prescribedType,
+    ];
+    if (candidates.any(_isTreadmillCardioType)) {
+      return _ManualCardioActivity.treadmillRun;
+    }
+    if (candidates.any(_isStairStepperCardioType)) {
+      return _ManualCardioActivity.stairStepper;
+    }
+    return _ManualCardioActivity.run;
+  }
+
+  String _manualCardioActivityLabel(_ManualCardioActivity activity) {
+    switch (activity) {
+      case _ManualCardioActivity.run:
+        return 'Run';
+      case _ManualCardioActivity.treadmillRun:
+        return 'Treadmill Run';
+      case _ManualCardioActivity.stairStepper:
+        return 'Stairstepper';
+    }
+  }
+
+  bool _manualCardioActivityRequiresDistance(_ManualCardioActivity activity) {
+    return activity != _ManualCardioActivity.stairStepper;
+  }
+
+  bool _manualCardioActivityUsesTreadmill(_ManualCardioActivity activity) {
+    return activity == _ManualCardioActivity.treadmillRun;
+  }
+
   String _formatRunTypeLabel(
     String? raw, {
     bool includeRunSuffix = false,
@@ -163,10 +276,32 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       }
       return '${lower[0].toUpperCase()}${lower.substring(1)}';
     }).join(' ');
-    if (!includeRunSuffix || titleCased.toLowerCase().contains('run')) {
+    if (!includeRunSuffix ||
+        !_isRunningLikeCardioType(trimmed) ||
+        titleCased.toLowerCase().contains('run')) {
       return titleCased;
     }
     return '$titleCased Run';
+  }
+
+  bool _manualEntryRequiresDistance() {
+    return _manualCardioActivityRequiresDistance(_selectedManualActivity);
+  }
+
+  String _manualActivityLabel() {
+    return _manualCardioActivityLabel(_selectedManualActivity);
+  }
+
+  String _loggedActivityTitle(RunSessionWithSegments run) {
+    final title = run.session.title?.trim();
+    if (title != null && title.isNotEmpty) {
+      return title;
+    }
+    final activityType = run.session.activityType?.trim();
+    if (activityType != null && activityType.isNotEmpty) {
+      return activityType;
+    }
+    return 'Cardio Session';
   }
 
   String _distanceUnitLabel() {
@@ -438,7 +573,9 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     );
   }
 
-  Future<void> _refreshRunTypeForSelectedDate() async {
+  Future<void> _refreshRunTypeForSelectedDate({
+    bool resetManualActivitySelection = false,
+  }) async {
     final dateYmd = toYmd(_selectedDate);
     setState(() => _loadingRunType = true);
     try {
@@ -462,6 +599,11 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         _loggedRunsForSelectedDate = detail.runSessions;
         _runMileageSummary = runMileageSummary;
         _loadingRunType = false;
+        if (resetManualActivitySelection) {
+          _selectedManualActivity = _inferManualCardioActivity(
+            prescribedType: runType,
+          );
+        }
         if (!_intervalModeTouched && _isIntervalRunType(runType)) {
           _intervalLoggingEnabled = true;
           _seedDefaultIntervalRowsIfEmpty();
@@ -480,6 +622,9 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         _prescribedRunNotes = null;
         _loggedRunsForSelectedDate = const <RunSessionWithSegments>[];
         _runMileageSummary = _RunMileageCardSummary.empty;
+        if (resetManualActivitySelection) {
+          _selectedManualActivity = _ManualCardioActivity.run;
+        }
       });
     }
   }
@@ -653,7 +798,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     );
     if (picked != null) {
       setState(() => _selectedDate = picked);
-      await _refreshRunTypeForSelectedDate();
+      await _refreshRunTypeForSelectedDate(resetManualActivitySelection: true);
     }
   }
 
@@ -707,6 +852,9 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       _distanceController.clear();
       _maxHrController.clear();
       _avgHrController.clear();
+      _selectedManualActivity = _inferManualCardioActivity(
+        prescribedType: _prescribedRunType,
+      );
       _intervalModeTouched = false;
       _intervalLoggingEnabled = _isIntervalRunType(_prescribedRunType);
       _clearIntervalSegments();
@@ -776,6 +924,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       }
       _avgHrController.text = session.avgHr?.toStringAsFixed(0) ?? '';
       _maxHrController.text = session.maxHr?.toStringAsFixed(0) ?? '';
+      _selectedManualActivity = _inferManualCardioActivity(editingRun: run);
       _intervalModeTouched = true;
       _intervalLoggingEnabled = hasSegments;
       _clearIntervalSegments();
@@ -784,7 +933,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     });
 
     _refreshRunTypeForSelectedDate();
-    _showMessage('Loaded run into form for editing.');
+    _showMessage('Loaded cardio session into form for editing.');
   }
 
   Future<void> _saveManualRun() async {
@@ -804,21 +953,30 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       final parsedDuration = GarminCsvImportService.parseDurationSeconds(
         _durationController.text.trim(),
       );
-      final distanceRaw = double.tryParse(_distanceController.text.trim());
+      final distanceText = _distanceController.text.trim();
+      final distanceRaw =
+          distanceText.isEmpty ? null : double.tryParse(distanceText);
+      final requiresDistance = _manualEntryRequiresDistance();
 
       if (parsedDuration == null || parsedDuration <= 0) {
         _showMessage('Duration must be valid (e.g. 00:45:30).');
         return;
       }
-      if (distanceRaw == null || distanceRaw <= 0) {
-        _showMessage('Distance must be a positive number.');
+      if (distanceRaw != null && distanceRaw <= 0) {
+        _showMessage('Distance must be a positive number when provided.');
+        return;
+      }
+      if (requiresDistance && (distanceRaw == null || distanceRaw <= 0)) {
+        _showMessage('Distance is required for running sessions.');
         return;
       }
 
       durationSeconds = parsedDuration.round();
-      distanceM = _distanceUnit == DistanceUnit.miles
-          ? distanceRaw * GarminCsvImportService.metersPerMile
-          : distanceRaw * 1000;
+      if (distanceRaw != null && distanceRaw > 0) {
+        distanceM = _distanceUnit == DistanceUnit.miles
+            ? distanceRaw * GarminCsvImportService.metersPerMile
+            : distanceRaw * 1000;
+      }
     }
 
     final maxHr = _maxHrController.text.trim().isEmpty
@@ -840,6 +998,9 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     try {
       final db = ref.read(appDbProvider);
       final editingRunSessionId = _editingRunSessionId;
+      final activityLabel = _manualActivityLabel();
+      final treadmill =
+          _manualCardioActivityUsesTreadmill(_selectedManualActivity);
       final outcome = editingRunSessionId == null
           ? await db.insertOrUpdateManualRun(
               dateString: toYmd(_selectedDate),
@@ -848,6 +1009,9 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
               distanceM: distanceM,
               avgHr: avgHr,
               maxHr: maxHr,
+              title: activityLabel,
+              activityType: activityLabel,
+              treadmill: treadmill,
               manualSegments: manualSegments,
             )
           : await db.updateExistingRunFromManualEntry(
@@ -858,6 +1022,9 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
               distanceM: distanceM,
               avgHr: avgHr,
               maxHr: maxHr,
+              title: activityLabel,
+              activityType: activityLabel,
+              treadmill: treadmill,
               manualSegments: manualSegments,
             );
 
@@ -867,7 +1034,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
 
       if (outcome.preservedGarmin) {
         _showMessage(
-            'Garmin data already exists for that run start time. Manual entry was not applied.');
+            'Garmin data already exists for that session start time. Manual entry was not applied.');
       } else {
         final wasEditing = editingRunSessionId != null;
         if (wasEditing) {
@@ -877,9 +1044,9 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         _showMessage(
           _intervalLoggingEnabled
               ? (wasEditing
-                  ? 'Run updated from manual interval entry.'
-                  : 'Manual interval run saved.')
-              : (wasEditing ? 'Run updated.' : 'Manual run saved.'),
+                  ? 'Cardio updated from manual interval entry.'
+                  : 'Manual interval cardio saved.')
+              : (wasEditing ? 'Cardio updated.' : 'Manual cardio saved.'),
         );
       }
     } catch (e) {
@@ -932,10 +1099,10 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   Widget build(BuildContext context) {
     final pageTheme = buildClinicalTheme();
     final runPlanLabel = _loadingRunType
-        ? 'Loading today\'s run...'
+        ? 'Loading today\'s cardio...'
         : (_formatRunTypeLabel(_prescribedRunType, includeRunSuffix: true)
                 .isEmpty
-            ? 'No Prescribed Run'
+            ? 'No Prescribed Cardio'
             : _formatRunTypeLabel(
                 _prescribedRunType,
                 includeRunSuffix: true,
@@ -959,11 +1126,15 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       durationS: todayTotalDurationS,
       distanceM: todayTotalDistanceM,
     );
+    final hasLoggedCardio =
+        _loggedRunsForSelectedDate.isNotEmpty || todayTotalDurationS > 0;
     final todaysRunStatusTitle =
-        todayTotalDistanceM > 0 ? 'Today\'s Run Logged' : 'No Run Logged';
+        hasLoggedCardio ? 'Today\'s Cardio Logged' : 'No Cardio Logged';
     final todaysRunStatusDetail = todayTotalDistanceM > 0
         ? '${(todayTotalDistanceM / 1609.344).toStringAsFixed(1)} Miles @ $todayPace'
-        : null;
+        : (hasLoggedCardio
+            ? 'Duration: ${_formatSecondsAsHms(todayTotalDurationS)}'
+            : null);
     final preview = _intervalLoggingEnabled
         ? _previewSegments()
         : const _IntervalSegmentPreview(
@@ -985,7 +1156,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     return Theme(
       data: pageTheme,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Run')),
+        appBar: AppBar(title: const Text('Cardio')),
         body: Stack(
           children: [
             const Positioned.fill(child: _RunInputsPageBackground()),
@@ -1041,7 +1212,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Run Prescription',
+                        'Cardio Prescription',
                         style: pageTheme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -1049,17 +1220,20 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                       const SizedBox(height: 4),
                       if (_loadingRunType)
                         Text(
-                          'Loading run prescription...',
+                          'Loading cardio prescription...',
                           style: pageTheme.textTheme.bodySmall,
                         )
                       else if ((_prescribedRunType ?? '').trim().isEmpty)
                         Text(
-                          'No prescribed run for ${toYmd(_selectedDate)}.',
+                          'No prescribed cardio for ${toYmd(_selectedDate)}.',
                           style: pageTheme.textTheme.bodySmall,
                         )
                       else ...[
                         Text(
-                          _formatRunTypeLabel(_prescribedRunType),
+                          _formatRunTypeLabel(
+                            _prescribedRunType,
+                            includeRunSuffix: true,
+                          ),
                           style: pageTheme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w600,
                             fontSize: 12.5,
@@ -1069,7 +1243,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                         const SizedBox(height: 2),
                         Text(
                           'Duration: ${(_prescribedDurationText ?? '').trim().isEmpty ? 'unknown' : _prescribedDurationText!.trim()}'
-                          ' | Pace: ${(_prescribedTargetPace ?? '').trim().isEmpty ? 'unknown' : _prescribedTargetPace!.trim()}',
+                          ' | Pace / Speed: ${(_prescribedTargetPace ?? '').trim().isEmpty ? 'unknown' : _prescribedTargetPace!.trim()}',
                           style: pageTheme.textTheme.bodySmall?.copyWith(
                             fontSize: 11.5,
                             height: 1.15,
@@ -1104,14 +1278,14 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const SectionHeader(text: 'Capture Run'),
+                const SectionHeader(text: 'Capture Cardio'),
                 const SizedBox(height: 8),
                 GlassCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Enter Your Run',
+                        'Enter Your Cardio Session',
                         style:
                             Theme.of(context).textTheme.titleMedium?.copyWith(
                                   color: Colors.white,
@@ -1137,11 +1311,11 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               Text(
-                                'Editing existing run: ${_formatRunStartTime(editingRun.session.startTime)}',
+                                'Editing existing session: ${_formatRunStartTime(editingRun.session.startTime)}',
                               ),
                               OutlinedButton(
                                 onPressed: _startNewManualEntry,
-                                child: const Text('New Run Instead'),
+                                child: const Text('New Entry Instead'),
                               ),
                             ],
                           ),
@@ -1168,20 +1342,49 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                               child: const Text('Pick Time')),
                         ],
                       ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Activity Performed',
+                        style: pageTheme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _ManualCardioActivity.values.map((activity) {
+                          return ChoiceChip(
+                            label: Text(_manualCardioActivityLabel(activity)),
+                            selected: _selectedManualActivity == activity,
+                            onSelected: (_) {
+                              setState(
+                                  () => _selectedManualActivity = activity);
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _manualEntryRequiresDistance()
+                            ? 'Distance is required for running entries.'
+                            : 'Distance is optional for stair stepper sessions.',
+                        style: pageTheme.textTheme.bodySmall,
+                      ),
                       const SizedBox(height: 8),
                       if (_loadingRunType)
-                        const Text('Checking prescribed run type...')
+                        const Text('Checking prescribed cardio...')
                       else if (_prescribedRunType != null)
                         Text(
-                          'Prescribed run type: ${_formatRunTypeLabel(_prescribedRunType)}',
+                          'Prescribed cardio type: ${_formatRunTypeLabel(_prescribedRunType, includeRunSuffix: true)}',
                         ),
                       const SizedBox(height: 6),
                       SwitchListTile.adaptive(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Interval Run Logging'),
+                        title: const Text('Interval / Segment Logging'),
                         subtitle: Text(
                           _isIntervalRunType(_prescribedRunType)
-                              ? 'Interval day detected. Log each work/rest segment.'
+                              ? 'Interval-style cardio detected. Log each work/rest segment.'
                               : 'Enable to log each interval and rest segment.',
                         ),
                         value: _intervalLoggingEnabled,
@@ -1377,7 +1580,12 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                         TextField(
                           controller: _distanceController,
                           decoration: InputDecoration(
-                            labelText: 'Distance (${_distanceUnitLabel()})',
+                            labelText: _manualEntryRequiresDistance()
+                                ? 'Distance (${_distanceUnitLabel()})'
+                                : 'Distance (${_distanceUnitLabel()}, optional)',
+                            helperText: _manualEntryRequiresDistance()
+                                ? null
+                                : 'Leave blank for duration-based cardio like stair stepper.',
                           ),
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
@@ -1404,8 +1612,8 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                         onPressed: _savingManual ? null : _saveManualRun,
                         child: Text(
                           _editingRunSessionId == null
-                              ? 'Save Manual Run'
-                              : 'Update Run',
+                              ? 'Save Manual Cardio'
+                              : 'Update Cardio',
                         ),
                       ),
                     ],
@@ -1413,7 +1621,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                 ),
                 const SizedBox(height: 16),
                 SectionHeader(
-                  text: 'Logged Runs (${toYmd(_selectedDate)})',
+                  text: 'Logged Cardio (${toYmd(_selectedDate)})',
                   trailing: _loggedRunsForSelectedDate.isEmpty
                       ? null
                       : Text(
@@ -1427,9 +1635,9 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (_loadingRunType)
-                        const Text('Loading runs...')
+                        const Text('Loading cardio sessions...')
                       else if (_loggedRunsForSelectedDate.isEmpty)
-                        const Text('No logged runs for this date yet.')
+                        const Text('No logged cardio for this date yet.')
                       else
                         ..._loggedRunsForSelectedDate.map((run) {
                           final session = run.session;
@@ -1467,15 +1675,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        (session.title?.trim().isNotEmpty ??
-                                                false)
-                                            ? session.title!.trim()
-                                            : ((session.activityType
-                                                        ?.trim()
-                                                        .isNotEmpty ??
-                                                    false)
-                                                ? session.activityType!.trim()
-                                                : 'Run'),
+                                        _loggedActivityTitle(run),
                                         style: pageTheme.textTheme.titleSmall
                                             ?.copyWith(
                                           fontWeight: FontWeight.w700,

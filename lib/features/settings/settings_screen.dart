@@ -294,7 +294,6 @@ class SettingsScreen extends ConsumerWidget {
                       ? null
                       : () async {
                           await Supabase.instance.client.auth.signOut();
-                          await ref.read(appDbProvider).clearAppContextState();
                           ref.invalidate(activeWorkspaceContextProvider);
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -422,10 +421,18 @@ class _WorkspaceInviteCardState extends ConsumerState<_WorkspaceInviteCard> {
               .toList(),
         ),
         const SizedBox(height: 8),
+        Text(
+          'Creates a shareable invite link and copies it to your clipboard. '
+          'It does not send an email or create a password for the new user.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
         SizedBox(
           width: double.infinity,
           child: PrimaryPillButton(
-            text: _submitting ? 'Creating invite...' : 'Create invite link',
+            text: _submitting
+                ? 'Creating invite...'
+                : 'Create & copy invite link',
             variant: PillButtonVariant.outlined,
             onPressed: _submitting
                 ? null
@@ -473,7 +480,8 @@ class _WorkspaceInviteCardState extends ConsumerState<_WorkspaceInviteCard> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            'Invite link copied: ${invite.deepLink}',
+                            'Invite link copied. Share it with ${invite.email}; '
+                            'they will create their own password after opening it.',
                           ),
                         ),
                       );

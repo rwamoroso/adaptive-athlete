@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import app_links
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -7,6 +8,9 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    if let url = AppLinks.shared.getLink(launchOptions: launchOptions) {
+      AppLinks.shared.handleLink(url: url)
+    }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 

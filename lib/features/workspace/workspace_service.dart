@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/utils/device_scoped_store.dart';
 import '../../db/app_db.dart';
 import 'workspace_models.dart';
 
@@ -9,10 +10,12 @@ class WorkspaceService {
   WorkspaceService({
     required this.db,
     required this.client,
+    required this.deviceStore,
   });
 
   final AppDb db;
   final SupabaseClient client;
+  final DeviceScopedStore deviceStore;
 
   Future<ActiveWorkspaceContext?> bootstrapAndGetContext() async {
     final user = client.auth.currentUser;
@@ -347,7 +350,7 @@ class WorkspaceService {
       params: {'p_token': token},
     );
     final response = _asMap(responseRaw);
-    await db.setPendingInviteToken(null);
+    await deviceStore.setPendingInviteToken(null);
     await bootstrapAndGetContext();
     return InviteAcceptResult(
       workspaceId: _requiredString(response, 'workspace_id'),
@@ -375,12 +378,11 @@ class WorkspaceService {
   }
 
   Future<String?> getPendingInviteToken() async {
-    final state = await db.getAppContextStateRow();
-    return state?.pendingInviteToken;
+    return deviceStore.getPendingInviteToken();
   }
 
   Future<void> setPendingInviteToken(String? token) {
-    return db.setPendingInviteToken(token);
+    return deviceStore.setPendingInviteToken(token);
   }
 
   List<WorkspaceSummary> _parseWorkspaces(dynamic value) {

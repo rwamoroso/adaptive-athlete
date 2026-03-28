@@ -130,6 +130,16 @@ class ExerciseSubstitutionService {
     return values;
   }
 
+  Future<List<String>> allKnownExerciseCanonicals() async {
+    final fromDb = await _allKnownExerciseCanonicalsFromDb();
+    final combined = <String>{
+      ..._profiles.keys,
+      ...fromDb,
+    }.map(ExerciseNormalizer.normalize).toList()
+      ..sort();
+    return combined;
+  }
+
   Future<List<SubstitutionCandidate>> suggestAlternatives({
     required String prescribedExerciseCanonical,
     required List<PlannedStrengthSetView> prescribedSets,

@@ -149,6 +149,158 @@ class _WorkoutDayDetailScreenState
     return 'Unknown';
   }
 
+  bool _isExplicitNonRunningCardioType(String? raw) {
+    final value = (raw ?? '').trim().toLowerCase();
+    if (value.isEmpty) {
+      return false;
+    }
+    const keywords = <String>[
+      'stair',
+      'stepper',
+      'bike',
+      'cycle',
+      'cycling',
+      'spin',
+      'row',
+      'rower',
+      'erg',
+      'ellipt',
+      'swim',
+      'pool',
+      'ski',
+      'walk',
+      'hike',
+      'incline',
+      'sled',
+      'rope',
+      'versa',
+      'airdyne',
+      'echo bike',
+      'assault bike',
+    ];
+    return keywords.any(value.contains);
+  }
+
+  bool _isRunningLikeCardioType(String? raw) {
+    final value = (raw ?? '').trim().toLowerCase();
+    if (value.isEmpty || _isExplicitNonRunningCardioType(value)) {
+      return false;
+    }
+    if (value.contains('run') ||
+        value.contains('jog') ||
+        value.contains('sprint')) {
+      return true;
+    }
+    const runningDescriptors = <String>[
+      'easy',
+      'tempo',
+      'interval',
+      'repeat',
+      'fartlek',
+      'recovery',
+      'long',
+      'threshold',
+      'track',
+      'hill',
+      'stride',
+    ];
+    return runningDescriptors.any(value.contains);
+  }
+
+  String _formatCardioTypeLabel(
+    String? raw, {
+    bool includeRunSuffix = false,
+  }) {
+    final trimmed = (raw ?? '').trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final titleCased = trimmed
+        .replaceAll(RegExp(r'[_-]+'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .map((part) {
+      final lower = part.toLowerCase();
+      if (lower.length == 1) {
+        return lower.toUpperCase();
+      }
+      return '${lower[0].toUpperCase()}${lower.substring(1)}';
+    }).join(' ');
+    if (includeRunSuffix &&
+        _isRunningLikeCardioType(trimmed) &&
+        !titleCased.toLowerCase().contains('run')) {
+      return '$titleCased Run';
+    }
+    return titleCased;
+  }
+
+  bool _hasCardioPrescription(PrescribedRunPlan? plan) {
+    if (plan == null) {
+      return false;
+    }
+    return <String?>[
+      plan.runType,
+      plan.durationText,
+      plan.targetPace,
+      plan.effortHrGuardrails,
+      plan.notes,
+    ].any((value) => (value ?? '').trim().isNotEmpty);
+  }
+
+  String _cardioSectionTitle(PrescribedRunPlan? plan) {
+    final type = _formatCardioTypeLabel(
+      plan?.runType,
+      includeRunSuffix: true,
+    );
+    return type.isEmpty ? 'Cardio' : type;
+  }
+
+  String _cardioPrescriptionSummary(PrescribedRunPlan? plan) {
+    if (!_hasCardioPrescription(plan)) {
+      return 'No prescribed cardio linked.';
+    }
+    final parts = <String>[];
+    final type = _formatCardioTypeLabel(
+      plan?.runType,
+      includeRunSuffix: true,
+    );
+    if (type.isNotEmpty) {
+      parts.add('Type: $type');
+    }
+    final duration = (plan?.durationText ?? '').trim();
+    if (duration.isNotEmpty) {
+      parts.add('Duration: $duration');
+    }
+    final pace = (plan?.targetPace ?? '').trim();
+    if (pace.isNotEmpty) {
+      parts.add('Pace / Speed: $pace');
+    }
+    final effort = (plan?.effortHrGuardrails ?? '').trim();
+    if (effort.isNotEmpty) {
+      parts.add('Effort / HR: $effort');
+    }
+    final notes = (plan?.notes ?? '').trim();
+    if (notes.isNotEmpty) {
+      parts.add('Notes: $notes');
+    }
+    if (parts.isEmpty) {
+      return 'No prescribed cardio linked.';
+    }
+    return 'Cardio Prescription | ${parts.join(' | ')}';
+  }
+
+  String _cardioSessionTitle(RunSessionWithSegments run) {
+    final title = run.session.title?.trim();
+    if (title != null && title.isNotEmpty) {
+      return title;
+    }
+    final activityType = run.session.activityType?.trim();
+    if (activityType != null && activityType.isNotEmpty) {
+      return activityType;
+    }
+    return 'Cardio Session';
+  }
+
   String _setKey(String exercise, int setIndex) => '$exercise::$setIndex';
 
   bool _needsSetIndexNormalization(List<PlannedStrengthSetView> sets) {
@@ -234,25 +386,18 @@ class _WorkoutDayDetailScreenState
     }
   }
 
-  Future<void> _addCustomExercise({
+  Future<void> _addExerciseToSplit({
     required String exerciseCanonical,
     required int initialSetCount,
   }) async {
     setState(() => _addingExercise = true);
     try {
       final db = ref.read(appDbProvider);
-      for (var setIndex = 1; setIndex <= initialSetCount; setIndex++) {
-        await db.upsertActualStrengthSetForDate(
-          dateYmd: widget.date,
-          exerciseCanonical: exerciseCanonical,
-          prescribedExerciseCanonical: exerciseCanonical,
-          setIndex: setIndex,
-          weight: 0,
-          reps: 0,
-          rir: 0,
-          source: 'manual_custom_exercise',
-        );
-      }
+      await db.addPlanPrescribedStrengthExerciseForDate(
+        dateYmd: widget.date,
+        exerciseCanonical: exerciseCanonical,
+        setCount: initialSetCount,
+      );
       if (!mounted) {
         return;
       }
@@ -261,7 +406,7 @@ class _WorkoutDayDetailScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Added $exerciseCanonical with $initialSetCount set${initialSetCount == 1 ? '' : 's'}.',
+            'Added $exerciseCanonical to this split with $initialSetCount set${initialSetCount == 1 ? '' : 's'}.',
           ),
         ),
       );
@@ -271,7 +416,7 @@ class _WorkoutDayDetailScreenState
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to add exercise: $e')),
+        SnackBar(content: Text('Failed to add exercise to split: $e')),
       );
     } finally {
       if (mounted) {
@@ -281,84 +426,81 @@ class _WorkoutDayDetailScreenState
   }
 
   Future<void> _promptAddExercise(WorkoutDayDetail detail) async {
-    final nameController = TextEditingController();
-    final setsController = TextEditingController(text: '1');
-
-    final draft = await showDialog<_AddExerciseDraft>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Exercise'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              autofocus: true,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Exercise Name',
-                hintText: 'Example: Kneeling Leg Curl',
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: setsController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Initial Set Count',
-                hintText: '1-10',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+    var workingDetail = detail;
+    if (workingDetail.planDayId == null) {
+      setState(() => _addingExercise = true);
+      try {
+        await ref.read(appDbProvider).ensurePlanDayForDate(widget.date);
+        workingDetail = await _loadDetail();
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Started a split plan for this day.'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(
-              _AddExerciseDraft(
-                exerciseName: nameController.text,
-                initialSetCountRaw: setsController.text,
-              ),
-            ),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-
-    if (draft == null) {
-      return;
-    }
-    final rawName = draft.exerciseName.trim();
-    if (rawName.isEmpty) {
-      if (!mounted) {
+        );
+        _refreshDetail();
+      } catch (e) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to start a split plan: $e')),
+        );
         return;
+      } finally {
+        if (mounted) {
+          setState(() => _addingExercise = false);
+        }
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Exercise name is required.')),
-      );
-      return;
     }
 
-    final initialSetCount = int.tryParse(draft.initialSetCountRaw.trim());
-    if (initialSetCount == null ||
-        initialSetCount < 1 ||
-        initialSetCount > 10) {
+    final service = ref.read(exerciseSubstitutionServiceProvider);
+    final knownExercises = await service.allKnownExerciseCanonicals();
+    if (!mounted) {
+      return;
+    }
+    final existingExercises = workingDetail.groups
+        .map((group) => ExerciseNormalizer.normalize(group.exercise))
+        .toSet();
+    final availableExercises = knownExercises
+        .where(
+          (exercise) => !existingExercises.contains(
+            ExerciseNormalizer.normalize(exercise),
+          ),
+        )
+        .toList(growable: false);
+    if (availableExercises.isEmpty) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Initial set count must be between 1 and 10.')),
+          content:
+              Text('No additional exercises are available for this split.'),
+        ),
       );
       return;
     }
 
-    final exerciseCanonical = ExerciseNormalizer.normalize(rawName);
-    final exists = detail.groups.any((g) => g.exercise == exerciseCanonical);
+    final selection = await showModalBottomSheet<_AddExerciseSelectionResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (context) => _AddExercisePickerSheet(
+        exercises: availableExercises,
+      ),
+    );
+    if (selection == null) {
+      return;
+    }
+
+    final exerciseCanonical =
+        ExerciseNormalizer.normalize(selection.exerciseCanonical);
+    final exists =
+        workingDetail.groups.any((g) => g.exercise == exerciseCanonical);
     if (exists) {
       _expandedByExercise[exerciseCanonical] = true;
       _pendingScrollExercise = exerciseCanonical;
@@ -374,9 +516,9 @@ class _WorkoutDayDetailScreenState
       return;
     }
 
-    await _addCustomExercise(
+    await _addExerciseToSplit(
       exerciseCanonical: exerciseCanonical,
-      initialSetCount: initialSetCount,
+      initialSetCount: selection.initialSetCount,
     );
   }
 
@@ -791,10 +933,8 @@ class _WorkoutDayDetailScreenState
                     (detail.prescribedRun?.liftFocus ?? '').trim().isEmpty
                         ? 'Split'
                         : detail.prescribedRun!.liftFocus!.trim();
-                final runHeaderTitle =
-                    (detail.prescribedRun?.runType ?? '').trim().isEmpty
-                        ? 'Runs'
-                        : detail.prescribedRun!.runType!.trim();
+                final cardioHeaderTitle =
+                    _cardioSectionTitle(detail.prescribedRun);
 
                 return ListView(
                   controller: _scrollController,
@@ -824,20 +964,18 @@ class _WorkoutDayDetailScreenState
                       ),
                     ),
                     const SizedBox(height: 16),
-                    SectionHeader(text: runHeaderTitle),
+                    SectionHeader(text: cardioHeaderTitle),
                     const SizedBox(height: 8),
                     GlassCard(
                       child: Text(
-                        detail.prescribedRun?.runType == null
-                            ? 'No prescribed run linked.'
-                            : 'Prescribed Run: ${detail.prescribedRun?.runType} | '
-                                'Duration: ${detail.prescribedRun?.durationText ?? 'unknown'} | '
-                                'Pace: ${detail.prescribedRun?.targetPace ?? 'unknown'}',
+                        _cardioPrescriptionSummary(detail.prescribedRun),
                       ),
                     ),
                     const SizedBox(height: 8),
                     if (detail.runSessions.isEmpty)
-                      const GlassCard(child: Text('No runs for this date.'))
+                      const GlassCard(
+                        child: Text('No cardio sessions for this date.'),
+                      )
                     else
                       ...detail.runSessions.map(
                         (run) {
@@ -845,9 +983,7 @@ class _WorkoutDayDetailScreenState
                               run.session.rawMetricsJson);
                           return GlassCard(
                             child: ListTile(
-                              title: Text(run.session.title ??
-                                  run.session.activityType ??
-                                  'Run'),
+                              title: Text(_cardioSessionTitle(run)),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -886,7 +1022,8 @@ class _WorkoutDayDetailScreenState
                             ? null
                             : () => _promptAddExercise(detail),
                         child: Text(
-                            _addingExercise ? 'Adding...' : 'Add Exercise'),
+                          _addingExercise ? 'Adding...' : 'Add To Split',
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1192,7 +1329,7 @@ class _WorkoutDayDetailScreenState
                             ),
                           const SizedBox(height: 12),
                           const Text(
-                            'Run Override Audit',
+                            'Cardio Override Audit',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                           if (detail.runOverrideAudits.isEmpty)
@@ -1253,14 +1390,14 @@ class _SubstitutionSelectionResult {
   final bool clear;
 }
 
-class _AddExerciseDraft {
-  const _AddExerciseDraft({
-    required this.exerciseName,
-    required this.initialSetCountRaw,
+class _AddExerciseSelectionResult {
+  const _AddExerciseSelectionResult({
+    required this.exerciseCanonical,
+    required this.initialSetCount,
   });
 
-  final String exerciseName;
-  final String initialSetCountRaw;
+  final String exerciseCanonical;
+  final int initialSetCount;
 }
 
 class _WorkoutDetailPageBackground extends StatelessWidget {
@@ -1526,6 +1663,170 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
       case SubstitutionTier.weak:
         return 'Weak';
     }
+  }
+}
+
+class _AddExercisePickerSheet extends StatefulWidget {
+  const _AddExercisePickerSheet({
+    required this.exercises,
+  });
+
+  final List<String> exercises;
+
+  @override
+  State<_AddExercisePickerSheet> createState() =>
+      _AddExercisePickerSheetState();
+}
+
+class _AddExercisePickerSheetState extends State<_AddExercisePickerSheet> {
+  String _query = '';
+  String? _selectedExercise;
+  String? _setCountError;
+  final TextEditingController _setCountController =
+      TextEditingController(text: '1');
+
+  @override
+  void dispose() {
+    _setCountController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sheetTheme = buildClinicalTheme();
+    final queryRaw = _query.trim().toLowerCase();
+    final normalizedQuery = queryRaw.isEmpty
+        ? ''
+        : ExerciseNormalizer.normalize(queryRaw).toLowerCase();
+    final filtered = widget.exercises.where((exercise) {
+      if (queryRaw.isEmpty) {
+        return true;
+      }
+      final name = exercise.toLowerCase();
+      return name.contains(queryRaw) || name.contains(normalizedQuery);
+    }).toList();
+
+    return Theme(
+      data: sheetTheme,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 12,
+            right: 12,
+            top: 8,
+            bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: GlassCard(
+            radius: 22,
+            padding: const EdgeInsets.all(14),
+            tintColor: sheetTheme.colorScheme.surface.withValues(alpha: 0.72),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Add Exercise To Split',
+                  style: sheetTheme.textTheme.titleLarge,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Pick an exercise to add as an additional prescribed split movement.',
+                  style: sheetTheme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: const InputDecoration(
+                    labelText: 'Search exercises',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color:
+                          sheetTheme.colorScheme.outline.withValues(alpha: 0.9),
+                    ),
+                    color: Colors.white.withValues(alpha: 0.03),
+                  ),
+                  child: SizedBox(
+                    height: 320,
+                    child: filtered.isEmpty
+                        ? const Center(child: Text('No exercises found.'))
+                        : RadioGroup<String>(
+                            groupValue: _selectedExercise,
+                            onChanged: (value) => setState(() {
+                              _selectedExercise = value;
+                            }),
+                            child: ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final exercise = filtered[index];
+                                return RadioListTile<String>(
+                                  value: exercise,
+                                  title: Text(exercise),
+                                );
+                              },
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _setCountController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Initial Set Count',
+                    hintText: '1-10',
+                    errorText: _setCountError,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: _selectedExercise == null
+                          ? null
+                          : () {
+                              final setCount =
+                                  int.tryParse(_setCountController.text.trim());
+                              if (setCount == null ||
+                                  setCount < 1 ||
+                                  setCount > 10) {
+                                setState(() {
+                                  _setCountError =
+                                      'Set count must be between 1 and 10.';
+                                });
+                                return;
+                              }
+                              Navigator.of(context).pop(
+                                _AddExerciseSelectionResult(
+                                  exerciseCanonical: _selectedExercise!,
+                                  initialSetCount: setCount,
+                                ),
+                              );
+                            },
+                      child: const Text('Add To Split'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
