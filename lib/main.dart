@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/supabase_config.dart';
 import 'core/utils/app_providers.dart';
 import 'core/utils/go_router_refresh_stream.dart';
+import 'core/utils/supabase_session_storage.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/auth/join_workspace_screen.dart';
 import 'features/auth/reset_password_screen.dart';
@@ -77,6 +78,14 @@ Future<void> main() async {
       await Supabase.initialize(
         url: SupabaseConfig.url,
         anonKey: SupabaseConfig.anonKey,
+        authOptions: FlutterAuthClientOptions(
+          localStorage: ResilientSupabaseLocalStorage(
+            delegate: SharedPreferencesLocalStorage(
+              persistSessionKey:
+                  'sb-${Uri.parse(SupabaseConfig.url).host.split(".").first}-auth-token',
+            ),
+          ),
+        ),
       );
       initialized = true;
     }
@@ -330,6 +339,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           _refreshScopedStorage();
           _scheduleSyncStatusReset();
         }
+      }, onError: (Object error, StackTrace stackTrace) {
+        debugPrint('Auth state stream ignored auth error: $error');
       });
 
       if (Supabase.instance.client.auth.currentSession != null) {
