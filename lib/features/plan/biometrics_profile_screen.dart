@@ -211,7 +211,7 @@ class _BiometricsProfileScreenState extends State<BiometricsProfileScreen> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  initialValue: _sex,
+                  value: _sex,
                   decoration: const InputDecoration(labelText: 'Sex'),
                   items: kBiometricsSexOptions
                       .map(
@@ -277,7 +277,7 @@ class _BiometricsProfileScreenState extends State<BiometricsProfileScreen> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  initialValue: _buildType,
+                  value: _buildType,
                   decoration: const InputDecoration(labelText: 'Build Type'),
                   items: kBiometricsBuildTypes
                       .map(

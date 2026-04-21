@@ -19,6 +19,21 @@ Priorities:
 5. Respect contraindications / pain triggers.
 6. Prefer optimal, yet sustainable progression.
 
+Importer compatibility gate (required):
+- In text mode, the output must start with `WEEK_PLAN_V1` (exactly, no `===` wrapper).
+- Include `WEEK_START: YYYY-MM-DD` and `WEEK_END: YYYY-MM-DD` before any `DAY` block.
+- `SESSION_TYPE` must be one of:
+  - `push|pull|legs|upper|lower|full_body|hybrid|conditioning|rest|unknown`
+- Use only schema keys defined in this template.
+- Do not output day-level keys named `DATE`, `STRENGTH`, or `NOTES`.
+- Strength prescriptions must be emitted as `STRENGTH_SET` rows (one set per row), not bullet lists.
+- On split strength days (`push`, `pull`, `legs`, `upper`, `lower`, `full_body`, `hybrid`), include at least 4 unique prescribed strength exercises.
+- Every `STRENGTH_SET` must include a non-empty `weight` value:
+  - use numeric values for `unit=lb` or `unit=kg`
+  - use `weight=bw` for bodyweight sets (`unit=bw`)
+- Include `ALT` rows for every prescribed strength exercise (except `run_only` split with no strength sets).
+- If output fails this schema, regenerate until it passes before returning a final answer.
+
 Definitions:
 - "Adequate alternative" means the substitute still matches the intended movement pattern and muscle focus, and supports the prescribed rep/RIR intent.
 - If no strong alternative exists, provide weaker alternatives but mark them clearly and explain the compromise.
@@ -138,6 +153,9 @@ Rules for strength rows (required):
 - If an exercise has 4 working sets, output 4 separate `STRENGTH_SET` lines with `set=1`, `set=2`, `set=3`, and `set=4`.
 - Do not collapse multiple sets into one line.
 - If weight/reps/RIR differ by set, reflect the actual per-set target on each line.
+- `weight` is required on every `STRENGTH_SET` row:
+  - numeric for `unit=lb|kg`
+  - literal `bw` for `unit=bw`
 
 Rules for cardio fields (required):
 - The `RUN_*` lines are the cardio prescription fields used by the app parser, even when the modality is not running.
@@ -153,6 +171,11 @@ Rules for 10-week updates (required when `TEN_WEEK_PLAN_UPDATE_V1` is included):
 - Align the weekly plan you generate with the current 10-week phase and progression intent.
 - Include a specific `strength_progression_expectation` for each week (for example load, rep, volume, or RIR progression expectation).
 - Use `deload=yes` for recovery/taper weeks when appropriate.
+- If `Propagate Long-term Changes` in `APP_CONTEXT_V1` is `yes`:
+  - include `TEN_WEEK_PLAN_UPDATE_V1`
+  - include exactly 10 `TEN_WEEK_ROW` lines
+  - first `TEN_WEEK_ROW.week_start` must equal `Week Start` in `APP_CONTEXT_V1`
+  - rows must proceed in contiguous 7-day increments
 
 Weekly split rules (required):
 - If `Requested Split Type` is `run_only`, generate a run-focused week and do not include strength prescriptions or ALT rows.

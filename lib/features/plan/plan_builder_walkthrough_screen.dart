@@ -609,7 +609,7 @@ class _PlanBuilderWalkthroughScreenState
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           key: ValueKey<String>('goal_${_draft.primaryGoal}'),
-          initialValue: _draft.primaryGoal,
+          value: _draft.primaryGoal,
           dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
           decoration: _walkthroughDropdownDecoration(context, 'Primary Goal'),
           items: const [
@@ -799,7 +799,7 @@ class _PlanBuilderWalkthroughScreenState
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           key: ValueKey<String>('experience_${_draft.experienceLevel}'),
-          initialValue: _draft.experienceLevel,
+          value: _draft.experienceLevel,
           dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
           decoration:
               _walkthroughDropdownDecoration(context, 'Experience Level'),
@@ -862,7 +862,7 @@ class _PlanBuilderWalkthroughScreenState
         const SizedBox(height: 8),
         DropdownButtonFormField<SplitType>(
           key: ValueKey<SplitType>(_draft.splitType),
-          initialValue: _draft.splitType,
+          value: _draft.splitType,
           dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
           decoration:
               _walkthroughDropdownDecoration(context, 'Weekly Split Type'),
@@ -1037,7 +1037,7 @@ class _PlanBuilderWalkthroughScreenState
               const SizedBox(height: 8),
               DropdownButtonFormField<WeeklyPlanModifier>(
                 key: ValueKey<WeeklyPlanModifier>(_draft.weeklyModifier),
-                initialValue: _draft.weeklyModifier,
+                value: _draft.weeklyModifier,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration:
@@ -1241,10 +1241,18 @@ class _PlanBuilderWalkthroughScreenState
       initialDate: _draft.weekStartDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
+      // ExcludeSemantics prevents the dialog's nodes from entering the Flutter
+      // Windows accessibility bridge during the open/close animation, which
+      // otherwise causes an AX-tree CHECK failure that crashes the process.
+      builder: (ctx, child) => ExcludeSemantics(child: child!),
     );
-    if (selected == null) {
-      return;
-    }
+    if (selected == null || !mounted) return;
+    // The Flutter Windows accessibility bridge enters a bad state during the
+    // dialog dismiss animation and crashes if setState is called before it
+    // fully recovers.  Waiting 400 ms clears the ~300 ms Material animation
+    // plus a buffer for bridge recovery.
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
     _updateDraft(_draft.copyWith(weekStartDate: selected));
   }
 

@@ -1,3 +1,6 @@
+# Claude Code (contains secrets)
+.claude/settings.json
+
 # Miscellaneous
 *.class
 *.log

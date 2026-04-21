@@ -737,6 +737,8 @@ class AppDb extends _$AppDb {
           }
         },
         beforeOpen: (details) async {
+          await customStatement('PRAGMA journal_mode=WAL');
+          await customStatement('PRAGMA busy_timeout=15000');
           await _dedupeWorkoutDaysByDateAndRepointReferences();
           await _ensureWorkoutDaysDateUniqueIndex();
           await _ensurePlanDaysSessionTypeColumn();
@@ -3103,6 +3105,31 @@ class AppDb extends _$AppDb {
     );
   }
 
+  Future<String?> getLatestWeeklyPlanResponse({
+    required String workspaceId,
+    required String athleteProfileId,
+  }) async {
+    final rows = await (select(weeklyPlanBuildRequests)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) &
+              t.athleteProfileId.equals(athleteProfileId) &
+              t.success.equals(true) &
+              t.responsePayloadJson.isNotNull())
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+          ])
+          ..limit(20))
+        .get();
+    for (final row in rows) {
+      final text = (row.responsePayloadJson ?? '').trim();
+      if (text.isNotEmpty) {
+        return text;
+      }
+    }
+    return null;
+  }
+
   Future<void> insertPrescribedStrengthSet({
     required String workoutDayId,
     required String exercise,
@@ -4791,6 +4818,11 @@ class AppDb extends _$AppDb {
       final trimmed = line.trim();
       final lineNo = i + 1;
 
+      if (!sawWeekHeader && trimmed.toUpperCase().startsWith('RULE:')) {
+        // Ignore directive leakage from prompt text; only parse data rows.
+        continue;
+      }
+
       if (sawWeekHeader) {
         weeklyLines.add(line);
         continue;
@@ -4985,6 +5017,10 @@ class AppDb extends _$AppDb {
       final trimmed = line.trim();
       final lineNo = i + 1;
       if (trimmed.isEmpty) {
+        continue;
+      }
+      if (trimmed.toUpperCase().startsWith('RULE:')) {
+        // Ignore directive leakage from prompt text; only parse data rows.
         continue;
       }
 

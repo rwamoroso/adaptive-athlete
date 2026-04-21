@@ -6,7 +6,7 @@ import 'package:drift/native.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-String _buildAiPlanTextWithTenWeekBlock() {
+String _buildAiPlanTextWithTenWeekBlock({bool includeRuleLines = false}) {
   final b = StringBuffer();
   b.writeln('TEN_WEEK_PLAN_UPDATE_V1');
   final start = DateTime(2026, 2, 9);
@@ -45,6 +45,11 @@ String _buildAiPlanTextWithTenWeekBlock() {
     b.writeln('RUN_TARGET_PACE:');
     b.writeln('RUN_HR_GUARDRAILS:');
     b.writeln('RUN_NOTES:');
+    if (includeRuleLines) {
+      b.writeln(
+        'RULE: Include ALT rows for every prescribed strength exercise listed in each DAY block',
+      );
+    }
     b.writeln('END DAY $day');
     b.writeln();
   }
@@ -247,6 +252,20 @@ void main() {
     expect(sets.length, 1);
     expect(sets.single.weight, isNull);
     expect(sets.single.unit, 'bw');
+  });
+
+  test('AI weekly text import ignores RULE directive lines', () async {
+    final db = AppDb.forTesting(NativeDatabase.memory());
+    addTearDown(() async {
+      await db.close();
+    });
+
+    final text = _buildAiPlanTextWithTenWeekBlock(includeRuleLines: true);
+    final result = await db.importAiWeeklyPlanText(
+      text: text,
+      splitStartDate: DateTime(2026, 2, 23),
+    );
+    expect(result.insertedPlanDays, 7);
   });
 
   test('AI weekly text import extracts valid plan from wrapped prompt text',

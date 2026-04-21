@@ -84,7 +84,7 @@ class SettingsScreen extends ConsumerWidget {
                 onChanged: settingsNotifier.setLocalOnly,
               ),
               DropdownButtonFormField<UnitPreference>(
-                initialValue: settings.unit,
+                value: settings.unit,
                 decoration: const InputDecoration(labelText: 'Units'),
                 items: const [
                   DropdownMenuItem(value: UnitPreference.lb, child: Text('lb')),
@@ -216,7 +216,7 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    initialValue: profiles.any((p) => p.id == ctx.profileId)
+                    value: profiles.any((p) => p.id == ctx.profileId)
                         ? ctx.profileId
                         : (profiles.isNotEmpty ? profiles.first.id : null),
                     decoration:
@@ -385,7 +385,7 @@ class _WorkspaceInviteCardState extends ConsumerState<_WorkspaceInviteCard> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          initialValue: _role,
+          value: _role,
           decoration: const InputDecoration(labelText: 'Role'),
           items: const [
             DropdownMenuItem(value: 'coach', child: Text('coach')),

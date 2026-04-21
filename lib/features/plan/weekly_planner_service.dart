@@ -364,6 +364,27 @@ class _RunQuality {
   final int corruptedRunsDetected;
 }
 
+class _GeneratedDayDiagnostics {
+  _GeneratedDayDiagnostics(this.dayNumber);
+
+  final int dayNumber;
+  String sessionType = 'unknown';
+  final Set<String> uniqueStrengthExercises = <String>{};
+  final List<int> missingWeightLineNumbers = <int>[];
+}
+
+class _GeneratedTenWeekRowDiagnostics {
+  const _GeneratedTenWeekRowDiagnostics({
+    required this.lineNo,
+    required this.weekStart,
+    required this.weekEnd,
+  });
+
+  final int lineNo;
+  final String weekStart;
+  final String weekEnd;
+}
+
 class WeeklyPlannerService {
   WeeklyPlannerService({
     required this.db,
@@ -374,6 +395,15 @@ class WeeklyPlannerService {
   final AppDb db;
   final WeeklyPlanPromptService promptService;
   final SupabaseClient client;
+  static const Set<String> _splitStrengthSessionTypes = {
+    'push',
+    'pull',
+    'legs',
+    'upper',
+    'lower',
+    'full_body',
+    'hybrid',
+  };
 
   bool get isServerSideAiEnabled {
     final session = client.auth.currentSession;
@@ -509,6 +539,41 @@ Cardio Prescription Compatibility Rules:
 - Use `RUN_DURATION` for the full cardio prescription duration regardless of modality.
 - Leave `RUN_TARGET_PACE` blank when pace or speed is not meaningful for that modality.
 - For non-running cardio, bias `RUN_HR_GUARDRAILS` and `RUN_NOTES` toward effort, cadence, resistance, incline, RPM, or other modality-specific cues.''';
+    const strictImportSchemaBlock = '''
+STRICT_IMPORT_SCHEMA_V1 (NON-NEGOTIABLE):
+- Output plain text only, no markdown wrappers.
+- Header line must be exactly: WEEK_PLAN_V1
+- Include both top-level fields before DAY blocks:
+  WEEK_START: YYYY-MM-DD
+  WEEK_END: YYYY-MM-DD
+- DAY blocks must be exactly DAY 1 through DAY 7, each closed with END DAY N.
+- SESSION_TYPE must be one of:
+  push|pull|legs|upper|lower|full_body|hybrid|conditioning|rest|unknown
+- Inside each day, only these keys are allowed:
+  SESSION_TYPE, DAY_LABEL, LIFT_FOCUS, RUN_TYPE, RUN_DURATION, RUN_TARGET_PACE, RUN_HR_GUARDRAILS, RUN_NOTES, STRENGTH_SET, ALT
+- Do not output DATE, STRENGTH, or free-form NOTES keys.
+- Strength prescriptions must be STRENGTH_SET rows (one row per set index). Bullet lists are invalid.
+- For split strength days (`push`, `pull`, `legs`, `upper`, `lower`, `full_body`, `hybrid`), include at least 4 unique prescribed strength exercises.
+- Every STRENGTH_SET must include a non-empty weight field:
+  - use numeric values for `unit=lb` or `unit=kg`
+  - use `weight=bw` for `unit=bw`
+- For non-run-only splits, every prescribed strength exercise must have at least one ALT row in that same DAY block.
+- Do not use `|` or `=` inside free-text field values (especially ALT rationale/notes).
+- Optional explanation block is allowed only after END DAY 7:
+  PLAN_EXPLANATION_V1 ... END_PLAN_EXPLANATION_V1
+''';
+    final longTermPropagationBlock = context.propagateLongTermChanges
+        ? '''
+LONG_TERM_PROPAGATION_REQUIREMENTS_V1:
+- Because Propagate Long-term Changes is yes, include TEN_WEEK_PLAN_UPDATE_V1 before WEEK_PLAN_V1.
+- Output exactly 10 TEN_WEEK_ROW lines.
+- First TEN_WEEK_ROW.week_start must equal Week Start from APP_CONTEXT_V1.
+- Each TEN_WEEK_ROW must be a contiguous 7-day week (week_end = week_start + 6 days), in chronological order.
+'''
+        : '''
+LONG_TERM_PROPAGATION_REQUIREMENTS_V1:
+- Because Propagate Long-term Changes is no, omit TEN_WEEK_PLAN_UPDATE_V1 unless explicitly requested.
+''';
     const explanationInstructionBlock = '''
 Plan Explanation Output Requirements:
 - After the full WEEK_PLAN_V1 block (after END DAY 7), append:
@@ -522,6 +587,9 @@ Plan Explanation Output Requirements:
 - Keep explanation practical and athlete-facing, without medical claims.''';
 
     return '''
+$strictImportSchemaBlock
+$longTermPropagationBlock
+
 $basePrompt
 
 === APP_CONTEXT_V1 ===
@@ -663,6 +731,10 @@ $extraBlock
         throw StateError('Edge function returned empty plan payload.');
       }
 
+      _validateGeneratedPlanTextForRequest(
+        request: request,
+        generatedText: generatedText,
+      );
       final imported = await db.importAiWeeklyPlanText(
         text: generatedText,
         splitStartDate: request.splitStartDate,
@@ -711,6 +783,10 @@ $extraBlock
     required String generatedText,
   }) async {
     try {
+      _validateGeneratedPlanTextForRequest(
+        request: request,
+        generatedText: generatedText,
+      );
       final imported = await db.importAiWeeklyPlanText(
         text: generatedText,
         splitStartDate: request.splitStartDate,
@@ -754,6 +830,216 @@ $extraBlock
       );
       rethrow;
     }
+  }
+
+  void _validateGeneratedPlanTextForRequest({
+    required WeeklyPlanBuildRequest request,
+    required String generatedText,
+  }) {
+    if (request.splitType != SplitType.runOnly) {
+      _validateSplitDayStrengthRequirements(generatedText);
+    }
+    if (request.propagateLongTermChanges) {
+      _validateTenWeekPropagationRequirements(
+        generatedText: generatedText,
+        expectedFirstWeekStart: request.weekStart,
+      );
+    }
+  }
+
+  void _validateSplitDayStrengthRequirements(String generatedText) {
+    final dayDiagnostics = _extractGeneratedDayDiagnostics(generatedText);
+    for (var dayNumber = 1; dayNumber <= 7; dayNumber++) {
+      final day = dayDiagnostics[dayNumber];
+      if (day == null) {
+        continue;
+      }
+      if (!_splitStrengthSessionTypes.contains(day.sessionType)) {
+        continue;
+      }
+      if (day.uniqueStrengthExercises.length < 4) {
+        throw StateError(
+          'DAY ${day.dayNumber}: split session "${day.sessionType}" must include '
+          'at least 4 unique strength exercises. Found '
+          '${day.uniqueStrengthExercises.length}.',
+        );
+      }
+      if (day.missingWeightLineNumbers.isNotEmpty) {
+        throw StateError(
+          'DAY ${day.dayNumber}: every STRENGTH_SET row must include an explicit '
+          'weight value (use numeric for lb/kg, and "bw" for bodyweight). '
+          'Missing weight on line(s): ${day.missingWeightLineNumbers.join(', ')}.',
+        );
+      }
+    }
+  }
+
+  Map<int, _GeneratedDayDiagnostics> _extractGeneratedDayDiagnostics(
+    String generatedText,
+  ) {
+    final lines = const LineSplitter().convert(generatedText);
+    final byDay = <int, _GeneratedDayDiagnostics>{};
+    var inWeekPlan = false;
+    int? currentDay;
+
+    for (var i = 0; i < lines.length; i++) {
+      final trimmed = lines[i].trim();
+      if (trimmed.isEmpty) {
+        continue;
+      }
+      if (trimmed == 'WEEK_PLAN_V1') {
+        inWeekPlan = true;
+        continue;
+      }
+      if (!inWeekPlan) {
+        continue;
+      }
+
+      final dayStartMatch = RegExp(r'^DAY\s+([1-7])$').firstMatch(trimmed);
+      if (dayStartMatch != null) {
+        currentDay = int.parse(dayStartMatch.group(1)!);
+        byDay.putIfAbsent(
+            currentDay, () => _GeneratedDayDiagnostics(currentDay!));
+        continue;
+      }
+      final dayEndMatch = RegExp(r'^END\s+DAY\s+([1-7])$').firstMatch(trimmed);
+      if (dayEndMatch != null) {
+        currentDay = null;
+        continue;
+      }
+      if (currentDay == null) {
+        continue;
+      }
+
+      final colonIndex = trimmed.indexOf(':');
+      if (colonIndex <= 0) {
+        continue;
+      }
+      final key = trimmed.substring(0, colonIndex).trim().toUpperCase();
+      final payload = trimmed.substring(colonIndex + 1).trim();
+      final day = byDay[currentDay]!;
+
+      if (key == 'SESSION_TYPE') {
+        day.sessionType = payload.trim().toLowerCase();
+        continue;
+      }
+      if (key != 'STRENGTH_SET') {
+        continue;
+      }
+
+      final parts = payload
+          .split('|')
+          .map((p) => p.trim())
+          .where((p) => p.isNotEmpty)
+          .toList(growable: false);
+      if (parts.isEmpty) {
+        continue;
+      }
+      final exercise = parts.first.trim().toLowerCase();
+      if (exercise.isNotEmpty) {
+        day.uniqueStrengthExercises.add(exercise);
+      }
+
+      final kv = _parsePipeSeparatedKeyValues(
+        parts.skip(1).toList(growable: false),
+      );
+      final rawWeight = (kv['weight'] ?? '').trim();
+      if (rawWeight.isEmpty) {
+        day.missingWeightLineNumbers.add(i + 1);
+      }
+    }
+    return byDay;
+  }
+
+  Map<String, String> _parsePipeSeparatedKeyValues(List<String> parts) {
+    final kv = <String, String>{};
+    for (final part in parts) {
+      final eqIndex = part.indexOf('=');
+      if (eqIndex <= 0) {
+        continue;
+      }
+      final key = part.substring(0, eqIndex).trim().toLowerCase();
+      final value = part.substring(eqIndex + 1).trim();
+      if (key.isEmpty) {
+        continue;
+      }
+      kv[key] = value;
+    }
+    return kv;
+  }
+
+  void _validateTenWeekPropagationRequirements({
+    required String generatedText,
+    required String expectedFirstWeekStart,
+  }) {
+    final rows = _extractTenWeekRows(generatedText);
+    if (rows.isEmpty) {
+      throw StateError(
+        'Long-term propagation is enabled, but TEN_WEEK_PLAN_UPDATE_V1 '
+        'is missing.',
+      );
+    }
+    if (rows.length != 10) {
+      throw StateError(
+        'Long-term propagation is enabled: expected exactly 10 TEN_WEEK_ROW '
+        'entries, but found ${rows.length}.',
+      );
+    }
+
+    final startAnchor = parseYmd(expectedFirstWeekStart);
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      final expectedStart = toYmd(startAnchor.add(Duration(days: i * 7)));
+      if (row.weekStart != expectedStart) {
+        throw StateError(
+          'TEN_WEEK_ROW line ${row.lineNo}: week_start must be contiguous and '
+          'start at $expectedFirstWeekStart. Expected $expectedStart, found '
+          '${row.weekStart}.',
+        );
+      }
+      final expectedEnd =
+          toYmd(parseYmd(expectedStart).add(const Duration(days: 6)));
+      if (row.weekEnd != expectedEnd) {
+        throw StateError(
+          'TEN_WEEK_ROW line ${row.lineNo}: week_end must be 6 days after '
+          'week_start. Expected $expectedEnd, found ${row.weekEnd}.',
+        );
+      }
+    }
+  }
+
+  List<_GeneratedTenWeekRowDiagnostics> _extractTenWeekRows(String text) {
+    final lines = const LineSplitter().convert(text);
+    final rows = <_GeneratedTenWeekRowDiagnostics>[];
+    for (var i = 0; i < lines.length; i++) {
+      final trimmed = lines[i].trim();
+      if (!trimmed.startsWith('TEN_WEEK_ROW:')) {
+        continue;
+      }
+      final payload = trimmed.substring('TEN_WEEK_ROW:'.length).trim();
+      final kv = _parsePipeSeparatedKeyValues(
+        payload
+            .split('|')
+            .map((p) => p.trim())
+            .where((p) => p.isNotEmpty)
+            .toList(growable: false),
+      );
+      final weekStart = (kv['week_start'] ?? '').trim();
+      final weekEnd = (kv['week_end'] ?? '').trim();
+      if (weekStart.isEmpty || weekEnd.isEmpty) {
+        throw StateError(
+          'TEN_WEEK_ROW line ${i + 1}: week_start and week_end are required.',
+        );
+      }
+      rows.add(
+        _GeneratedTenWeekRowDiagnostics(
+          lineNo: i + 1,
+          weekStart: weekStart,
+          weekEnd: weekEnd,
+        ),
+      );
+    }
+    return rows;
   }
 
   Future<List<Map<String, dynamic>>> _loadLongRangeContext(

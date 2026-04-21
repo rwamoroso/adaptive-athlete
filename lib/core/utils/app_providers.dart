@@ -413,3 +413,14 @@ final activeWorkspaceContextProvider =
   }
   return ref.watch(workspaceServiceProvider).bootstrapAndGetContext();
 });
+
+final latestAiWeeklyPlanResponseProvider = FutureProvider<String>((ref) async {
+  final ctx = ref.watch(activeWorkspaceContextProvider).valueOrNull;
+  final workspaceId = ctx?.workspaceId ?? 'local_workspace';
+  final athleteProfileId = ctx?.profileId ?? 'local_profile';
+  final saved = await ref.read(appDbProvider).getLatestWeeklyPlanResponse(
+        workspaceId: workspaceId,
+        athleteProfileId: athleteProfileId,
+      );
+  return saved ?? '';
+});

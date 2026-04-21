@@ -1,15 +1,18 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/rules/recovery_gating.dart';
 import '../../core/utils/app_providers.dart';
 import '../../core/utils/date_utils.dart';
 import '../training/exercise_substitution_service.dart';
 import '../ui/clinical_widgets.dart';
+import '../sync/sync_service.dart';
 import 'biometrics_profile.dart';
 import 'biometrics_profile_screen.dart';
 import 'plan_builder_walkthrough_screen.dart';
@@ -45,6 +48,124 @@ class _PlanSchedulePreviewDay {
   final String dayLabel;
   final String? runTitle;
   final String? strengthTitle;
+}
+
+class _WindowsCalendarDateScreen extends StatefulWidget {
+  const _WindowsCalendarDateScreen({
+    required this.title,
+    required this.initialDate,
+    required this.firstDate,
+    required this.lastDate,
+  });
+
+  final String title;
+  final DateTime initialDate;
+  final DateTime firstDate;
+  final DateTime lastDate;
+
+  @override
+  State<_WindowsCalendarDateScreen> createState() =>
+      _WindowsCalendarDateScreenState();
+}
+
+class _WindowsCalendarDateScreenState
+    extends State<_WindowsCalendarDateScreen> {
+  late DateTime _selectedDate;
+  bool _closing = false;
+
+  Future<void> _closeWithoutDate() async {
+    if (_closing) {
+      return;
+    }
+    _closing = true;
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _closeWithDate() async {
+    if (_closing) {
+      return;
+    }
+    _closing = true;
+    final selected = _selectedDate;
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) {
+      return;
+    }
+    Navigator.of(context).pop(selected);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final first = DateTime(
+      widget.firstDate.year,
+      widget.firstDate.month,
+      widget.firstDate.day,
+    );
+    final last = DateTime(
+      widget.lastDate.year,
+      widget.lastDate.month,
+      widget.lastDate.day,
+    );
+    var initial = DateTime(
+      widget.initialDate.year,
+      widget.initialDate.month,
+      widget.initialDate.day,
+    );
+    if (initial.isBefore(first)) {
+      initial = first;
+    } else if (initial.isAfter(last)) {
+      initial = last;
+    }
+    _selectedDate = initial;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: _closeWithoutDate,
+        ),
+        actions: [
+          TextButton(
+            onPressed: _closeWithDate,
+            child: const Text('Use Date'),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: 8),
+            Text(
+              'Selected: ${toYmd(_selectedDate)}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: CalendarDatePicker(
+                initialDate: _selectedDate,
+                firstDate: widget.firstDate,
+                lastDate: widget.lastDate,
+                onDateChanged: (date) {
+                  setState(() {
+                    _selectedDate = DateTime(date.year, date.month, date.day);
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ShortTermGoalScreen extends StatefulWidget {
@@ -246,10 +367,17 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   bool _legacyGenerating = false;
   bool _legacyAiImporting = false;
   bool _legacyStandardImporting = false;
+  bool _startDatePickerActive = false;
+  Timer? _manualResponseAutoApplyDebounce;
+  String _lastAppliedManualResponseText = '';
+  String _lastAutoApplyAttemptText = '';
 
   late Future<List<_PlanSchedulePreviewDay>> _schedulePreviewFuture;
   String? _loadedScopeKey;
   int? _walkthroughLastStepIndex;
+  bool _walkthroughActive = false;
+  PlanBuilderWalkthroughDraft? _pendingWalkthroughDraft;
+  AthletePlanningProfile? _pendingProfileDuringDatePicker;
 
   @override
   void initState() {
@@ -258,11 +386,13 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     _selectedEquipment.addAll(settings.availableEquipment);
     _selectedContraindications.addAll(settings.movementContraindications);
     _manualAiResponseController.text = ref.read(aiWeeklyPlanResponseProvider);
+    _lastAppliedManualResponseText = _manualAiResponseController.text.trim();
     _schedulePreviewFuture = _loadSchedulePreview();
   }
 
   @override
   void dispose() {
+    _manualResponseAutoApplyDebounce?.cancel();
     _goalTargetController.dispose();
     _runGoalDistanceController.dispose();
     _runGoalPaceController.dispose();
@@ -526,6 +656,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     });
   }
 
+  // ignore: unused_element
   Widget _buildSchedulePreviewCard(BuildContext context) {
     return GlassCard(
       child: FutureBuilder<List<_PlanSchedulePreviewDay>>(
@@ -819,6 +950,17 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       return;
     }
 
+    if (_startDatePickerActive) {
+      _pendingProfileDuringDatePicker = profile;
+      return;
+    }
+    _applyPlanningProfile(profile);
+  }
+
+  void _applyPlanningProfile(AthletePlanningProfile profile) {
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _primaryGoal = _normalizePrimaryGoal(profile.primaryGoal);
       _hydrateGoalTargetInputs(profile.goalTarget);
@@ -1029,13 +1171,91 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       _manualAiResponseController.text = text;
     }
     ref.read(aiWeeklyPlanResponseProvider.notifier).state = text;
+    _scheduleAutoApplyFromPastedResponse(text);
   }
 
-  Future<bool> _applyManualAiResponseInternal(String rawText) async {
+  bool _looksLikeWeeklyPlanResponse(String text) {
+    final normalized = text.toUpperCase();
+    return normalized.contains('WEEK_PLAN_V1');
+  }
+
+  void _scheduleAutoApplyFromPastedResponse(String rawText) {
+    final trimmed = rawText.trim();
+    if (trimmed.isEmpty || !_looksLikeWeeklyPlanResponse(trimmed)) {
+      _manualResponseAutoApplyDebounce?.cancel();
+      return;
+    }
+    if (_manualApplying || _oneTapGenerating) {
+      return;
+    }
+    if (trimmed == _lastAppliedManualResponseText ||
+        trimmed == _lastAutoApplyAttemptText) {
+      return;
+    }
+    _manualResponseAutoApplyDebounce?.cancel();
+    _manualResponseAutoApplyDebounce = Timer(
+      const Duration(milliseconds: 700),
+      () async {
+        if (!mounted || _manualApplying || _oneTapGenerating) {
+          return;
+        }
+        final latestTrimmed = _manualAiResponseController.text.trim();
+        if (latestTrimmed != trimmed ||
+            !_looksLikeWeeklyPlanResponse(latestTrimmed)) {
+          return;
+        }
+        _lastAutoApplyAttemptText = latestTrimmed;
+        await _applyManualAiResponseInternal(
+          _manualAiResponseController.text,
+          autoTriggeredByPaste: true,
+        );
+      },
+    );
+  }
+
+  Future<void> _syncAfterPlanApply({required String reason}) async {
+    final bootstrap = ref.read(supabaseBootstrapProvider);
+    final settings = ref.read(settingsProvider);
+    if (!bootstrap.initialized || settings.localOnly) {
+      return;
+    }
+    final client = Supabase.instance.client;
+    if (client.auth.currentSession == null) {
+      return;
+    }
+    ref.read(syncStatusProvider.notifier).setSyncing(reason: reason);
+    try {
+      final status = await SyncService(
+        db: ref.read(appDbProvider),
+        client: client,
+        workspaceService: ref.read(workspaceServiceProvider),
+      ).syncNow();
+      if (!mounted) {
+        return;
+      }
+      ref.read(syncStatusProvider.notifier).setResult(status, reason: reason);
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ref.read(syncStatusProvider.notifier).setError(
+            label: 'Sync failed',
+            detail: 'Automatic sync ($reason) failed: $e',
+          );
+    }
+  }
+
+  Future<bool> _applyManualAiResponseInternal(
+    String rawText, {
+    bool autoTriggeredByPaste = false,
+  }) async {
     final text = rawText.trim();
     if (text.isEmpty) {
       _showMessage('Paste AI weekly plan text before applying.');
       return false;
+    }
+    if (autoTriggeredByPaste && text == _lastAppliedManualResponseText) {
+      return true;
     }
 
     if (_manualAiResponseController.text != rawText) {
@@ -1062,7 +1282,15 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         _status = 'Manual AI plan applied: ${result.pretty()}';
       });
       _refreshSchedulePreview();
-      _showMessage('Manual AI weekly plan applied.');
+      _lastAppliedManualResponseText = text;
+      await _syncAfterPlanApply(
+        reason: autoTriggeredByPaste ? 'manual_paste' : 'manual_apply',
+      );
+      if (autoTriggeredByPaste) {
+        _showMessage('Pasted AI weekly plan auto-applied and synced.');
+      } else {
+        _showMessage('Manual AI weekly plan applied and synced.');
+      }
       return true;
     } catch (e) {
       _showMessage('Manual AI apply failed: $e');
@@ -1115,17 +1343,58 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   }
 
   Future<void> _pickStartDate() async {
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: _startDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (selected != null) {
+    _startDatePickerActive = true;
+    try {
+      final selected = Platform.isWindows
+          ? await Navigator.of(context).push<DateTime>(
+              PageRouteBuilder<DateTime>(
+                pageBuilder: (_, __, ___) => _WindowsCalendarDateScreen(
+                  title: 'Select Week Start Date',
+                  initialDate: _startDate,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2100),
+                ),
+                transitionDuration: Duration.zero,
+                reverseTransitionDuration: Duration.zero,
+              ),
+            )
+          : await showDatePicker(
+              context: context,
+              initialDate: _startDate,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2100),
+              // ExcludeSemantics prevents the dialog's nodes from entering the Flutter
+              // Windows accessibility bridge during the open/close animation, which
+              // otherwise causes an AX-tree CHECK failure that crashes the process.
+              builder: (ctx, child) => ExcludeSemantics(child: child!),
+            );
+      if (selected == null || !mounted) return;
+      if (Platform.isWindows) {
+        await Future.delayed(const Duration(milliseconds: 900));
+      } else {
+        // The Flutter Windows accessibility bridge enters a bad state during the
+        // dialog dismiss animation and crashes if setState is called before it
+        // fully recovers. Waiting 500 ms clears the ~300 ms Material animation
+        // plus extra buffer for bridge recovery.
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      if (!mounted) return;
       setState(() {
-        _startDate = selected;
+        _startDate = DateTime(selected.year, selected.month, selected.day);
         _schedulePreviewFuture = _loadSchedulePreview();
       });
+    } finally {
+      _startDatePickerActive = false;
+      final pending = _pendingProfileDuringDatePicker;
+      _pendingProfileDuringDatePicker = null;
+      if (pending != null && mounted) {
+        if (Platform.isWindows) {
+          await Future.delayed(const Duration(milliseconds: 900));
+        }
+        if (mounted) {
+          _applyPlanningProfile(pending);
+        }
+      }
     }
   }
 
@@ -1410,6 +1679,20 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   }
 
   void _applyWalkthroughDraft(PlanBuilderWalkthroughDraft draft) {
+    // While the walkthrough route is on top, plan_screen's semantic tree must
+    // not be rebuilt — concurrent AX tree updates for a non-current route and
+    // a dialog dismiss animation cause a CHECK failure in the Flutter Windows
+    // accessibility bridge that crashes the process.  Cache the latest draft
+    // and apply it in one shot once the walkthrough pops.
+    if (_walkthroughActive) {
+      _pendingWalkthroughDraft = draft;
+      return;
+    }
+    _applyWalkthroughDraftNow(draft);
+  }
+
+  void _applyWalkthroughDraftNow(PlanBuilderWalkthroughDraft draft) {
+    if (!mounted) return;
     final normalizedDraftStartDate = DateTime(
       draft.weekStartDate.year,
       draft.weekStartDate.month,
@@ -1502,6 +1785,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     if (!mounted) {
       return;
     }
+    _walkthroughActive = true;
     final completed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => PlanBuilderWalkthroughScreen(
@@ -1523,8 +1807,14 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       ),
     );
 
+    _walkthroughActive = false;
     if (!mounted) {
       return;
+    }
+    final pending = _pendingWalkthroughDraft;
+    _pendingWalkthroughDraft = null;
+    if (pending != null) {
+      _applyWalkthroughDraftNow(pending);
     }
     if (completed == true) {
       _walkthroughLastStepIndex = null;
@@ -1573,10 +1863,6 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
           text:
               'One guided flow for intake, weekly setup, generation, and apply.',
         ),
-        const SizedBox(height: 12),
-        const SectionHeader(text: 'Weekly Cardio + Strength Schedule'),
-        const SizedBox(height: 8),
-        _buildSchedulePreviewCard(context),
         const SizedBox(height: 10),
         SizedBox(
           width: double.infinity,
@@ -1620,7 +1906,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               DropdownButtonFormField<String>(
-                initialValue: _primaryGoal,
+                value: _primaryGoal,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration: _dropdownDecoration(context, 'Primary Goal'),
@@ -1718,7 +2004,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                initialValue: _experienceLevel,
+                value: _experienceLevel,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration: _dropdownDecoration(context, 'Experience Level'),
@@ -1736,7 +2022,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<SplitType>(
-                initialValue: _preferredSplit,
+                value: _preferredSplit,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration: _dropdownDecoration(context, 'Preferred Split'),
@@ -1864,7 +2150,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<SplitType>(
-                initialValue: _selectedSplit,
+                value: _selectedSplit,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration: _dropdownDecoration(context, 'Weekly Split Type'),
@@ -1930,7 +2216,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                 ),
               const SizedBox(height: 8),
               DropdownButtonFormField<WeeklyPlanModifier>(
-                initialValue: _selectedModifier,
+                value: _selectedModifier,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration: _dropdownDecoration(context, 'Weekly Modifier'),
@@ -2082,6 +2368,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                   onChanged: (value) {
                     ref.read(aiWeeklyPlanResponseProvider.notifier).state =
                         value;
+                    _scheduleAutoApplyFromPastedResponse(value);
                     setState(() {});
                   },
                   decoration: const InputDecoration(

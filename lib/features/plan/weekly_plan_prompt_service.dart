@@ -7,13 +7,37 @@ class WeeklyPlanPromptService {
 
   final AppDb db;
 
-  static const String weeklyPlanPromptTemplateKey = 'weekly_plan_workbook_text_v1';
+  static const String weeklyPlanPromptTemplateKey =
+      'weekly_plan_workbook_text_v1';
   static const String weeklyPlanPromptAssetPath =
       'assets/prompts/weekly_plan_workbook_text_v1.md';
   static const String weeklyPlanPromptVersionTag = 'v1';
+  static const String _fallbackPromptTemplate = '''
+ADAPTIVE ATHLETE WEEKLY PLAN PROMPT (FALLBACK)
+
+You are generating WEEK_PLAN_V1 output for the Adaptive Athlete app.
+Return exactly one 7-day plan that is safe, practical, and progression-aware.
+
+Formatting requirements:
+- Use the app's expected WEEK_PLAN_V1 structure with 7 ordered days.
+- Keep prescription language concise and actionable.
+- Include recovery-aware loading decisions when fatigue or poor sleep is implied.
+- Maintain consistency between run/cardio and strength prescriptions.
+- If strength substitutions are required, provide clearly ranked alternatives with rationale.
+
+Output only the plan content expected by the app, with no extra preamble.
+''';
 
   Future<String> getDefaultPromptTemplate() async {
-    return rootBundle.loadString(weeklyPlanPromptAssetPath);
+    try {
+      final text = await rootBundle.loadString(weeklyPlanPromptAssetPath);
+      if (text.trim().isNotEmpty) {
+        return text;
+      }
+    } catch (_) {
+      // Fall through to the built-in fallback template.
+    }
+    return _fallbackPromptTemplate;
   }
 
   Future<String?> getPromptOverride() async {
