@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,7 +11,9 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'app_storage_scope.dart';
 import 'device_scoped_store.dart';
 import '../../db/app_db.dart';
+import '../../db/dao/workout_dao.dart';
 import '../../features/ai/ai_analyze_service.dart';
+import '../../features/sync/sync_service.dart';
 import '../../features/plan/weekly_plan_prompt_service.dart';
 import '../../features/plan/weekly_planner_service.dart';
 import '../../features/training/exercise_substitution_service.dart';
@@ -32,9 +38,10 @@ class AppSyncStatus {
     required this.label,
     this.detail,
     this.updatedAtMs,
+    this.lastSuccessAtMs,
   });
 
-  const AppSyncStatus.idle()
+  const AppSyncStatus.idle({this.lastSuccessAtMs})
       : phase = AppSyncPhase.idle,
         label = 'Idle',
         detail = null,
@@ -44,18 +51,21 @@ class AppSyncStatus {
   final String label;
   final String? detail;
   final int? updatedAtMs;
+  final int? lastSuccessAtMs;
 
   AppSyncStatus copyWith({
     AppSyncPhase? phase,
     String? label,
     String? detail,
     int? updatedAtMs,
+    int? lastSuccessAtMs,
   }) {
     return AppSyncStatus(
       phase: phase ?? this.phase,
       label: label ?? this.label,
       detail: detail ?? this.detail,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
+      lastSuccessAtMs: lastSuccessAtMs ?? this.lastSuccessAtMs,
     );
   }
 
@@ -67,10 +77,14 @@ class AppSyncStatus {
       );
 
   factory AppSyncStatus.fromSyncResult(String result, {String? reason}) {
-    final isError = result.toLowerCase().startsWith('sync failed');
+    final isError = !result.startsWith('Sync complete:');
     return AppSyncStatus(
       phase: isError ? AppSyncPhase.error : AppSyncPhase.success,
-      label: isError ? 'Sync failed' : 'Synced',
+      label: isError
+          ? (result.startsWith('Sync needs review:')
+              ? 'Review sync'
+              : 'Not synced')
+          : 'Synced',
       detail: reason == null ? result : '$result ($reason)',
       updatedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
@@ -113,34 +127,80 @@ class AppSettings {
   }
 }
 
+final preferencesProvider = Provider<SharedPreferences?>((_) => null);
+
 class AppSettingsNotifier extends StateNotifier<AppSettings> {
-  AppSettingsNotifier()
-      : super(const AppSettings(localOnly: false, unit: UnitPreference.lb));
+  AppSettingsNotifier({SharedPreferences? preferences})
+      : _preferences = preferences,
+        super(_restore(preferences));
 
-  void setLocalOnly(bool localOnly) =>
-      state = state.copyWith(localOnly: localOnly);
+  static const storageKey = 'adaptive_athlete.preferences.v1';
+  final SharedPreferences? _preferences;
+  Future<void> _pendingWrite = Future.value();
+  Future<void> get persistenceComplete => _pendingWrite;
 
-  void setUnit(UnitPreference unit) => state = state.copyWith(unit: unit);
-
-  void toggleEquipment(String equipment) {
-    final next = <String>{...state.availableEquipment};
-    if (!next.add(equipment)) {
-      next.remove(equipment);
+  static AppSettings _restore(SharedPreferences? preferences) {
+    const defaults = AppSettings(localOnly: false, unit: UnitPreference.lb);
+    try {
+      final raw = preferences?.getString(storageKey);
+      if (raw == null) return defaults;
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      return defaults.copyWith(
+        localOnly:
+            data['localOnly'] is bool ? data['localOnly'] as bool : false,
+        unit: data['unit'] == 'kg' ? UnitPreference.kg : UnitPreference.lb,
+        availableEquipment: data['equipment'] is List
+            ? (data['equipment'] as List).whereType<String>().toSet()
+            : null,
+        movementContraindications: data['restrictions'] is List
+            ? (data['restrictions'] as List).whereType<String>().toSet()
+            : null,
+      );
+    } catch (_) {
+      return defaults;
     }
-    state = state.copyWith(availableEquipment: next);
   }
 
-  void toggleContraindication(String flag) {
-    final next = <String>{...state.movementContraindications};
-    if (!next.add(flag)) {
-      next.remove(flag);
-    }
-    state = state.copyWith(movementContraindications: next);
+  void _save(AppSettings next) {
+    state = next;
+    final payload = jsonEncode({
+      'localOnly': next.localOnly,
+      'unit': next.unit.name,
+      'equipment': next.availableEquipment.toList()..sort(),
+      'restrictions': next.movementContraindications.toList()..sort()
+    });
+    _pendingWrite = _pendingWrite.then((_) async {
+      await _preferences?.setString(storageKey, payload);
+    }).catchError((Object error) {
+      debugPrint('Preferences could not be saved: $error');
+    });
+  }
+
+  void setLocalOnly(bool value) => _save(state.copyWith(localOnly: value));
+  void setUnit(UnitPreference value) => _save(state.copyWith(unit: value));
+  void toggleEquipment(String value) {
+    final next = {...state.availableEquipment};
+    if (!next.add(value)) next.remove(value);
+    _save(state.copyWith(availableEquipment: next));
+  }
+
+  void toggleContraindication(String value) {
+    final next = {...state.movementContraindications};
+    if (!next.add(value)) next.remove(value);
+    _save(state.copyWith(movementContraindications: next));
   }
 }
 
 class AppSyncStatusNotifier extends StateNotifier<AppSyncStatus> {
-  AppSyncStatusNotifier() : super(const AppSyncStatus.idle());
+  AppSyncStatusNotifier(
+      {SharedPreferences? preferences, String account = 'guest'})
+      : _preferences = preferences,
+        _key = 'adaptive_athlete.last_sync.$account',
+        super(AppSyncStatus.idle(
+            lastSuccessAtMs:
+                preferences?.getInt('adaptive_athlete.last_sync.$account')));
+  final SharedPreferences? _preferences;
+  final String _key;
 
   Timer? _hideTimer;
 
@@ -169,14 +229,20 @@ class AppSyncStatusNotifier extends StateNotifier<AppSyncStatus> {
   void _setStatus(AppSyncStatus next) {
     _hideTimer?.cancel();
     _hideTimer = null;
-    state = next;
+    final lastSuccess = next.phase == AppSyncPhase.success
+        ? next.updatedAtMs
+        : state.lastSuccessAtMs;
+    state = next.copyWith(lastSuccessAtMs: lastSuccess);
+    if (next.phase == AppSyncPhase.success && lastSuccess != null) {
+      unawaited(_preferences?.setInt(_key, lastSuccess));
+    }
 
     if (next.phase == AppSyncPhase.success) {
       _hideTimer = Timer(const Duration(seconds: 20), () {
         if (!mounted) {
           return;
         }
-        state = const AppSyncStatus.idle();
+        state = AppSyncStatus.idle(lastSuccessAtMs: state.lastSuccessAtMs);
       });
     }
   }
@@ -298,8 +364,8 @@ class RestCountdownNotifier extends StateNotifier<RestCountdownState> {
 }
 
 final settingsProvider =
-    StateNotifierProvider<AppSettingsNotifier, AppSettings>(
-        (ref) => AppSettingsNotifier());
+    StateNotifierProvider<AppSettingsNotifier, AppSettings>((ref) =>
+        AppSettingsNotifier(preferences: ref.watch(preferencesProvider)));
 
 final supabaseBootstrapProvider = Provider<SupabaseBootstrap>(
     (_) => const SupabaseBootstrap(initialized: false));
@@ -354,9 +420,15 @@ final appDbProvider = Provider<AppDb>((ref) {
   return db;
 });
 
+final workoutDaoProvider = Provider<WorkoutDao>((ref) {
+  return WorkoutDao(ref.watch(appDbProvider));
+});
+
 final syncStatusProvider =
     StateNotifierProvider<AppSyncStatusNotifier, AppSyncStatus>(
-  (_) => AppSyncStatusNotifier(),
+  (ref) => AppSyncStatusNotifier(
+      preferences: ref.watch(preferencesProvider),
+      account: ref.watch(currentAuthUserIdProvider) ?? 'guest'),
 );
 
 final restCountdownProvider =
@@ -423,4 +495,17 @@ final latestAiWeeklyPlanResponseProvider = FutureProvider<String>((ref) async {
         athleteProfileId: athleteProfileId,
       );
   return saved ?? '';
+});
+
+final syncConflictsProvider = FutureProvider<List<SyncConflict>>((ref) async {
+  final bootstrap = ref.watch(supabaseBootstrapProvider);
+  final account = ref.watch(currentAuthUserIdProvider);
+  final localOnly = ref.watch(settingsProvider.select((s) => s.localOnly));
+  ref.watch(syncStatusProvider.select((s) => s.phase));
+  if (!bootstrap.initialized || account == null || localOnly) return [];
+  return SyncService(
+          db: ref.watch(appDbProvider),
+          client: Supabase.instance.client,
+          workspaceService: ref.watch(workspaceServiceProvider))
+      .conflicts();
 });

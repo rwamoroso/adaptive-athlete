@@ -61,12 +61,16 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             ),
             if (syncStatus.phase != AppSyncPhase.idle)
               Positioned.fill(
-                child: IgnorePointer(
-                  child: SafeArea(
-                    minimum: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                    child: Align(
-                      alignment: Alignment.topRight,
-                      child: _SyncStatusPill(status: syncStatus),
+                child: SafeArea(
+                  minimum: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: Align(
+                    alignment: Alignment.topRight,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _index = 4),
+                      child: Semantics(
+                          button: true,
+                          label: 'Open cloud sync settings',
+                          child: _SyncStatusPill(status: syncStatus)),
                     ),
                   ),
                 ),

@@ -609,7 +609,7 @@ class _PlanBuilderWalkthroughScreenState
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           key: ValueKey<String>('goal_${_draft.primaryGoal}'),
-          value: _draft.primaryGoal,
+          initialValue: _draft.primaryGoal,
           dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
           decoration: _walkthroughDropdownDecoration(context, 'Primary Goal'),
           items: const [
@@ -799,7 +799,7 @@ class _PlanBuilderWalkthroughScreenState
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           key: ValueKey<String>('experience_${_draft.experienceLevel}'),
-          value: _draft.experienceLevel,
+          initialValue: _draft.experienceLevel,
           dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
           decoration:
               _walkthroughDropdownDecoration(context, 'Experience Level'),
@@ -862,7 +862,7 @@ class _PlanBuilderWalkthroughScreenState
         const SizedBox(height: 8),
         DropdownButtonFormField<SplitType>(
           key: ValueKey<SplitType>(_draft.splitType),
-          value: _draft.splitType,
+          initialValue: _draft.splitType,
           dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
           decoration:
               _walkthroughDropdownDecoration(context, 'Weekly Split Type'),
@@ -1037,7 +1037,7 @@ class _PlanBuilderWalkthroughScreenState
               const SizedBox(height: 8),
               DropdownButtonFormField<WeeklyPlanModifier>(
                 key: ValueKey<WeeklyPlanModifier>(_draft.weeklyModifier),
-                value: _draft.weeklyModifier,
+                initialValue: _draft.weeklyModifier,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration:

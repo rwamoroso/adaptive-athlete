@@ -99,7 +99,7 @@ class _WorkoutDayDetailScreenState
   }
 
   Future<WorkoutDayDetail> _loadDetail() {
-    return ref.read(appDbProvider).getWorkoutDayDetail(widget.date);
+    return ref.read(workoutDaoProvider).getDay(widget.date);
   }
 
   void _refreshDetail() {
@@ -1536,32 +1536,34 @@ class _SubstitutionPickerSheetState extends State<_SubstitutionPickerSheet> {
                     height: 320,
                     child: filtered.isEmpty
                         ? const Center(child: Text('No suggestions found.'))
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final c = filtered[index];
-                              return RadioListTile<String>(
-                                value: c.exerciseCanonical,
-                                groupValue: _selectedExercise,
-                                onChanged: (value) => setState(() {
-                                  _selectedExercise = value;
-                                  _warningAcknowledged = false;
-                                }),
-                                title: Text(c.exerciseCanonical),
-                                subtitle: Text(
-                                  '${_tierLabel(c.tier)} • ${c.score.round()}/100'
-                                  '${c.isCurated ? ' • curated' : ''}'
-                                  '${c.warnings.isEmpty ? '' : '\n${c.warnings.join('; ')}'}',
-                                ),
-                              );
-                            },
+                        : RadioGroup<String>(
+                            groupValue: _selectedExercise,
+                            onChanged: (value) => setState(() {
+                              _selectedExercise = value;
+                              _warningAcknowledged = false;
+                            }),
+                            child: ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final c = filtered[index];
+                                return RadioListTile<String>(
+                                  value: c.exerciseCanonical,
+                                  title: Text(c.exerciseCanonical),
+                                  subtitle: Text(
+                                    '${_tierLabel(c.tier)} • ${c.score.round()}/100'
+                                    '${c.isCurated ? ' • curated' : ''}'
+                                    '${c.warnings.isEmpty ? '' : '\n${c.warnings.join('; ')}'}',
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _reasonCode,
+                  initialValue: _reasonCode,
                   items: const [
                     DropdownMenuItem(
                         value: 'equipment_unavailable',
@@ -1754,20 +1756,22 @@ class _AddExercisePickerSheetState extends State<_AddExercisePickerSheet> {
                     height: 320,
                     child: filtered.isEmpty
                         ? const Center(child: Text('No exercises found.'))
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final exercise = filtered[index];
-                              return RadioListTile<String>(
-                                value: exercise,
-                                groupValue: _selectedExercise,
-                                onChanged: (value) => setState(() {
-                                  _selectedExercise = value;
-                                }),
-                                title: Text(exercise),
-                              );
-                            },
+                        : RadioGroup<String>(
+                            groupValue: _selectedExercise,
+                            onChanged: (value) => setState(() {
+                              _selectedExercise = value;
+                            }),
+                            child: ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final exercise = filtered[index];
+                                return RadioListTile<String>(
+                                  value: exercise,
+                                  title: Text(exercise),
+                                );
+                              },
+                            ),
                           ),
                   ),
                 ),

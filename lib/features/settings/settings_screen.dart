@@ -12,6 +12,7 @@ import '../sync/sync_service.dart';
 import '../training/exercise_substitution_service.dart';
 import '../ui/clinical_widgets.dart';
 import '../workspace/workspace_models.dart';
+import 'app_release.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -23,6 +24,7 @@ class SettingsScreen extends ConsumerWidget {
     final bootstrap = ref.watch(supabaseBootstrapProvider);
     final workspaceContextAsync = ref.watch(activeWorkspaceContextProvider);
     final plannerService = ref.watch(weeklyPlannerServiceProvider);
+    final syncStatus = ref.watch(syncStatusProvider);
 
     String? userId;
     if (bootstrap.initialized) {
@@ -39,6 +41,10 @@ class SettingsScreen extends ConsumerWidget {
                 fontWeight: FontWeight.w800,
               ),
         ),
+        const SizedBox(height: 12),
+        const AppReleaseCard(),
+        const SizedBox(height: 12),
+        const SyncReviewCard(),
         const SizedBox(height: 12),
         const ClinicalBanner(
           text: 'Clinical Focus: Reliable Local State & Sync Integrity',
@@ -62,7 +68,9 @@ class SettingsScreen extends ConsumerWidget {
             ),
             MetricTile(
               title: 'Supabase',
-              valueText: bootstrap.initialized ? 'Connected' : 'Offline',
+              valueText: settings.localOnly
+                  ? 'Local only'
+                  : (userId != null ? 'Signed in' : 'Not signed in'),
               subtitleText:
                   userId == null ? 'No active user' : 'User authenticated',
               leadingIcon: Icons.cloud_done_outlined,
@@ -84,7 +92,8 @@ class SettingsScreen extends ConsumerWidget {
                 onChanged: settingsNotifier.setLocalOnly,
               ),
               DropdownButtonFormField<UnitPreference>(
-                value: settings.unit,
+                key: ValueKey(settings.unit),
+                initialValue: settings.unit,
                 decoration: const InputDecoration(labelText: 'Units'),
                 items: const [
                   DropdownMenuItem(value: UnitPreference.lb, child: Text('lb')),
@@ -171,7 +180,21 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 12),
-        const SectionHeader(text: 'Supabase'),
+        const SectionHeader(text: 'Cloud Sync'),
+        const SizedBox(height: 8),
+        GlassCard(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(syncStatus.phase == AppSyncPhase.error
+              ? syncStatus.label
+              : 'Your changes are saved on this device.'),
+          if (syncStatus.detail != null) Text(syncStatus.detail!),
+          Text(syncStatus.lastSuccessAtMs == null
+              ? 'No successful cloud sync recorded on this device.'
+              : 'Last successful cloud sync: ${DateTime.fromMillisecondsSinceEpoch(syncStatus.lastSuccessAtMs!).toLocal().toString().split(".").first}'),
+        ])),
+        const SizedBox(height: 12),
+        const SectionHeader(text: 'Connection Details'),
         const SizedBox(height: 8),
         GlassCard(
           child: Column(
@@ -216,7 +239,9 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: profiles.any((p) => p.id == ctx.profileId)
+                    key: ValueKey(
+                        'profile_${ctx.profileId}_${syncStatus.updatedAtMs}'),
+                    initialValue: profiles.any((p) => p.id == ctx.profileId)
                         ? ctx.profileId
                         : (profiles.isNotEmpty ? profiles.first.id : null),
                     decoration:
@@ -229,7 +254,8 @@ class SettingsScreen extends ConsumerWidget {
                           ),
                         )
                         .toList(),
-                    onChanged: profiles.isEmpty
+                    onChanged: profiles.isEmpty ||
+                            syncStatus.phase == AppSyncPhase.syncing
                         ? null
                         : (selectedProfileId) async {
                             if (selectedProfileId == null ||
@@ -237,19 +263,44 @@ class SettingsScreen extends ConsumerWidget {
                               return;
                             }
                             try {
+                              final notifier =
+                                  ref.read(syncStatusProvider.notifier);
+                              final service = SyncService(
+                                  db: ref.read(appDbProvider),
+                                  client: Supabase.instance.client,
+                                  workspaceService:
+                                      ref.read(workspaceServiceProvider));
+                              notifier.setSyncing(
+                                  reason: 'before_profile_switch');
+                              final saved = await service.syncNow();
+                              if (!context.mounted) return;
+                              if (!SyncService.succeeded(saved)) {
+                                notifier.setResult(saved,
+                                    reason: 'before_profile_switch');
+                                ref.invalidate(syncConflictsProvider);
+                                throw StateError(
+                                    'Current profile remains selected. Resolve sync issues before switching. $saved');
+                              }
                               await ref
                                   .read(workspaceServiceProvider)
                                   .switchActiveProfile(
                                     workspaceId: ctx.workspaceId,
                                     profileId: selectedProfileId,
+                                    cloudSyncConfirmed: true,
                                   );
+                              if (!context.mounted) return;
                               final status = await SyncService(
                                 db: ref.read(appDbProvider),
                                 client: Supabase.instance.client,
                                 workspaceService:
                                     ref.read(workspaceServiceProvider),
                               ).syncNow();
+                              if (!context.mounted) return;
+                              ref
+                                  .read(syncStatusProvider.notifier)
+                                  .setResult(status, reason: 'profile_switch');
                               ref.invalidate(activeWorkspaceContextProvider);
+                              ref.invalidate(syncConflictsProvider);
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text(status)),
@@ -257,6 +308,9 @@ class SettingsScreen extends ConsumerWidget {
                               }
                             } catch (e) {
                               if (context.mounted) {
+                                ref.read(syncStatusProvider.notifier).setError(
+                                    label: 'Profile switch failed',
+                                    detail: '$e');
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text('Profile switch failed: $e'),
@@ -294,7 +348,6 @@ class SettingsScreen extends ConsumerWidget {
                       ? null
                       : () async {
                           await Supabase.instance.client.auth.signOut();
-                          ref.invalidate(activeWorkspaceContextProvider);
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Signed out.')));
@@ -306,26 +359,16 @@ class SettingsScreen extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: PrimaryPillButton(
-                  text: 'Sync Now',
+                  text: syncStatus.phase == AppSyncPhase.syncing
+                      ? 'Syncing…'
+                      : 'Sync Now',
                   variant: PillButtonVariant.outlined,
-                  onPressed: () async {
-                    ref
-                        .read(syncStatusProvider.notifier)
-                        .setSyncing(reason: 'manual');
-                    final status = await SyncService(
-                      db: ref.read(appDbProvider),
-                      client: Supabase.instance.client,
-                      workspaceService: ref.read(workspaceServiceProvider),
-                    ).syncNow();
-                    ref
-                        .read(syncStatusProvider.notifier)
-                        .setResult(status, reason: 'manual');
-                    ref.invalidate(activeWorkspaceContextProvider);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context)
-                          .showSnackBar(SnackBar(content: Text(status)));
-                    }
-                  },
+                  onPressed: !bootstrap.initialized ||
+                          settings.localOnly ||
+                          userId == null ||
+                          syncStatus.phase == AppSyncPhase.syncing
+                      ? null
+                      : () => _syncFromSettings(context, ref),
                 ),
               ),
             ],
@@ -385,7 +428,7 @@ class _WorkspaceInviteCardState extends ConsumerState<_WorkspaceInviteCard> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: _role,
+          initialValue: _role,
           decoration: const InputDecoration(labelText: 'Role'),
           items: const [
             DropdownMenuItem(value: 'coach', child: Text('coach')),
@@ -807,5 +850,105 @@ class _WeeklyPlanPromptCardState extends ConsumerState<_WeeklyPlanPromptCard> {
         ],
       ),
     );
+  }
+}
+
+Future<void> _syncFromSettings(BuildContext context, WidgetRef ref) async {
+  final notifier = ref.read(syncStatusProvider.notifier);
+  final service = SyncService(
+      db: ref.read(appDbProvider),
+      client: Supabase.instance.client,
+      workspaceService: ref.read(workspaceServiceProvider));
+  notifier.setSyncing(reason: 'manual');
+  final status = await service.syncNow();
+  if (!context.mounted) return;
+  if (notifier.mounted) notifier.setResult(status, reason: 'manual');
+  ref.invalidate(syncConflictsProvider);
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(status)));
+}
+
+class SyncReviewCard extends ConsumerWidget {
+  const SyncReviewCard({super.key});
+  Future<void> _resolve(BuildContext context, WidgetRef ref,
+      SyncConflict conflict, bool keepDevice) async {
+    final service = SyncService(
+        db: ref.read(appDbProvider),
+        client: Supabase.instance.client,
+        workspaceService: ref.read(workspaceServiceProvider));
+    final notifier = ref.read(syncStatusProvider.notifier);
+    notifier.setSyncing(reason: 'resolve_conflict');
+    try {
+      await service.resolve(conflict, keepDevice: keepDevice);
+      final result = await service.syncNow();
+      if (!context.mounted) return;
+      if (notifier.mounted) {
+        notifier.setResult(result, reason: 'resolve_conflict');
+      }
+      ref.invalidate(syncConflictsProvider);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(result)));
+    } catch (e) {
+      if (!context.mounted) return;
+      if (notifier.mounted) {
+        notifier.setError(label: 'Review sync', detail: '$e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final busy = ref.watch(syncStatusProvider).phase == AppSyncPhase.syncing;
+    return ref.watch(syncConflictsProvider).when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const Text(
+              'Sync review is unavailable. Try Sync Now to reconnect.'),
+          data: (conflicts) => conflicts.isEmpty
+              ? const SizedBox.shrink()
+              : GlassCard(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                      Text('Review Sync Changes (${conflicts.length})',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const Text(
+                          'Both copies are preserved until you choose which version to keep.'),
+                      for (final conflict in conflicts)
+                        ExpansionTile(title: Text(conflict.label), children: [
+                          const Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text('On this device',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold))),
+                          Align(
+                              alignment: Alignment.centerLeft,
+                              child: SelectableText(
+                                  conflict.describe(conflict.local))),
+                          const SizedBox(height: 8),
+                          const Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text('In the cloud',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold))),
+                          Align(
+                              alignment: Alignment.centerLeft,
+                              child: SelectableText(
+                                  conflict.describe(conflict.cloud))),
+                          Wrap(spacing: 8, children: [
+                            OutlinedButton(
+                                onPressed: busy
+                                    ? null
+                                    : () =>
+                                        _resolve(context, ref, conflict, true),
+                                child: const Text('Keep Device Version')),
+                            OutlinedButton(
+                                onPressed: busy
+                                    ? null
+                                    : () =>
+                                        _resolve(context, ref, conflict, false),
+                                child: const Text('Use Cloud Version')),
+                          ]),
+                        ]),
+                    ])),
+        );
   }
 }

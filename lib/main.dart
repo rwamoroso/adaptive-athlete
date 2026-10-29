@@ -7,6 +7,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'config/supabase_config.dart';
 import 'core/utils/app_providers.dart';
@@ -64,6 +65,7 @@ Future<void> main() async {
     usePathUrlStrategy();
   }
 
+  final preferences = await SharedPreferences.getInstance();
   var initialized = false;
   String? error;
 
@@ -96,6 +98,7 @@ Future<void> main() async {
   runApp(
     ProviderScope(
       overrides: [
+        preferencesProvider.overrideWithValue(preferences),
         supabaseBootstrapProvider.overrideWithValue(
             SupabaseBootstrap(initialized: initialized, error: error)),
       ],
@@ -188,14 +191,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   StreamSubscription<Uri>? _deepLinkSubscription;
   Uri? _lastHandledDeepLink;
   bool _autoSyncInFlight = false;
+  String? _pendingAutoSyncReason;
   DateTime? _lastAutoSyncAt;
-
-  void _refreshScopedStorage() {
-    ref.invalidate(currentAuthUserIdProvider);
-    ref.invalidate(appStorageScopeProvider);
-    ref.invalidate(appDbProvider);
-    ref.invalidate(activeWorkspaceContextProvider);
-  }
 
   Future<void> _initDeepLinks() async {
     final appLinks = AppLinks();
@@ -234,6 +231,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       }
       ref.read(routerProvider).go(normalized);
     });
+  }
+
+  Future<void> _resumePendingInvite() async {
+    final token =
+        await ref.read(deviceScopedStoreProvider).getPendingInviteToken();
+    if (!mounted || token == null || token.trim().isEmpty) return;
+    ref
+        .read(routerProvider)
+        .go('/join?token=${Uri.encodeQueryComponent(token)}');
   }
 
   void _scheduleAutoSync({
@@ -283,32 +289,45 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       }
     }
     if (_autoSyncInFlight) {
+      _pendingAutoSyncReason = reason;
       return;
     }
 
+    final startedAccount = client.auth.currentUser?.id;
+    final database = ref.read(appDbProvider);
+    final notifier = ref.read(syncStatusProvider.notifier);
     _autoSyncInFlight = true;
-    ref.read(syncStatusProvider.notifier).setSyncing(reason: reason);
+    notifier.setSyncing(reason: reason);
     try {
       final status = await SyncService(
-        db: ref.read(appDbProvider),
+        db: database,
         client: client,
       ).syncNow();
-      if (!mounted) {
+      if (!mounted ||
+          client.auth.currentUser?.id != startedAccount ||
+          !notifier.mounted) {
         return;
       }
-      ref.read(syncStatusProvider.notifier).setResult(status, reason: reason);
-      _lastAutoSyncAt = DateTime.now();
+      notifier.setResult(status, reason: reason);
+      if (SyncService.succeeded(status)) _lastAutoSyncAt = DateTime.now();
       debugPrint('Auto sync ($reason): $status');
     } catch (e) {
-      if (mounted) {
-        ref.read(syncStatusProvider.notifier).setError(
-              label: 'Sync failed',
-              detail: 'Auto sync ($reason) failed: $e',
-            );
+      if (mounted &&
+          client.auth.currentUser?.id == startedAccount &&
+          notifier.mounted) {
+        notifier.setError(
+          label: 'Sync failed',
+          detail: 'Auto sync ($reason) failed: $e',
+        );
       }
       debugPrint('Auto sync ($reason) failed: $e');
     } finally {
       _autoSyncInFlight = false;
+      final pending = _pendingAutoSyncReason;
+      _pendingAutoSyncReason = null;
+      if (mounted && pending != null) {
+        _scheduleAutoSync(reason: pending, force: true);
+      }
     }
   }
 
@@ -331,12 +350,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           return;
         }
         if (event.event == AuthChangeEvent.signedIn) {
-          _refreshScopedStorage();
           _scheduleAutoSync(reason: 'signed_in', force: true);
+          unawaited(_resumePendingInvite());
           return;
         }
         if (event.event == AuthChangeEvent.signedOut) {
-          _refreshScopedStorage();
           _scheduleSyncStatusReset();
         }
       }, onError: (Object error, StackTrace stackTrace) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -6,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/date_utils.dart';
 import '../../db/app_db.dart';
+import '../training/cardio_activity.dart';
+import 'planner_issue.dart';
 import 'biometrics_profile.dart';
 import 'weekly_plan_prompt_service.dart';
 
@@ -701,14 +704,10 @@ $extraBlock
       );
     }
 
-    await _ensureValidServerSession();
-
     String? generatedText;
     try {
-      final response = await client.functions.invoke(
-        'generate-weekly-plan',
-        body: requestPayload,
-      );
+      await _ensureValidServerSession();
+      final response = await _invokePlanner(requestPayload);
       final data = response.data;
       String? generatedBy;
       if (data is String) {
@@ -774,7 +773,28 @@ $extraBlock
         success: false,
         errorText: e.toString(),
       );
-      rethrow;
+      throw PlannerGenerationFailure(e, generatedText);
+    }
+  }
+
+  String checkResponse(
+      {required WeeklyPlanBuildRequest request, required String text}) {
+    _validateGeneratedPlanTextForRequest(request: request, generatedText: text);
+    return db.validateAiWeeklyPlanText(
+        text: text, splitStartDate: request.splitStartDate);
+  }
+
+  Future<FunctionResponse> _invokePlanner(Map<String, dynamic> payload) async {
+    Future<FunctionResponse> invoke() => client.functions
+        .invoke('generate-weekly-plan', body: payload)
+        .timeout(const Duration(seconds: 90));
+    try {
+      return await invoke();
+    } on FunctionException catch (error) {
+      if (error.status != 401) rethrow;
+      // An unauthorized request never reached generation. Refresh once, then retry.
+      await _ensureValidServerSession(forceRefresh: true);
+      return invoke();
     }
   }
 
@@ -1098,7 +1118,6 @@ $extraBlock
         continue;
       }
       dayById[day.id] = date;
-      workoutDatesInWindow.add(date);
     }
 
     final strengthRows = await (db.select(db.actualStrengthSets)
@@ -1117,6 +1136,7 @@ $extraBlock
       if (workoutDate == null) {
         continue;
       }
+      workoutDatesInWindow.add(workoutDate);
       strengthHistory.add({
         'workout_date': workoutDate,
         'exercise': row.exerciseCanonical,
@@ -1150,6 +1170,7 @@ $extraBlock
           ]))
         .get();
     final runHistory = <Map<String, dynamic>>[];
+    final cardioHistory = <Map<String, dynamic>>[];
     var totalRunDistanceM = 0.0;
     var totalRunDurationS = 0;
     var hrSum = 0.0;
@@ -1161,7 +1182,8 @@ $extraBlock
       if (workoutDate == null) {
         continue;
       }
-      runHistory.add({
+      workoutDatesInWindow.add(workoutDate);
+      final historyRow = <String, dynamic>{
         'workout_date': workoutDate,
         'start_time': run.startTime,
         'duration_s': run.durationS,
@@ -1171,7 +1193,15 @@ $extraBlock
         'activity_type': run.activityType,
         'source': run.source,
         'run_key': run.runKey,
-      });
+      };
+      cardioHistory.add(historyRow);
+      if (!CardioActivity.isRunningSession(
+          activityType: run.activityType,
+          title: run.title,
+          treadmill: run.treadmill ?? false)) {
+        continue;
+      }
+      runHistory.add(historyRow);
       totalRunDistanceM += run.distanceM ?? 0;
       totalRunDurationS += run.durationS ?? 0;
       if (run.avgHr != null) {
@@ -1225,6 +1255,10 @@ $extraBlock
             .map((e) => {'exercise': e.key, 'set_count': e.value})
             .toList(growable: false),
         'history_rows': strengthHistory,
+      },
+      'cardio': {
+        'history_rows': cardioHistory,
+        'session_count': cardioHistory.length
       },
       'run': {
         'session_count': runHistory.length,
@@ -1322,6 +1356,11 @@ $extraBlock
     }
 
     final rawRunRows = _asMapList(runData['history_rows'])
+        .where((row) => CardioActivity.isRunningSession(
+            activityType: row['activity_type']?.toString(),
+            title: row['title']?.toString(),
+            treadmill: row['treadmill'] == true))
+        .toList()
       ..sort((a, b) => _compareYmdMaps(a, b, dateKey: 'workout_date'));
     final quality = _filterCorruptedRuns(rawRunRows);
     final runRows = quality.validRows;
@@ -2348,7 +2387,7 @@ $extraBlock
     return decoded.map((e) => e.toString()).toList(growable: false);
   }
 
-  Future<Session> _ensureValidServerSession() async {
+  Future<Session> _ensureValidServerSession({bool forceRefresh = false}) async {
     final initialSession = client.auth.currentSession;
     if (initialSession == null || initialSession.accessToken.isEmpty) {
       throw StateError(
@@ -2358,11 +2397,13 @@ $extraBlock
     Session session = initialSession;
 
     final expiresAt = session.expiresAt;
-    if (expiresAt != null) {
-      final expiryUtc =
-          DateTime.fromMillisecondsSinceEpoch(expiresAt * 1000, isUtc: true);
+    if (forceRefresh || expiresAt != null) {
+      final expiryUtc = DateTime.fromMillisecondsSinceEpoch(
+          (expiresAt ?? 0) * 1000,
+          isUtc: true);
       final nowUtc = DateTime.now().toUtc();
-      if (!expiryUtc.isAfter(nowUtc.add(const Duration(seconds: 30)))) {
+      if (forceRefresh ||
+          !expiryUtc.isAfter(nowUtc.add(const Duration(seconds: 30)))) {
         try {
           final refreshed = await client.auth.refreshSession();
           final refreshedSession = refreshed.session;
@@ -2377,7 +2418,7 @@ $extraBlock
     }
 
     final activeSession = client.auth.currentSession ?? session;
-    if (activeSession.accessToken.isEmpty) {
+    if (activeSession.accessToken.isEmpty || activeSession.isExpired) {
       throw StateError(
         'Server-side AI session is invalid. Please sign out and sign back in.',
       );

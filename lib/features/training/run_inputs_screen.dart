@@ -1,7 +1,7 @@
+import 'cardio_metrics.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 
-import 'package:drift/drift.dart' show Variable;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,13 +11,12 @@ import '../../core/utils/date_utils.dart';
 import '../../db/app_db.dart';
 import '../ui/clinical_theme.dart';
 import '../ui/clinical_widgets.dart';
+import 'cardio_activity.dart';
 import 'garmin_csv_import_service.dart';
 
 enum DistanceUnit { miles, kilometers }
 
 enum IntervalSegmentType { interval, rest }
-
-enum _ManualCardioActivity { run, treadmillRun, stairStepper }
 
 class _RunWeeklyMileagePoint {
   const _RunWeeklyMileagePoint({
@@ -93,7 +92,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   DistanceUnit _distanceUnit = DistanceUnit.miles;
-  _ManualCardioActivity _selectedManualActivity = _ManualCardioActivity.run;
+  CardioActivity _selectedManualActivity = CardioActivity.run;
   GarminActivityFilter _activityFilter = GarminActivityFilter.cardioOnly;
   bool _intervalLoggingEnabled = false;
   bool _intervalModeTouched = false;
@@ -147,114 +146,22 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         value.contains('fartlek');
   }
 
-  bool _isExplicitNonRunningCardioType(String? raw) {
-    final value = raw?.trim().toLowerCase() ?? '';
-    if (value.isEmpty) {
-      return false;
-    }
-    const keywords = <String>[
-      'stair',
-      'stepper',
-      'bike',
-      'cycle',
-      'cycling',
-      'spin',
-      'row',
-      'rower',
-      'erg',
-      'ellipt',
-      'swim',
-      'pool',
-      'ski',
-      'walk',
-      'hike',
-      'incline',
-      'sled',
-      'rope',
-      'versa',
-      'airdyne',
-      'echo bike',
-      'assault bike',
-    ];
-    return keywords.any(value.contains);
-  }
+  bool _isRunningLikeCardioType(String? raw) =>
+      CardioActivity.isRunningSession(activityType: raw);
 
-  bool _isRunningLikeCardioType(String? raw) {
-    final value = raw?.trim().toLowerCase() ?? '';
-    if (value.isEmpty || _isExplicitNonRunningCardioType(value)) {
-      return false;
-    }
-    if (value.contains('run') ||
-        value.contains('jog') ||
-        value.contains('sprint')) {
-      return true;
-    }
-    const runningDescriptors = <String>[
-      'easy',
-      'tempo',
-      'interval',
-      'repeat',
-      'fartlek',
-      'recovery',
-      'long',
-      'threshold',
-      'track',
-      'hill',
-      'stride',
-    ];
-    return runningDescriptors.any(value.contains);
-  }
-
-  bool _isTreadmillCardioType(String? raw) {
-    final value = raw?.trim().toLowerCase() ?? '';
-    return value.contains('treadmill');
-  }
-
-  bool _isStairStepperCardioType(String? raw) {
-    final value = raw?.trim().toLowerCase() ?? '';
-    return value.contains('stair') || value.contains('stepper');
-  }
-
-  _ManualCardioActivity _inferManualCardioActivity({
+  CardioActivity _inferManualCardioActivity({
     RunSessionWithSegments? editingRun,
     String? prescribedType,
   }) {
     final session = editingRun?.session;
-    if (session?.treadmill == true) {
-      return _ManualCardioActivity.treadmillRun;
-    }
-
-    final candidates = <String?>[
-      session?.title,
-      session?.activityType,
-      prescribedType,
-    ];
-    if (candidates.any(_isTreadmillCardioType)) {
-      return _ManualCardioActivity.treadmillRun;
-    }
-    if (candidates.any(_isStairStepperCardioType)) {
-      return _ManualCardioActivity.stairStepper;
-    }
-    return _ManualCardioActivity.run;
-  }
-
-  String _manualCardioActivityLabel(_ManualCardioActivity activity) {
-    switch (activity) {
-      case _ManualCardioActivity.run:
-        return 'Run';
-      case _ManualCardioActivity.treadmillRun:
-        return 'Treadmill Run';
-      case _ManualCardioActivity.stairStepper:
-        return 'Stairstepper';
-    }
-  }
-
-  bool _manualCardioActivityRequiresDistance(_ManualCardioActivity activity) {
-    return activity != _ManualCardioActivity.stairStepper;
-  }
-
-  bool _manualCardioActivityUsesTreadmill(_ManualCardioActivity activity) {
-    return activity == _ManualCardioActivity.treadmillRun;
+    return CardioActivity.infer(
+      treadmill: session?.treadmill ?? false,
+      candidates: <String?>[
+        session?.title,
+        session?.activityType,
+        prescribedType,
+      ],
+    );
   }
 
   String _formatRunTypeLabel(
@@ -285,11 +192,11 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
   }
 
   bool _manualEntryRequiresDistance() {
-    return _manualCardioActivityRequiresDistance(_selectedManualActivity);
+    return _selectedManualActivity.requiresDistance;
   }
 
   String _manualActivityLabel() {
-    return _manualCardioActivityLabel(_selectedManualActivity);
+    return _selectedManualActivity.label;
   }
 
   String _loggedActivityTitle(RunSessionWithSegments run) {
@@ -517,33 +424,8 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     final queryStart =
         last7Start.isBefore(chartStart) ? last7Start : chartStart;
 
-    final rows = await db.customSelect(
-      '''
-      select wd.workout_date as workout_date, coalesce(sum(rs.distance_m), 0) as total_distance_m
-      from run_sessions rs
-      join workout_days wd on wd.id = rs.workout_day_id
-      where wd.workout_date >= ? and wd.workout_date <= ?
-      group by wd.workout_date
-      ''',
-      variables: [
-        Variable.withString(toYmd(queryStart)),
-        Variable.withString(toYmd(chartEnd)),
-      ],
-    ).get();
-
-    final dailyMetersByYmd = <String, double>{};
-    for (final row in rows) {
-      final ymd = row.data['workout_date']?.toString();
-      final totalDistance = row.data['total_distance_m'];
-      if (ymd == null || ymd.isEmpty) {
-        continue;
-      }
-      if (totalDistance is num) {
-        dailyMetersByYmd[ymd] = totalDistance.toDouble();
-      } else {
-        dailyMetersByYmd[ymd] = double.tryParse('$totalDistance') ?? 0;
-      }
-    }
+    final dailyMetersByYmd =
+        await runningDistanceByDate(db, toYmd(queryStart), toYmd(chartEnd));
 
     final weeklyPoints = <_RunWeeklyMileagePoint>[];
     for (var i = 0; i < weeksToShow; i++) {
@@ -623,7 +505,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
         _loggedRunsForSelectedDate = const <RunSessionWithSegments>[];
         _runMileageSummary = _RunMileageCardSummary.empty;
         if (resetManualActivitySelection) {
-          _selectedManualActivity = _ManualCardioActivity.run;
+          _selectedManualActivity = CardioActivity.run;
         }
       });
     }
@@ -999,8 +881,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
       final db = ref.read(appDbProvider);
       final editingRunSessionId = _editingRunSessionId;
       final activityLabel = _manualActivityLabel();
-      final treadmill =
-          _manualCardioActivityUsesTreadmill(_selectedManualActivity);
+      final treadmill = _selectedManualActivity.usesTreadmill;
       final outcome = editingRunSessionId == null
           ? await db.insertOrUpdateManualRun(
               dateString: toYmd(_selectedDate),
@@ -1108,19 +989,36 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                 includeRunSuffix: true,
               ));
     final dailyPrescribedMiles = _estimatePlannedMilesForRun(
-      durationText: _prescribedDurationText,
+      durationText:
+          CardioActivity.isRunningSession(activityType: _prescribedRunType)
+              ? _prescribedDurationText
+              : null,
       targetPace: _prescribedTargetPace,
     );
     final runCardTitle = dailyPrescribedMiles > 0
         ? '$runPlanLabel - ${dailyPrescribedMiles.toStringAsFixed(1)} Miles'
-        : runPlanLabel;
+        : 'Running Mileage';
     final todayTotalDistanceM = _loggedRunsForSelectedDate.fold<double>(
       0,
-      (sum, run) => sum + (run.session.distanceM ?? 0),
+      (sum, run) =>
+          sum +
+          (CardioActivity.isRunningSession(
+                  activityType: run.session.activityType,
+                  title: run.session.title,
+                  treadmill: run.session.treadmill ?? false)
+              ? (run.session.distanceM ?? 0)
+              : 0),
     );
     final todayTotalDurationS = _loggedRunsForSelectedDate.fold<int>(
       0,
-      (sum, run) => sum + (run.session.durationS ?? 0),
+      (sum, run) =>
+          sum +
+          (CardioActivity.isRunningSession(
+                  activityType: run.session.activityType,
+                  title: run.session.title,
+                  treadmill: run.session.treadmill ?? false)
+              ? (run.session.durationS ?? 0)
+              : 0),
     );
     final todayPace = _formatPaceFromDurationAndDistance(
       durationS: todayTotalDurationS,
@@ -1133,7 +1031,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
     final todaysRunStatusDetail = todayTotalDistanceM > 0
         ? '${(todayTotalDistanceM / 1609.344).toStringAsFixed(1)} Miles @ $todayPace'
         : (hasLoggedCardio
-            ? 'Duration: ${_formatSecondsAsHms(todayTotalDurationS)}'
+            ? 'Duration: ${_formatSecondsAsHms(_loggedRunsForSelectedDate.fold<int>(0, (sum, r) => sum + (r.session.durationS ?? 0)))}'
             : null);
     final preview = _intervalLoggingEnabled
         ? _previewSegments()
@@ -1353,9 +1251,9 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: _ManualCardioActivity.values.map((activity) {
+                        children: CardioActivity.values.map((activity) {
                           return ChoiceChip(
-                            label: Text(_manualCardioActivityLabel(activity)),
+                            label: Text(activity.label),
                             selected: _selectedManualActivity == activity,
                             onSelected: (_) {
                               setState(
@@ -1368,7 +1266,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                       Text(
                         _manualEntryRequiresDistance()
                             ? 'Distance is required for running entries.'
-                            : 'Distance is optional for stair stepper sessions.',
+                            : 'Distance is optional for bike and stair stepper sessions.',
                         style: pageTheme.textTheme.bodySmall,
                       ),
                       const SizedBox(height: 8),
@@ -1585,7 +1483,7 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                                 : 'Distance (${_distanceUnitLabel()}, optional)',
                             helperText: _manualEntryRequiresDistance()
                                 ? null
-                                : 'Leave blank for duration-based cardio like stair stepper.',
+                                : 'Leave blank for duration-based cardio like stationary bike or stair stepper.',
                           ),
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
@@ -1648,10 +1546,15 @@ class _RunInputsScreenState extends ConsumerState<RunInputsScreen> {
                           final subtitleParts = <String>[
                             _formatRunStartTime(session.startTime),
                             '${session.source} • $durationText',
-                            _formatPaceFromDurationAndDistance(
-                              durationS: session.durationS,
-                              distanceM: session.distanceM,
-                            ),
+                            if (CardioActivity.isRunningSession(
+                                activityType: session.activityType,
+                                title: session.title,
+                                treadmill: session.treadmill ?? false))
+                              _formatPaceFromDurationAndDistance(
+                                  durationS: session.durationS,
+                                  distanceM: session.distanceM)
+                            else if ((session.distanceM ?? 0) > 0)
+                              '${(session.distanceM! / 1000).toStringAsFixed(1)} km',
                             if (run.segments.isNotEmpty)
                               '${run.segments.length} segment${run.segments.length == 1 ? '' : 's'}',
                           ];

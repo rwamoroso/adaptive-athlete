@@ -11,10 +11,10 @@ class HistoryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final db = ref.watch(appDbProvider);
+    final workoutDao = ref.watch(workoutDaoProvider);
 
     return FutureBuilder<List<WorkoutDay>>(
-      future: db.listWorkoutDays(desc: true),
+      future: workoutDao.listDays(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());

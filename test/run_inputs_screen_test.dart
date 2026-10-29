@@ -7,8 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets(
-      'manual cardio selector offers run, treadmill run, and stairstepper',
+  testWidgets('manual cardio selector offers running and bike activity options',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 2000);
     tester.view.devicePixelRatio = 1.0;
@@ -30,18 +29,21 @@ void main() {
 
     expect(find.text('Run'), findsWidgets);
     expect(find.text('Treadmill Run'), findsOneWidget);
+    expect(find.text('Stationary Bike'), findsOneWidget);
+    expect(find.text('Outdoor Bike'), findsOneWidget);
     expect(find.text('Stairstepper'), findsOneWidget);
     expect(
       find.text('Distance is required for running entries.'),
       findsOneWidget,
     );
 
-    final stairStepperChip = find.widgetWithText(ChoiceChip, 'Stairstepper');
-    await tester.tap(stairStepperChip);
+    final stationaryBikeChip =
+        find.widgetWithText(ChoiceChip, 'Stationary Bike');
+    await tester.tap(stationaryBikeChip);
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Distance is optional for stair stepper sessions.'),
+      find.text('Distance is optional for bike and stair stepper sessions.'),
       findsOneWidget,
     );
 
@@ -52,8 +54,8 @@ void main() {
 
     final runs = await db.select(db.runSessions).get();
     expect(runs.length, 1);
-    expect(runs.single.title, 'Stairstepper');
-    expect(runs.single.activityType, 'Stairstepper');
+    expect(runs.single.title, 'Stationary Bike');
+    expect(runs.single.activityType, 'Stationary Bike');
     expect(runs.single.treadmill, false);
     expect(runs.single.distanceM, 0);
   });

@@ -110,7 +110,7 @@ class MetricTile extends StatelessWidget {
     final stackTrailing = textScale > 1.2 && trailingWidget != null;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxHeight <= 96;
+        final compact = constraints.maxHeight <= 112;
         final showSubtitle = subtitleText != null && !compact;
         final shouldStackTrailing = !compact && stackTrailing;
 

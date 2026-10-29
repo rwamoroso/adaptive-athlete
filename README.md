@@ -1,6 +1,6 @@
 # Adaptive Athlete (MVP)
 
-Flutter app scaffold with local Drift database, optional Supabase auth bootstrap, basic training UI, CSV export, and mocked AI analysis with audit logs.
+Flutter training app with local Drift storage, optional Supabase authentication, cloud sync, AI-assisted planning, Garmin imports, and workbook export.
 
 ## Setup
 
@@ -23,8 +23,12 @@ Flutter app scaffold with local Drift database, optional Supabase auth bootstrap
    - `anonKey = "<SUPABASE_ANON_KEY>"`
 3. `lib/config/supabase_config.dart` is gitignored.
 4. In Supabase SQL Editor, run `supabase/schema.sql` to create the app tables.
-5. Use `Settings -> Sync Now` to push local Drift data into Supabase.
-6. Use `Daily -> Run Inputs` to add manual run data or import Garmin `Activities.csv`.
+5. Use `Settings -> Sync Now` to sync device and cloud changes. Conflicts are preserved for review in Settings.
+6. Use `Daily -> Cardio` to log runs, bikes, or stair sessions, or import Garmin `Activities.csv`. Running charts and pace calculations exclude other cardio.
+
+For ongoing database development, follow `supabase/README.md`. The SQL Editor
+bootstrap is retained for the existing MVP, but new schema changes should use
+reviewed Supabase migrations after a remote baseline has been pulled.
 
 ## Android Emulator
 
@@ -35,7 +39,7 @@ Flutter app scaffold with local Drift database, optional Supabase auth bootstrap
 
 ## iOS Note
 
-iOS deployment requires macOS + Xcode. This Windows environment can still build/run Android, web, desktop targets as supported by your Flutter setup.
+iOS deployment requires macOS and Xcode. Run `flutter devices`, then `flutter run -d <device-id>` for a connected iPhone or booted simulator.
 
 ## TestFlight Upload (CLI)
 
@@ -73,3 +77,21 @@ Use the included helper script to build and upload an iOS IPA to TestFlight via 
 
 No production secrets are committed. Keep all keys local and out of source control.
 Do not store the Postgres database password in mobile app code.
+
+## Version 1.1.0 reliability updates
+
+- Sync stores the last acknowledged cloud copy on-device and uses an atomic,
+  authenticated compare-and-set RPC. Concurrent edits remain available under
+  Settings -> Review Sync Changes. Choosing a version does not bypass a newer
+  cloud edit. Deletions use scoped tombstones to prevent stale-device resurrection.
+- Ten-week plans and weekly performance sync alongside workouts. Profile switching
+  requires a successful sync before clearing the previous profile's local cache.
+- Units, equipment, movement restrictions, and local-only mode persist on the device.
+- Settings shows the installed version/build, release notes, and last successful
+  cloud-sync time. A local save is reported separately from cloud-sync completion.
+- Planner response checks validate without replacing a plan. Failures preserve
+  pasted/generated responses and show actionable recovery guidance. Unauthorized
+  generation requests refresh the session and retry once.
+
+On the first sync after upgrading, records that differ without a prior sync
+baseline require a choice in Settings; neither copy is silently discarded.

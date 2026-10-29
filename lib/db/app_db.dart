@@ -17,6 +17,7 @@ import '../core/utils/date_utils.dart';
 import '../core/utils/device_scoped_store.dart';
 import '../features/plan/ppl_template_service.dart';
 import '../features/training/garmin_csv_import_service.dart';
+import '../features/training/cardio_activity.dart';
 import '../features/training/strength_history_import_service.dart';
 import 'tables/actual_strength_sets.dart';
 import 'tables/app_prompt_templates.dart';
@@ -4231,6 +4232,23 @@ class AppDb extends _$AppDb {
     );
   }
 
+  /// Parses and checks dates without changing the active plan or audit history.
+  String validateAiWeeklyPlanText(
+      {required String text, required DateTime splitStartDate}) {
+    final bundle = _parseAiPlanImportBundleText(text);
+    final start =
+        DateTime(splitStartDate.year, splitStartDate.month, splitStartDate.day);
+    if (bundle.weeklyPlan.weekStart != toYmd(start)) {
+      throw StateError(
+          'WEEK_START does not match selected split start (${toYmd(start)}).');
+    }
+    if (bundle.weeklyPlan.weekEnd !=
+        toYmd(start.add(const Duration(days: 6)))) {
+      throw StateError('WEEK_END does not match selected split end.');
+    }
+    return '${bundle.weeklyPlan.days.length} days checked. Ready to apply.';
+  }
+
   Future<AiWeeklyPlanTextImportResult> importAiWeeklyPlanText({
     required String text,
     required DateTime splitStartDate,
@@ -7891,7 +7909,9 @@ class AppDb extends _$AppDb {
     final plannedStrengthExercises =
         plannedSets.map((s) => s.exerciseCanonical).toSet().length;
     final plannedRunRows = planRunByDayId.values
-        .where((r) => (r.runType ?? '').trim().isNotEmpty)
+        .where((r) =>
+            (r.runType ?? '').trim().isNotEmpty &&
+            CardioActivity.isRunningSession(activityType: r.runType))
         .toList();
     final plannedRunDays = plannedRunRows.length;
     final plannedRunSessions = plannedRunRows.length;
@@ -7910,12 +7930,18 @@ class AppDb extends _$AppDb {
         : await (select(actualStrengthSets)
               ..where((a) => a.workoutDayId.isIn(workoutDayIds)))
             .get();
-    final actualRunRows = workoutDayIds.isEmpty
+    final actualCardioRows = workoutDayIds.isEmpty
         ? const <RunSession>[]
         : await (select(runSessions)
               ..where((r) => r.workoutDayId.isIn(workoutDayIds)))
             .get();
 
+    final actualRunRows = actualCardioRows
+        .where((r) => CardioActivity.isRunningSession(
+            activityType: r.activityType,
+            title: r.title,
+            treadmill: r.treadmill ?? false))
+        .toList();
     final actualStrengthSetsCount = actualStrengthRows.length;
     final actualStrengthExercises = actualStrengthRows
         .map((a) => a.prescribedExerciseCanonical ?? a.exerciseCanonical)
@@ -7934,11 +7960,16 @@ class AppDb extends _$AppDb {
         .map((a) => workoutDateById[a.workoutDayId])
         .whereType<String>()
         .toSet();
+    final actualCardioDays = actualCardioRows
+        .map((r) => workoutDateById[r.workoutDayId])
+        .whereType<String>()
+        .toSet();
     final completedPlanDays = plannedDays
         .map((d) => d.estimatedDate)
         .whereType<String>()
         .where((ymd) =>
-            actualRunDaySet.contains(ymd) || actualStrengthDaySet.contains(ymd))
+            actualCardioDays.contains(ymd) ||
+            actualStrengthDaySet.contains(ymd))
         .toSet()
         .length;
     final totalRunDistanceM = actualRunRows
@@ -8116,6 +8147,9 @@ class AppDb extends _$AppDb {
       await delete(workoutDays).go();
       await delete(planLongRangeWeekPerformance).go();
       await delete(planLongRangeWeeks).go();
+      if (await _doesTableExist('sync_state')) {
+        await customStatement('DELETE FROM sync_state');
+      }
     });
   }
 

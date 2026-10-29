@@ -1,3 +1,5 @@
+import 'cardio_activity.dart';
+import 'cardio_metrics.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -783,33 +785,8 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     final queryStart =
         last7Start.isBefore(chartStart) ? last7Start : chartStart;
 
-    final rows = await db.customSelect(
-      '''
-      select wd.workout_date as workout_date, coalesce(sum(rs.distance_m), 0) as total_distance_m
-      from run_sessions rs
-      join workout_days wd on wd.id = rs.workout_day_id
-      where wd.workout_date >= ? and wd.workout_date <= ?
-      group by wd.workout_date
-      ''',
-      variables: [
-        Variable.withString(toYmd(queryStart)),
-        Variable.withString(toYmd(chartEnd)),
-      ],
-    ).get();
-
-    final dailyMetersByYmd = <String, double>{};
-    for (final row in rows) {
-      final ymd = row.data['workout_date']?.toString();
-      final totalDistance = row.data['total_distance_m'];
-      if (ymd == null || ymd.isEmpty) {
-        continue;
-      }
-      if (totalDistance is num) {
-        dailyMetersByYmd[ymd] = totalDistance.toDouble();
-      } else {
-        dailyMetersByYmd[ymd] = double.tryParse('$totalDistance') ?? 0;
-      }
-    }
+    final dailyMetersByYmd =
+        await runningDistanceByDate(db, toYmd(queryStart), toYmd(chartEnd));
 
     final weeklyPoints = <_WeeklyMileagePoint>[];
     for (var i = 0; i < weeksToShow; i++) {
@@ -836,7 +813,7 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     final plannedRows = await db.customSelect(
       '''
       select pd.estimated_date as estimated_date,
-             pr.duration_text as duration_text,
+             pr.run_type as run_type, pr.duration_text as duration_text,
              pr.target_pace as target_pace
       from plan_days pd
       join plan_prescribed_runs pr on pr.plan_day_id = pd.id
@@ -850,6 +827,10 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
 
     var currentWeekPlannedMiles = 0.0;
     for (final row in plannedRows) {
+      if (!CardioActivity.isRunningSession(
+          activityType: row.data['run_type']?.toString())) {
+        continue;
+      }
       currentWeekPlannedMiles += _estimatePlannedMilesForRun(
         durationText: row.data['duration_text']?.toString(),
         targetPace: row.data['target_pace']?.toString(),
@@ -1149,10 +1130,20 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
             : 0.0;
         final totalRunDistance = safeDetail.runSessions.fold<double>(
           0,
-          (sum, run) => sum + (run.session.distanceM ?? 0),
+          (sum, run) =>
+              sum +
+              (CardioActivity.isRunningSession(
+                      activityType: run.session.activityType,
+                      title: run.session.title,
+                      treadmill: run.session.treadmill ?? false)
+                  ? (run.session.distanceM ?? 0)
+                  : 0),
         );
         final dailyPrescribedMiles = _estimatePlannedMilesForRun(
-          durationText: safeDetail.prescribedRun?.durationText,
+          durationText: CardioActivity.isRunningSession(
+                  activityType: safeDetail.prescribedRun?.runType)
+              ? safeDetail.prescribedRun?.durationText
+              : null,
           targetPace: safeDetail.prescribedRun?.targetPace,
         );
 
@@ -1521,8 +1512,11 @@ class _DailyClinicalContent extends StatelessWidget {
         );
         final prescribedLiftFocusTitle =
             (safeDetail.prescribedRun?.liftFocus ?? '').trim();
-        final runTitleBase =
-            prescribedRunTypeTitle.isEmpty ? 'Cardio' : prescribedRunTypeTitle;
+        final runTitleBase = prescribedRunTypeTitle.isEmpty ||
+                !CardioActivity.isRunningSession(
+                    activityType: safeDetail.prescribedRun?.runType)
+            ? 'Running'
+            : prescribedRunTypeTitle;
         final runCardTitle = dailyPrescribedMiles > 0
             ? '$runTitleBase - ${dailyPrescribedMiles.toStringAsFixed(1)} Miles'
             : runTitleBase;
@@ -1532,10 +1526,14 @@ class _DailyClinicalContent extends StatelessWidget {
             : splitSessionType;
         final splitFocusDescription =
             _formatLiftFocusSummary(prescribedLiftFocusTitle);
-        final todayRunDurationS = safeDetail.runSessions.fold<int>(
-          0,
-          (sum, run) => sum + (run.session.durationS ?? 0),
-        );
+        final todayRunDurationS = safeDetail.runSessions
+            .where((run) => CardioActivity.isRunningSession(
+                activityType: run.session.activityType,
+                title: run.session.title,
+                treadmill: run.session.treadmill ?? false))
+            .fold<int>(0, (sum, run) => sum + (run.session.durationS ?? 0));
+        final todayCardioDurationS = safeDetail.runSessions
+            .fold<int>(0, (sum, run) => sum + (run.session.durationS ?? 0));
         final todayRunDistanceM = totalRunDistance > 0 ? totalRunDistance : 0.0;
         final todayRunPace = _formatPaceMinPerMileFromTotals(
           durationS: todayRunDurationS,
@@ -1548,7 +1546,7 @@ class _DailyClinicalContent extends StatelessWidget {
                 ? (todayRunPace == null
                     ? 'Today\'s Cardio Logged\n${_formatMilesWord(todayRunDistanceM / 1609.344)}'
                     : 'Today\'s Cardio Logged\n${_formatMilesWord(todayRunDistanceM / 1609.344)} @ $todayRunPace')
-                : 'Today\'s Cardio Logged\n${_formatDuration(todayRunDurationS)}')
+                : 'Today\'s Cardio Logged\n${_formatDuration(todayCardioDurationS)}')
             : 'No Cardio Logged';
         final ratio = constraints.maxWidth < 760 ? 0.76 : 0.96;
         return GridView.count(

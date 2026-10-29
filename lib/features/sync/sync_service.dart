@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -5,1521 +8,467 @@ import '../../core/utils/device_scoped_store.dart';
 import '../../db/app_db.dart';
 import '../workspace/workspace_service.dart';
 
+/// Parent records precede their children. Deletes run in the reverse order.
+const syncedTables = <String>[
+  'workout_days',
+  'plan_cycles',
+  'plan_days',
+  'exercise_substitutions',
+  'actual_strength_sets',
+  'prescribed_strength_sets',
+  'sleep_nights',
+  'run_sessions',
+  'run_segments',
+  'run_session_details',
+  'run_override_audit',
+  'rule_triggers',
+  'ai_audit',
+  'plan_prescribed_strength_sets',
+  'plan_prescribed_runs',
+  'plan_exercise_alternatives',
+  'plan_summary_snapshots',
+  'plan_import_audit',
+  'athlete_planning_profiles',
+  'weekly_plan_build_requests',
+  'plan_long_range_weeks',
+  'plan_long_range_week_performance',
+];
+
+class SyncConflict {
+  const SyncConflict(this.table, this.key, this.local, this.cloud);
+  final String table;
+  final String key;
+  final Map<String, dynamic>? local;
+  final Map<String, dynamic>? cloud;
+
+  String get label {
+    final row = local ?? cloud ?? {};
+    final date = row['workout_date'] ??
+        row['estimated_date'] ??
+        row['week_start'] ??
+        row['sleep_date'] ??
+        '';
+    final title = row['title'] ??
+        row['exercise_canonical'] ??
+        row['week_label'] ??
+        table.replaceAll('_', ' ');
+    return '$title $date'.trim();
+  }
+
+  String describe(Map<String, dynamic>? row) {
+    if (row == null) return 'Deleted';
+    final fields = <String, dynamic>{
+      for (final entry in row.entries)
+        if (!entry.key.endsWith('_id') &&
+            entry.key != 'id' &&
+            !entry.key.endsWith('_json') &&
+            entry.value != null)
+          entry.key.replaceAll('_', ' '): entry.value,
+    };
+    return fields.entries
+        .map((e) =>
+            '${e.key}: ${e.value.toString().length > 250 ? '${e.value.toString().substring(0, 250)}…' : e.value}')
+        .join('\n');
+  }
+}
+
+/// A durable three-way merge. No network request runs inside a SQLite transaction.
+/// Cloud writes use an atomic compare-and-set RPC, never a blind upsert.
 class SyncService {
-  SyncService({
-    required this.db,
-    required this.client,
-    WorkspaceService? workspaceService,
-  }) : workspaceService = workspaceService ??
+  SyncService(
+      {required this.db,
+      required this.client,
+      WorkspaceService? workspaceService})
+      : workspaceService = workspaceService ??
             WorkspaceService(
-              db: db,
-              client: client,
-              deviceStore: const DeviceScopedStore(),
-            );
+                db: db, client: client, deviceStore: const DeviceScopedStore());
 
   final AppDb db;
   final SupabaseClient client;
   final WorkspaceService workspaceService;
-  late final _ScopedSyncContext _context;
-  final Map<String, String> _workoutDayIdRemap = <String, String>{};
-  String _activeStep = 'starting sync';
+  static final _inFlight = Expando<Future<String>>();
+  String? _account;
+  String _scope = '';
+  String _workspace = '';
+  String _profile = '';
+  String _step = 'loading workspace';
+  final _pendingDeletes = <String, Map<String, Map<String, dynamic>>>{};
 
-  Future<String> syncNow() async {
-    final user = client.auth.currentUser;
-    if (user == null) {
-      return 'Sign in first to sync with Supabase.';
+  static bool succeeded(String result) => result.startsWith('Sync complete:');
+
+  Future<String> syncNow() {
+    final running = _inFlight[db];
+    if (running != null) return running;
+    final future = _sync();
+    _inFlight[db] = future;
+    unawaited(future.whenComplete(() {
+      _inFlight[db] = null;
+    }));
+    return future;
+  }
+
+  Future<void> _initialize({bool refresh = true}) async {
+    final context = !refresh
+        ? (await workspaceService.getCachedContext() ??
+            await workspaceService.requireContext())
+        : await workspaceService.requireContext();
+    _workspace = context.workspaceId;
+    _profile = context.profileId;
+    _scope = '$_workspace/$_profile';
+    await db.customStatement("""
+      CREATE TABLE IF NOT EXISTS sync_state (
+        scope TEXT NOT NULL, table_name TEXT NOT NULL, row_key TEXT NOT NULL,
+        baseline_json TEXT, conflict INTEGER NOT NULL DEFAULT 0,
+        local_json TEXT, cloud_json TEXT, restore INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(scope, table_name, row_key)
+      )
+    """);
+    if (refresh &&
+        context.needsCloudClaim &&
+        context.role.toLowerCase() == 'owner') {
+      await workspaceService.claimLegacyRowsForActiveProfile(context: context);
     }
+  }
 
-    _activeStep = 'loading workspace context';
+  Future<String> _sync() async {
+    _pendingDeletes.clear();
+    _account = client.auth.currentUser?.id;
+    if (_account == null) {
+      return 'Sync unavailable: sign in first.';
+    }
     try {
-      final activeContext = await _runStep(
-          'loading workspace context', workspaceService.requireContext);
-      _context = _ScopedSyncContext(
-        workspaceId: activeContext.workspaceId,
-        athleteProfileId: activeContext.profileId,
-      );
-      if (activeContext.needsCloudClaim &&
-          activeContext.role.toLowerCase() == 'owner') {
-        await _runStep(
-          'claiming legacy cloud rows',
-          () => workspaceService.claimLegacyRowsForActiveProfile(
-            context: activeContext,
-          ),
-        );
+      await _initialize();
+      await db.enforceWorkoutDayDateUniqueness();
+      for (final name in syncedTables) {
+        _step = 'syncing ${name.replaceAll('_', ' ')}';
+        await _syncTable(name);
       }
-
-      final hasLocalRows =
-          await _runStep('checking local data', _hasAnyLocalRows);
-      final hasCloudRows =
-          await _runStep('checking cloud data', _hasAnyCloudRows);
-      if (hasCloudRows) {
-        await _runStep('pulling cloud data', _pullFromSupabase);
-        await _runStep(
-          'pruning empty local plan cycles',
-          _pruneEmptyLocalPlanCycles,
-        );
-        if (hasLocalRows) {
-          await _runStep('pushing merged local data', _pushToSupabase);
-          await _runStep('refreshing cloud data', _pullFromSupabase);
-          await _runStep(
-            'pruning empty local plan cycles',
-            _pruneEmptyLocalPlanCycles,
-          );
-          return 'Sync complete: cloud pulled, local merged, then cloud refreshed locally.';
+      for (final name in syncedTables.reversed) {
+        for (final entry in (_pendingDeletes[name] ?? {}).entries) {
+          // A user may have restored a record while the sync was running.
+          final current = await _localRows(name);
+          if (!current.containsKey(entry.key)) {
+            await _writeCloud(name, entry.key, null, entry.value);
+          }
         }
-
-        // A fresh-device restore only needs the cloud snapshot locally.
-        // Re-pushing unchanged rows back to Supabase adds failure surface.
-        return 'Sync complete: cloud pulled to local.';
       }
-
-      if (hasLocalRows) {
-        await _runStep('pushing local data to cloud', _pushToSupabase);
-        await _runStep('refreshing cloud data', _pullFromSupabase);
-        await _runStep(
-          'pruning empty local plan cycles',
-          _pruneEmptyLocalPlanCycles,
-        );
-        return 'Sync complete: local pushed to empty cloud, then cloud pulled to local.';
+      final conflicts = await _conflicts();
+      if (conflicts.isNotEmpty) {
+        return 'Sync needs review: ${conflicts.length} conflicting record(s). '
+            'Your device edits are preserved. Open Settings to review.';
       }
-
-      return 'Sync complete: nothing to sync yet.';
+      if (await _hasPendingChanges()) {
+        return 'Sync pending: more device edits were made during sync. Tap Sync Now to save them to cloud.';
+      }
+      return 'Sync complete: device and cloud changes saved.';
     } catch (e) {
-      return 'Sync failed during $_activeStep: $e';
+      return 'Sync failed during $_step: $e. Device changes remain saved locally.';
     }
   }
 
-  Future<T> _runStep<T>(String step, Future<T> Function() action) async {
-    _activeStep = step;
-    return action();
+  void _checkAccount() {
+    if (client.auth.currentUser?.id != _account) {
+      throw StateError('Sign-in changed during sync. Retry after signing in.');
+    }
   }
 
-  Future<bool> _hasAnyLocalRows() async {
-    if (await (db.select(db.workoutDays)..limit(1)).getSingleOrNull() != null) {
-      return true;
+  TableInfo getTable(String name) =>
+      db.allTables.firstWhere((table) => table.actualTableName == name);
+
+  String _keyColumn(String name) =>
+      name == 'run_session_details' ? 'run_session_id' : 'id';
+
+  Map<String, dynamic>? _normalize(String name, Map<String, dynamic>? row) {
+    if (row == null) return null;
+    final table = getTable(name);
+    final normalized = <String, dynamic>{
+      for (final col in table.$columns)
+        col.$name: col.type == DriftSqlType.bool && row[col.$name] is num
+            ? row[col.$name] != 0
+            : row[col.$name],
+      'workspace_id': _workspace,
+      'athlete_profile_id': _profile,
+    };
+    // Older cloud rows predate this field. Its existing app default is the
+    // performed exercise; an actual substitution still remains distinct.
+    if (name == 'actual_strength_sets') {
+      normalized['prescribed_exercise_canonical'] ??=
+          normalized['exercise_canonical'];
     }
-    if (await (db.select(db.planCycles)..limit(1)).getSingleOrNull() != null) {
-      return true;
-    }
-    if (await (db.select(db.actualStrengthSets)..limit(1)).getSingleOrNull() !=
-        null) {
-      return true;
-    }
-    if (await (db.select(db.runSessions)..limit(1)).getSingleOrNull() != null) {
-      return true;
-    }
-    if (await (db.select(db.sleepNights)..limit(1)).getSingleOrNull() != null) {
-      return true;
-    }
-    if (await (db.select(db.athletePlanningProfiles)..limit(1))
-            .getSingleOrNull() !=
-        null) {
-      return true;
-    }
-    return false;
+    return normalized;
   }
 
-  Future<bool> _hasAnyCloudRows() async {
-    final tables = <String>[
-      'workout_days',
-      'plan_cycles',
-      'actual_strength_sets',
-      'run_sessions',
-      'sleep_nights',
-      'athlete_planning_profiles',
-    ];
-    for (final table in tables) {
-      _activeStep = 'checking cloud table $table';
-      final response = await client
-          .from(table)
-          .select('id')
-          .eq('workspace_id', _context.workspaceId)
-          .eq('athlete_profile_id', _context.athleteProfileId)
-          .limit(1);
-      if ((response as List).isNotEmpty) {
-        return true;
-      }
+  String _json(Object? value) {
+    if (value is Map) {
+      final keys = value.keys.cast<String>().toList()..sort();
+      return '{${keys.map((k) => '${jsonEncode(k)}:${_json(value[k])}').join(',')}}';
     }
-    return false;
+    if (value is List) return '[${value.map(_json).join(',')}]';
+    // SQLite's integer representation and PostgreSQL's real representation agree.
+    if (value is num && value.isFinite && value == value.roundToDouble()) {
+      return value.toInt().toString();
+    }
+    return jsonEncode(value);
   }
 
-  Future<void> _pushToSupabase() async {
-    await _runStep('pushing workout days', _upsertWorkoutDays);
-    await _runStep('pushing actual strength sets', _upsertActualStrengthSets);
-    await _runStep(
-      'pushing prescribed strength sets',
-      _upsertPrescribedStrengthSets,
-    );
-    await _runStep('pushing sleep nights', _upsertSleepNights);
-    await _runStep('pushing run sessions', _upsertRunSessions);
-    await _runStep('pushing run segments', _upsertRunSegments);
-    await _runStep('pushing run session details', _upsertRunSessionDetails);
-    await _runStep('pushing run override audit', _upsertRunOverrideAudit);
-    await _runStep('pushing rule triggers', _upsertRuleTriggers);
-    await _runStep('pushing ai audit', _upsertAiAudit);
-    await _runStep('pushing plan cycles', _upsertPlanCycles);
-    await _runStep('pushing plan days', _upsertPlanDays);
-    await _runStep(
-      'pushing exercise substitutions',
-      _upsertExerciseSubstitutions,
-    );
-    await _runStep(
-      'pushing plan prescribed strength sets',
-      _upsertPlanPrescribedStrengthSets,
-    );
-    await _runStep('pushing plan prescribed runs', _upsertPlanPrescribedRuns);
-    await _runStep(
-      'pushing plan exercise alternatives',
-      _upsertPlanExerciseAlternatives,
-    );
-    await _runStep(
-      'pushing plan summary snapshots',
-      _upsertPlanSummarySnapshots,
-    );
-    await _runStep('pushing plan import audit', _upsertPlanImportAudit);
-    await _runStep(
-      'pushing athlete planning profiles',
-      _upsertAthletePlanningProfiles,
-    );
-    await _runStep(
-      'pushing weekly plan build requests',
-      _upsertWeeklyPlanBuildRequests,
-    );
+  bool _same(String name, Map<String, dynamic>? a, Map<String, dynamic>? b) =>
+      _json(_normalize(name, a)) == _json(_normalize(name, b));
+
+  Future<Map<String, Map<String, dynamic>>> _localRows(String name) async {
+    final scoped = name == 'athlete_planning_profiles' ||
+        name == 'weekly_plan_build_requests';
+    final rows = await db.customSelect(
+      'SELECT * FROM "$name"${scoped ? ' WHERE workspace_id = ? AND athlete_profile_id = ?' : ''}',
+      variables: scoped
+          ? [Variable.withString(_workspace), Variable.withString(_profile)]
+          : [],
+      readsFrom: {getTable(name)},
+    ).get();
+    return {
+      for (final row in rows)
+        row.data[_keyColumn(name)].toString(): _normalize(name, row.data)!
+    };
   }
 
-  Future<void> _pullFromSupabase() async {
-    _workoutDayIdRemap.clear();
-    await _runStep('pulling workout days', _pullWorkoutDays);
-    await _runStep('pulling plan cycles', _pullPlanCycles);
-    await _runStep('pulling plan days', _pullPlanDays);
-    await _runStep(
-      'pulling exercise substitutions',
-      _pullExerciseSubstitutions,
-    );
-    await _runStep(
-      'pulling plan prescribed strength sets',
-      _pullPlanPrescribedStrengthSets,
-    );
-    await _runStep('pulling plan prescribed runs', _pullPlanPrescribedRuns);
-    await _runStep(
-      'pulling plan exercise alternatives',
-      _pullPlanExerciseAlternatives,
-    );
-    await _runStep(
-      'pulling plan summary snapshots',
-      _pullPlanSummarySnapshots,
-    );
-    await _runStep('pulling plan import audit', _pullPlanImportAudit);
-    await _runStep(
-      'pulling athlete planning profiles',
-      _pullAthletePlanningProfiles,
-    );
-    await _runStep(
-      'pulling weekly plan build requests',
-      _pullWeeklyPlanBuildRequests,
-    );
-    await _runStep('pulling actual strength sets', _pullActualStrengthSets);
-    await _runStep(
-      'pulling prescribed strength sets',
-      _pullPrescribedStrengthSets,
-    );
-    await _runStep('pulling sleep nights', _pullSleepNights);
-    await _runStep('pulling run sessions', _pullRunSessions);
-    await _runStep('pulling run segments', _pullRunSegments);
-    await _runStep('pulling run session details', _pullRunSessionDetails);
-    await _runStep('pulling run override audit', _pullRunOverrideAudit);
-    await _runStep('pulling rule triggers', _pullRuleTriggers);
-    await _runStep('pulling ai audit', _pullAiAudit);
-    await _runStep(
-      'deduplicating local workout days',
-      db.enforceWorkoutDayDateUniqueness,
+  Future<List<Map<String, dynamic>>> _remoteRows(String name) async {
+    final rows = <Map<String, dynamic>>[];
+    for (var start = 0;; start += 500) {
+      _checkAccount();
+      final page = await client
+          .from(name)
+          .select()
+          .eq('workspace_id', _workspace)
+          .eq('athlete_profile_id', _profile)
+          .order(_keyColumn(name))
+          .range(start, start + 499);
+      rows.addAll(page.map((row) => Map<String, dynamic>.from(row)));
+      if (page.length < 500) return rows;
+    }
+  }
+
+  Future<void> _saveState(
+      String name, String key, Map<String, dynamic>? baseline,
+      {bool conflict = false,
+      Map<String, dynamic>? local,
+      Map<String, dynamic>? cloud,
+      bool restore = false}) async {
+    await db.customStatement(
+      'INSERT INTO sync_state(scope,table_name,row_key,baseline_json,conflict,local_json,cloud_json,restore) '
+      'VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(scope,table_name,row_key) DO UPDATE SET '
+      'baseline_json=excluded.baseline_json, conflict=excluded.conflict, '
+      'local_json=excluded.local_json, cloud_json=excluded.cloud_json, restore=excluded.restore',
+      [
+        _scope,
+        name,
+        key,
+        _json(_normalize(name, baseline)),
+        conflict ? 1 : 0,
+        _json(_normalize(name, local)),
+        _json(_normalize(name, cloud)),
+        restore ? 1 : 0
+      ],
     );
   }
 
-  Future<Set<String>> _localPlanCycleIdsWithPrescribedContent() async {
-    final dayRows = await db.select(db.planDays).get();
-    if (dayRows.isEmpty) {
-      return const <String>{};
-    }
-    final setDayIds = (await db.select(db.planPrescribedStrengthSets).get())
-        .map((row) => row.planDayId)
-        .toSet();
-    final runDayIds = (await db.select(db.planPrescribedRuns).get())
-        .map((row) => row.planDayId)
-        .toSet();
-    final contentDayIds = <String>{...setDayIds, ...runDayIds};
-    if (contentDayIds.isEmpty) {
-      return const <String>{};
-    }
-    final cycleIds = <String>{};
-    for (final day in dayRows) {
-      if (contentDayIds.contains(day.id)) {
-        cycleIds.add(day.planCycleId);
-      }
-    }
-    return cycleIds;
-  }
-
-  Future<void> _pruneEmptyLocalPlanCycles() async {
-    final cycleIdsWithContent = await _localPlanCycleIdsWithPrescribedContent();
-    final cycles = await db.select(db.planCycles).get();
-    final emptyCycleIds = cycles
-        .map((cycle) => cycle.id)
-        .where((id) => !cycleIdsWithContent.contains(id))
-        .toList();
-    if (emptyCycleIds.isEmpty) {
-      return;
-    }
-
-    final dayRows = await db.select(db.planDays).get();
-    final emptyDayIds = dayRows
-        .where((day) => emptyCycleIds.contains(day.planCycleId))
-        .map((day) => day.id)
-        .toList();
-
-    await db.transaction(() async {
-      if (emptyDayIds.isNotEmpty) {
-        await (db.delete(db.planExerciseAlternatives)
-              ..where((row) => row.planDayId.isIn(emptyDayIds)))
-            .go();
-        await (db.delete(db.planPrescribedStrengthSets)
-              ..where((row) => row.planDayId.isIn(emptyDayIds)))
-            .go();
-        await (db.delete(db.planPrescribedRuns)
-              ..where((row) => row.planDayId.isIn(emptyDayIds)))
-            .go();
-        await (db.delete(db.planDays)..where((row) => row.id.isIn(emptyDayIds)))
-            .go();
-      }
-      await (db.delete(db.planSummarySnapshots)
-            ..where((row) => row.planCycleId.isIn(emptyCycleIds)))
-          .go();
-      await (db.delete(db.planCycles)
-            ..where((row) => row.id.isIn(emptyCycleIds)))
-          .go();
-    });
-  }
-
-  Future<List<Map<String, dynamic>>> _fetchRows(
-    String table, {
-    String? columns,
-  }) async {
-    const pageSize = 1000;
-    final allRows = <Map<String, dynamic>>[];
-    var from = 0;
-
-    while (true) {
-      final query = columns == null
-          ? client.from(table).select()
-          : client.from(table).select(columns);
-      final response = await query
-          .eq('workspace_id', _context.workspaceId)
-          .eq('athlete_profile_id', _context.athleteProfileId)
-          .range(from, from + pageSize - 1);
-
-      final rows = (response as List)
-          .map((row) => Map<String, dynamic>.from(row as Map))
+  Future<void> _applyLocal(
+      String name, String key, Map<String, dynamic>? row) async {
+    final table = getTable(name);
+    if (row == null) {
+      await db.customStatement(
+          'DELETE FROM "$name" WHERE "${_keyColumn(name)}" = ?', [key]);
+    } else {
+      final cols = table.$columns.map((c) => c.$name).toList();
+      final normalized = _normalize(name, row)!;
+      final values = cols
+          .map((c) => normalized[c] is bool
+              ? (normalized[c] == true ? 1 : 0)
+              : normalized[c])
           .toList();
-      allRows.addAll(rows);
+      await db.customStatement(
+        'INSERT INTO "$name" (${cols.map((c) => '"$c"').join(',')}) '
+        'VALUES (${cols.map((_) => '?').join(',')}) ON CONFLICT("${_keyColumn(name)}") '
+        'DO UPDATE SET ${cols.where((c) => c != _keyColumn(name)).map((c) => '"$c"=excluded."$c"').join(',')}',
+        values,
+      );
+    }
+    db.markTablesUpdated({table});
+  }
 
-      if (rows.length < pageSize) {
-        break;
+  Future<void> _alignWorkoutDays(List<Map<String, dynamic>> cloud) async {
+    final local = await _localRows('workout_days');
+    final byDate = {for (final row in cloud) row['workout_date']: row};
+    for (final row in local.values) {
+      final remote = byDate[row['workout_date']];
+      if (remote == null || remote['id'] == row['id']) continue;
+      for (final table in db.allTables) {
+        if (table.$columns.any((c) => c.$name == 'workout_day_id')) {
+          await db.customStatement(
+              'UPDATE "${table.actualTableName}" SET workout_day_id=? WHERE workout_day_id=?',
+              [remote['id'], row['id']]);
+          db.markTablesUpdated({table});
+        }
       }
-      from += pageSize;
+      await db.customStatement(
+          'UPDATE workout_days SET id=?, created_at=? WHERE id=?',
+          [remote['id'], remote['created_at'], row['id']]);
+      await db.customStatement(
+          'DELETE FROM sync_state WHERE scope=? AND table_name=? AND row_key=?',
+          [_scope, 'workout_days', row['id']]);
+      db.markTablesUpdated({db.workoutDays});
     }
-
-    return allRows;
   }
 
-  String _requiredString(Map<String, dynamic> row, String key) {
-    final value = row[key];
-    if (value == null) {
-      throw StateError('Missing required field "$key".');
-    }
-    return value.toString();
-  }
-
-  int _requiredInt(Map<String, dynamic> row, String key) {
-    final value = _asInt(row[key]);
-    if (value == null) {
-      throw StateError('Missing required int field "$key".');
-    }
-    return value;
-  }
-
-  bool _requiredBool(Map<String, dynamic> row, String key) {
-    final value = _asBool(row[key]);
-    if (value == null) {
-      throw StateError('Missing required bool field "$key".');
-    }
-    return value;
-  }
-
-  int? _asInt(dynamic value) {
-    if (value == null) {
-      return null;
-    }
-    if (value is int) {
-      return value;
-    }
-    if (value is num) {
-      return value.toInt();
-    }
-    return int.tryParse(value.toString());
-  }
-
-  double? _asDouble(dynamic value) {
-    if (value == null) {
-      return null;
-    }
-    if (value is double) {
-      return value;
-    }
-    if (value is num) {
-      return value.toDouble();
-    }
-    return double.tryParse(value.toString());
-  }
-
-  bool? _asBool(dynamic value) {
-    if (value == null) {
-      return null;
-    }
-    if (value is bool) {
-      return value;
-    }
-    if (value is num) {
-      return value != 0;
-    }
-    final normalized = value.toString().toLowerCase();
-    if (normalized == 'true' || normalized == 't' || normalized == '1') {
-      return true;
-    }
-    if (normalized == 'false' || normalized == 'f' || normalized == '0') {
-      return false;
-    }
-    return null;
-  }
-
-  Map<String, dynamic> _scopedRow(Map<String, dynamic> row) => {
-        ...row,
-        'workspace_id': _context.workspaceId,
-        'athlete_profile_id': _context.athleteProfileId,
+  Future<void> _syncTable(String name) async {
+    final cloudRows = await _remoteRows(name);
+    final cloud = {
+      for (final row in cloudRows) row[_keyColumn(name)].toString(): row
+    };
+    final deleted = await client
+        .from('sync_tombstones')
+        .select('row_key')
+        .eq('workspace_id', _workspace)
+        .eq('athlete_profile_id', _profile)
+        .eq('table_name', name);
+    final deletedKeys = deleted.map((r) => r['row_key'].toString()).toSet();
+    _checkAccount();
+    final uploads = <String, Map<String, dynamic>?>{};
+    final restores = <String>{};
+    await db.transaction(() async {
+      if (name == 'workout_days') await _alignWorkoutDays(cloudRows);
+      final local = await _localRows(name);
+      final stateRows = await db.customSelect(
+        'SELECT * FROM sync_state WHERE scope=? AND table_name=?',
+        variables: [Variable.withString(_scope), Variable.withString(name)],
+      ).get();
+      final states = {
+        for (final r in stateRows) r.data['row_key'].toString(): r.data
       };
-
-  Future<void> _pullWorkoutDays() async {
-    final rows = await _fetchRows('workout_days');
-    final sorted = rows.toList()
-      ..sort((a, b) {
-        final aDate = _requiredString(a, 'workout_date');
-        final bDate = _requiredString(b, 'workout_date');
-        final byDate = aDate.compareTo(bDate);
-        if (byDate != 0) {
-          return byDate;
+      for (final key in {...local.keys, ...cloud.keys, ...states.keys}) {
+        final device = local[key];
+        final remote = cloud[key];
+        final state = states[key];
+        final hasBaseline = state != null;
+        final baseline = state == null
+            ? null
+            : jsonDecode(state['baseline_json'] as String)
+                as Map<String, dynamic>?;
+        if (_same(name, device, remote)) {
+          await _saveState(name, key, remote);
+          continue;
         }
-        final byCreatedAt = _requiredInt(a, 'created_at')
-            .compareTo(_requiredInt(b, 'created_at'));
-        if (byCreatedAt != 0) {
-          return byCreatedAt;
+        final localChanged =
+            !hasBaseline ? device != null : !_same(name, device, baseline);
+        final remoteChanged = !hasBaseline
+            ? remote != null || deletedKeys.contains(key)
+            : !_same(name, remote, baseline);
+        if (localChanged && remoteChanged) {
+          await _saveState(name, key, baseline,
+              conflict: true, local: device, cloud: remote);
+        } else if (localChanged) {
+          if (device == null) {
+            (_pendingDeletes[name] ??= {})[key] = remote!;
+          } else {
+            uploads[key] = device;
+            if (state?['restore'] == 1) restores.add(key);
+          }
+        } else {
+          await _applyLocal(name, key, remote);
+          await _saveState(name, key, remote);
         }
-        return _requiredString(a, 'id').compareTo(_requiredString(b, 'id'));
-      });
+      }
+    });
+    for (final entry in uploads.entries) {
+      await _writeCloud(name, entry.key, entry.value, cloud[entry.key],
+          restore: restores.contains(entry.key));
+    }
+  }
 
-    final canonicalByDate = <String, Map<String, dynamic>>{};
-    _workoutDayIdRemap.clear();
-    for (final r in sorted) {
-      final workoutDate = _requiredString(r, 'workout_date');
-      final rowId = _requiredString(r, 'id');
-      final canonical = canonicalByDate[workoutDate];
-      if (canonical == null) {
-        canonicalByDate[workoutDate] = r;
+  Future<void> _writeCloud(String name, String key, Map<String, dynamic>? next,
+      Map<String, dynamic>? expected,
+      {bool restore = false}) async {
+    _checkAccount();
+    final response = Map<String, dynamic>.from(
+        await client.rpc('sync_apply_change', params: {
+      'p_table': name,
+      'p_key': key,
+      'p_workspace': _workspace,
+      'p_profile': _profile,
+      'p_expected': expected,
+      'p_next': next == null ? null : {...?expected, ...next},
+      'p_restore': restore,
+    }) as Map);
+    _checkAccount();
+    final remote = response['row'] == null
+        ? null
+        : Map<String, dynamic>.from(response['row'] as Map);
+    await db.transaction(() async {
+      if (response['applied'] == true) {
+        await _saveState(name, key, remote);
       } else {
-        _workoutDayIdRemap[rowId] = _requiredString(canonical, 'id');
+        final device = (await _localRows(name))[key];
+        await _saveState(name, key, expected,
+            conflict: true, local: device, cloud: remote);
+      }
+    });
+  }
+
+  Future<bool> _hasPendingChanges() async {
+    for (final name in syncedTables) {
+      final local = await _localRows(name);
+      final rows = await db.customSelect(
+          'SELECT row_key,baseline_json FROM sync_state WHERE scope=? AND table_name=?',
+          variables: [
+            Variable.withString(_scope),
+            Variable.withString(name)
+          ]).get();
+      final baselines = {
+        for (final row in rows)
+          row.data['row_key'].toString():
+              jsonDecode(row.data['baseline_json'] as String)
+                  as Map<String, dynamic>?
+      };
+      for (final key in {...local.keys, ...baselines.keys}) {
+        if (!_same(name, local[key], baselines[key])) return true;
       }
     }
-
-    await db.batch((batch) {
-      for (final r in canonicalByDate.values) {
-        batch.insert(
-          db.workoutDays,
-          WorkoutDaysCompanion(
-            id: Value(_requiredString(r, 'id')),
-            workoutDate: Value(_requiredString(r, 'workout_date')),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-            notes: Value(r['notes']?.toString()),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
+    return false;
   }
 
-  Future<void> _pullActualStrengthSets() async {
-    final rows = await _fetchRows('actual_strength_sets');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.actualStrengthSets,
-          ActualStrengthSetsCompanion(
-            id: Value(_requiredString(r, 'id')),
-            workoutDayId:
-                Value(_remapWorkoutDayId(_requiredString(r, 'workout_day_id'))),
-            planDayId: Value(r['plan_day_id']?.toString()),
-            performedAt: Value(_asInt(r['performed_at'])),
-            exerciseCanonical: Value(_requiredString(r, 'exercise_canonical')),
-            setIndex: Value(_requiredInt(r, 'set_index')),
-            weight: Value(_asDouble(r['weight'])),
-            reps: Value(_asInt(r['reps'])),
-            rir: Value(_asInt(r['rir'])),
-            unit: Value(_requiredString(r, 'unit')),
-            source: Value(_requiredString(r, 'source')),
-            rawSetString: Value(r['raw_set_string']?.toString()),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
+  Future<List<SyncConflict>> conflicts() async {
+    await _initialize(refresh: false);
+    return _conflicts();
   }
 
-  Future<void> _pullPrescribedStrengthSets() async {
-    final rows = await _fetchRows('prescribed_strength_sets');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.prescribedStrengthSets,
-          PrescribedStrengthSetsCompanion(
-            id: Value(_requiredString(r, 'id')),
-            workoutDayId:
-                Value(_remapWorkoutDayId(_requiredString(r, 'workout_day_id'))),
-            exerciseCanonical: Value(_requiredString(r, 'exercise_canonical')),
-            setIndex: Value(_requiredInt(r, 'set_index')),
-            weight: Value(_asDouble(r['weight'])),
-            reps: Value(_asInt(r['reps'])),
-            rir: Value(_asInt(r['rir'])),
-            unit: Value(_requiredString(r, 'unit')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullSleepNights() async {
-    final rows = await _fetchRows('sleep_nights');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.sleepNights,
-          SleepNightsCompanion(
-            id: Value(_requiredString(r, 'id')),
-            sleepDate: Value(_requiredString(r, 'sleep_date')),
-            startTime: Value(_asInt(r['start_time'])),
-            endTime: Value(_asInt(r['end_time'])),
-            totalSleepMin: Value(_asInt(r['total_sleep_min'])),
-            remMin: Value(_asInt(r['rem_min'])),
-            deepMin: Value(_asInt(r['deep_min'])),
-            lightMin: Value(_asInt(r['light_min'])),
-            awakeMin: Value(_asInt(r['awake_min'])),
-            source: Value(_requiredString(r, 'source')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullRunSessions() async {
-    final rows = await _fetchRows('run_sessions');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.runSessions,
-          RunSessionsCompanion(
-            id: Value(_requiredString(r, 'id')),
-            runKey: Value(_requiredString(r, 'run_key')),
-            workoutDayId: Value(_optionalRemappedWorkoutDayId(
-              r['workout_day_id']?.toString(),
-            )),
-            planDayId: Value(r['plan_day_id']?.toString()),
-            startTime: Value(_asInt(r['start_time'])),
-            endTime: Value(_asInt(r['end_time'])),
-            durationS: Value(_asInt(r['duration_s'])),
-            distanceM: Value(_asDouble(r['distance_m'])),
-            avgHr: Value(_asDouble(r['avg_hr'])),
-            maxHr: Value(_asDouble(r['max_hr'])),
-            treadmill: Value(_asBool(r['treadmill'])),
-            title: Value(r['title']?.toString()),
-            activityType: Value(r['activity_type']?.toString()),
-            calories: Value(_asInt(r['calories'])),
-            movingTimeS: Value(_asInt(r['moving_time_s'])),
-            elapsedTimeS: Value(_asInt(r['elapsed_time_s'])),
-            sourcePriority: Value(_asInt(r['source_priority']) ?? 0),
-            importFileName: Value(r['import_file_name']?.toString()),
-            rawMetricsJson: Value(r['raw_metrics_json']?.toString()),
-            source: Value(_requiredString(r, 'source')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullRunSegments() async {
-    final rows = await _fetchRows('run_segments');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.runSegments,
-          RunSegmentsCompanion(
-            id: Value(_requiredString(r, 'id')),
-            runSessionId: Value(_requiredString(r, 'run_session_id')),
-            idx: Value(_requiredInt(r, 'idx')),
-            durationS: Value(_asInt(r['duration_s'])),
-            distanceM: Value(_asDouble(r['distance_m'])),
-            speedMps: Value(_asDouble(r['speed_mps'])),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullRunSessionDetails() async {
-    final rows = await _fetchRows('run_session_details');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.runSessionDetails,
-          RunSessionDetailsCompanion(
-            runSessionId: Value(_requiredString(r, 'run_session_id')),
-            favorite: Value(_asBool(r['favorite'])),
-            aerobicTe: Value(_asDouble(r['aerobic_te'])),
-            avgRunCadence: Value(_asDouble(r['avg_run_cadence'])),
-            maxRunCadence: Value(_asDouble(r['max_run_cadence'])),
-            avgPaceS: Value(_asDouble(r['avg_pace_s'])),
-            bestPaceS: Value(_asDouble(r['best_pace_s'])),
-            totalAscent: Value(_asDouble(r['total_ascent'])),
-            totalDescent: Value(_asDouble(r['total_descent'])),
-            avgStrideLengthM: Value(_asDouble(r['avg_stride_length_m'])),
-            trainingStressScore: Value(_asDouble(r['training_stress_score'])),
-            steps: Value(_asInt(r['steps'])),
-            minTemp: Value(_asDouble(r['min_temp'])),
-            maxTemp: Value(_asDouble(r['max_temp'])),
-            decompression: Value(r['decompression']?.toString()),
-            bestLapTimeS: Value(_asDouble(r['best_lap_time_s'])),
-            numberOfLaps: Value(_asInt(r['number_of_laps'])),
-            minElevation: Value(_asDouble(r['min_elevation'])),
-            maxElevation: Value(_asDouble(r['max_elevation'])),
-            rawMetricsJson: Value(r['raw_metrics_json']?.toString() ?? '{}'),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullRunOverrideAudit() async {
-    final rows = await _fetchRows('run_override_audit');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.runOverrideAudit,
-          RunOverrideAuditCompanion(
-            id: Value(_requiredString(r, 'id')),
-            runKey: Value(_requiredString(r, 'run_key')),
-            workoutDayId: Value(_optionalRemappedWorkoutDayId(
-              r['workout_day_id']?.toString(),
-            )),
-            oldSource: Value(_requiredString(r, 'old_source')),
-            newSource: Value(_requiredString(r, 'new_source')),
-            oldSnapshotJson: Value(_requiredString(r, 'old_snapshot_json')),
-            newSnapshotJson: Value(_requiredString(r, 'new_snapshot_json')),
-            reason: Value(_requiredString(r, 'reason')),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullRuleTriggers() async {
-    final rows = await _fetchRows('rule_triggers');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.ruleTriggers,
-          RuleTriggersCompanion(
-            id: Value(_requiredString(r, 'id')),
-            triggerDate: Value(_requiredString(r, 'trigger_date')),
-            ruleCode: Value(_requiredString(r, 'rule_code')),
-            triggered: Value(_requiredBool(r, 'triggered')),
-            detailsJson: Value(_requiredString(r, 'details_json')),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullAiAudit() async {
-    final rows = await _fetchRows('ai_audit');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.aiAudit,
-          AiAuditCompanion(
-            id: Value(_requiredString(r, 'id')),
-            requestedAt: Value(_requiredInt(r, 'requested_at')),
-            dateWindowStart: Value(r['date_window_start']?.toString()),
-            dateWindowEnd: Value(r['date_window_end']?.toString()),
-            inputSnapshotJson: Value(_requiredString(r, 'input_snapshot_json')),
-            responseJson: Value(_requiredString(r, 'response_json')),
-            schemaValid: Value(_requiredBool(r, 'schema_valid')),
-            notes: Value(r['notes']?.toString()),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullPlanCycles() async {
-    final rows = await _fetchRows('plan_cycles');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.planCycles,
-          PlanCyclesCompanion(
-            id: Value(_requiredString(r, 'id')),
-            cycleKey: Value(_requiredString(r, 'cycle_key')),
-            weekStart: Value(_requiredString(r, 'week_start')),
-            weekEnd: Value(_requiredString(r, 'week_end')),
-            source: Value(_requiredString(r, 'source')),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullPlanDays() async {
-    final rows = await _fetchRows('plan_days');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.planDays,
-          PlanDaysCompanion(
-            id: Value(_requiredString(r, 'id')),
-            planCycleId: Value(_requiredString(r, 'plan_cycle_id')),
-            dayNumber: Value(_requiredInt(r, 'day_number')),
-            sheetName: Value(_requiredString(r, 'sheet_name')),
-            estimatedDate: Value(r['estimated_date']?.toString()),
-            sessionType: Value(r['session_type']?.toString()),
-            shiftReason: Value(r['shift_reason']?.toString()),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullPlanPrescribedStrengthSets() async {
-    final rows = await _fetchRows('plan_prescribed_strength_sets');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.planPrescribedStrengthSets,
-          PlanPrescribedStrengthSetsCompanion(
-            id: Value(_requiredString(r, 'id')),
-            planDayId: Value(_requiredString(r, 'plan_day_id')),
-            exerciseCanonical: Value(_requiredString(r, 'exercise_canonical')),
-            setIndex: Value(_requiredInt(r, 'set_index')),
-            weight: Value(_asDouble(r['weight'])),
-            reps: Value(_asInt(r['reps'])),
-            rir: Value(_asInt(r['rir'])),
-            unit: Value(_requiredString(r, 'unit')),
-            rawSetString: Value(r['raw_set_string']?.toString()),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullPlanPrescribedRuns() async {
-    final rows = await _fetchRows('plan_prescribed_runs');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.planPrescribedRuns,
-          PlanPrescribedRunsCompanion(
-            id: Value(_requiredString(r, 'id')),
-            planDayId: Value(_requiredString(r, 'plan_day_id')),
-            dayLabel: Value(r['day_label']?.toString()),
-            liftFocus: Value(r['lift_focus']?.toString()),
-            runType: Value(r['run_type']?.toString()),
-            durationText: Value(r['duration_text']?.toString()),
-            targetPace: Value(r['target_pace']?.toString()),
-            effortHrGuardrails: Value(r['effort_hr_guardrails']?.toString()),
-            notes: Value(r['notes']?.toString()),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullPlanExerciseAlternatives() async {
-    final rows = await _fetchRows('plan_exercise_alternatives');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.planExerciseAlternatives,
-          PlanExerciseAlternativesCompanion(
-            id: Value(_requiredString(r, 'id')),
-            planDayId: Value(r['plan_day_id']?.toString()),
-            prescribedExerciseCanonical:
-                Value(_requiredString(r, 'prescribed_exercise_canonical')),
-            alternativeExerciseCanonical:
-                Value(_requiredString(r, 'alternative_exercise_canonical')),
-            priority: Value(_asInt(r['priority']) ?? 0),
-            notes: Value(r['notes']?.toString()),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullExerciseSubstitutions() async {
-    final rows = await _fetchRows('exercise_substitutions');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.exerciseSubstitutions,
-          ExerciseSubstitutionsCompanion(
-            id: Value(_requiredString(r, 'id')),
-            workoutDayId:
-                Value(_remapWorkoutDayId(_requiredString(r, 'workout_day_id'))),
-            planDayId: Value(r['plan_day_id']?.toString()),
-            prescribedExerciseCanonical:
-                Value(_requiredString(r, 'prescribed_exercise_canonical')),
-            substituteExerciseCanonical:
-                Value(_requiredString(r, 'substitute_exercise_canonical')),
-            reasonCode: Value(_requiredString(r, 'reason_code')),
-            reasonNotes: Value(r['reason_notes']?.toString()),
-            selectedAt: Value(_requiredInt(r, 'selected_at')),
-            selectedBy: Value(r['selected_by']?.toString()),
-            matchScore: Value(_asDouble(r['match_score'])),
-            matchExplanationJson:
-                Value(r['match_explanation_json']?.toString()),
-            warningAcknowledged:
-                Value(_asBool(r['warning_acknowledged']) ?? false),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullPlanSummarySnapshots() async {
-    final rows = await _fetchRows('plan_summary_snapshots');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.planSummarySnapshots,
-          PlanSummarySnapshotsCompanion(
-            id: Value(_requiredString(r, 'id')),
-            planCycleId: Value(_requiredString(r, 'plan_cycle_id')),
-            tabName: Value(_requiredString(r, 'tab_name')),
-            snapshotJson: Value(_requiredString(r, 'snapshot_json')),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullPlanImportAudit() async {
-    final rows = await _fetchRows('plan_import_audit');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.planImportAudit,
-          PlanImportAuditCompanion(
-            id: Value(_requiredString(r, 'id')),
-            importedAt: Value(_requiredInt(r, 'imported_at')),
-            fileName: Value(_requiredString(r, 'file_name')),
-            success: Value(_requiredBool(r, 'success')),
-            detailsJson: Value(_requiredString(r, 'details_json')),
-            conflictReportPath: Value(r['conflict_report_path']?.toString()),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullAthletePlanningProfiles() async {
-    final existingProfiles = (await db.select(db.athletePlanningProfiles).get())
-        .where((row) =>
-            row.workspaceId == _context.workspaceId &&
-            row.athleteProfileId == _context.athleteProfileId)
-        .fold<Map<String, AthletePlanningProfile>>(
-      <String, AthletePlanningProfile>{},
-      (map, row) {
-        map[row.id] = row;
-        return map;
-      },
-    );
-    final rows = await _fetchRows('athlete_planning_profiles');
-    await db.batch((batch) {
-      for (final r in rows) {
-        final id = _requiredString(r, 'id');
-        batch.insert(
-          db.athletePlanningProfiles,
-          AthletePlanningProfilesCompanion(
-            id: Value(id),
-            workspaceId: Value(_requiredString(r, 'workspace_id')),
-            athleteProfileId: Value(_requiredString(r, 'athlete_profile_id')),
-            primaryGoal: Value(_requiredString(r, 'primary_goal')),
-            goalTargetJson: Value(_requiredString(r, 'goal_target_json')),
-            experienceLevel: Value(_requiredString(r, 'experience_level')),
-            preferredSplit: Value(_requiredString(r, 'preferred_split')),
-            daysPerWeek: Value(_requiredInt(r, 'days_per_week')),
-            availableEquipmentJson:
-                Value(_requiredString(r, 'available_equipment_json')),
-            contraindicationsJson:
-                Value(_requiredString(r, 'contraindications_json')),
-            scheduleConstraintsJson:
-                Value(_requiredString(r, 'schedule_constraints_json')),
-            biometricsJson: Value(
-              _resolvedPlanningProfileBiometricsJson(
-                r,
-                fallback: existingProfiles[id]?.biometricsJson,
-              ),
-            ),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-            updatedAt: Value(_requiredInt(r, 'updated_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _pullWeeklyPlanBuildRequests() async {
-    final rows = await _fetchRows('weekly_plan_build_requests');
-    await db.batch((batch) {
-      for (final r in rows) {
-        batch.insert(
-          db.weeklyPlanBuildRequests,
-          WeeklyPlanBuildRequestsCompanion(
-            id: Value(_requiredString(r, 'id')),
-            workspaceId: Value(_requiredString(r, 'workspace_id')),
-            athleteProfileId: Value(_requiredString(r, 'athlete_profile_id')),
-            weekStart: Value(_requiredString(r, 'week_start')),
-            weekEnd: Value(_requiredString(r, 'week_end')),
-            splitType: Value(_requiredString(r, 'split_type')),
-            modifier: Value(_requiredString(r, 'modifier')),
-            mode: Value(_requiredString(r, 'mode')),
-            promptSnapshot: Value(_requiredString(r, 'prompt_snapshot')),
-            requestPayloadJson:
-                Value(_requiredString(r, 'request_payload_json')),
-            responsePayloadJson: Value(r['response_payload_json']?.toString()),
-            success: Value(_requiredBool(r, 'success')),
-            errorText: Value(r['error_text']?.toString()),
-            createdAt: Value(_requiredInt(r, 'created_at')),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
-      }
-    });
-  }
-
-  Future<void> _upsertWorkoutDays() async {
-    await db.enforceWorkoutDayDateUniqueness();
-    final rows = await db.select(db.workoutDays).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('workout_days').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'workout_date': r.workoutDate,
-                    'created_at': r.createdAt,
-                    'notes': r.notes,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  String _remapWorkoutDayId(String id) {
-    var current = id;
-    final seen = <String>{};
-    while (seen.add(current) && _workoutDayIdRemap.containsKey(current)) {
-      current = _workoutDayIdRemap[current]!;
-    }
-    return current;
-  }
-
-  String? _optionalRemappedWorkoutDayId(String? id) {
-    if (id == null || id.trim().isEmpty) {
-      return null;
-    }
-    return _remapWorkoutDayId(id);
-  }
-
-  Future<void> _upsertActualStrengthSets() async {
-    final rows = await db.select(db.actualStrengthSets).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('actual_strength_sets').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'workout_day_id': r.workoutDayId,
-                    'plan_day_id': r.planDayId,
-                    'performed_at': r.performedAt,
-                    'exercise_canonical': r.exerciseCanonical,
-                    'set_index': r.setIndex,
-                    'weight': r.weight,
-                    'reps': r.reps,
-                    'rir': r.rir,
-                    'unit': r.unit,
-                    'source': r.source,
-                    'raw_set_string': r.rawSetString,
-                    'created_at': r.createdAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertPrescribedStrengthSets() async {
-    final rows = await db.select(db.prescribedStrengthSets).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('prescribed_strength_sets').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'workout_day_id': r.workoutDayId,
-                    'exercise_canonical': r.exerciseCanonical,
-                    'set_index': r.setIndex,
-                    'weight': r.weight,
-                    'reps': r.reps,
-                    'rir': r.rir,
-                    'unit': r.unit,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertSleepNights() async {
-    final rows = await db.select(db.sleepNights).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('sleep_nights').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'sleep_date': r.sleepDate,
-                    'start_time': r.startTime,
-                    'end_time': r.endTime,
-                    'total_sleep_min': r.totalSleepMin,
-                    'rem_min': r.remMin,
-                    'deep_min': r.deepMin,
-                    'light_min': r.lightMin,
-                    'awake_min': r.awakeMin,
-                    'source': r.source,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertRunSessions() async {
-    final rows = await db.select(db.runSessions).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('run_sessions').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'run_key': r.runKey,
-                    'workout_day_id': r.workoutDayId,
-                    'plan_day_id': r.planDayId,
-                    'start_time': r.startTime,
-                    'end_time': r.endTime,
-                    'duration_s': r.durationS,
-                    'distance_m': r.distanceM,
-                    'avg_hr': r.avgHr,
-                    'max_hr': r.maxHr,
-                    'treadmill': r.treadmill,
-                    'title': r.title,
-                    'activity_type': r.activityType,
-                    'calories': r.calories,
-                    'moving_time_s': r.movingTimeS,
-                    'elapsed_time_s': r.elapsedTimeS,
-                    'source_priority': r.sourcePriority,
-                    'import_file_name': r.importFileName,
-                    'raw_metrics_json': r.rawMetricsJson,
-                    'source': r.source,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertRunSegments() async {
-    final rows = await db.select(db.runSegments).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('run_segments').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'run_session_id': r.runSessionId,
-                    'idx': r.idx,
-                    'duration_s': r.durationS,
-                    'distance_m': r.distanceM,
-                    'speed_mps': r.speedMps,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertRunSessionDetails() async {
-    final rows = await db.select(db.runSessionDetails).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('run_session_details').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'run_session_id': r.runSessionId,
-                    'favorite': r.favorite,
-                    'aerobic_te': r.aerobicTe,
-                    'avg_run_cadence': r.avgRunCadence,
-                    'max_run_cadence': r.maxRunCadence,
-                    'avg_pace_s': r.avgPaceS,
-                    'best_pace_s': r.bestPaceS,
-                    'total_ascent': r.totalAscent,
-                    'total_descent': r.totalDescent,
-                    'avg_stride_length_m': r.avgStrideLengthM,
-                    'training_stress_score': r.trainingStressScore,
-                    'steps': r.steps,
-                    'min_temp': r.minTemp,
-                    'max_temp': r.maxTemp,
-                    'decompression': r.decompression,
-                    'best_lap_time_s': r.bestLapTimeS,
-                    'number_of_laps': r.numberOfLaps,
-                    'min_elevation': r.minElevation,
-                    'max_elevation': r.maxElevation,
-                    'raw_metrics_json': r.rawMetricsJson,
-                  }))
-              .toList(),
-          onConflict: 'run_session_id',
-        );
-  }
-
-  Future<void> _upsertRunOverrideAudit() async {
-    final rows = await db.select(db.runOverrideAudit).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('run_override_audit').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'run_key': r.runKey,
-                    'workout_day_id': r.workoutDayId,
-                    'old_source': r.oldSource,
-                    'new_source': r.newSource,
-                    'old_snapshot_json': r.oldSnapshotJson,
-                    'new_snapshot_json': r.newSnapshotJson,
-                    'reason': r.reason,
-                    'created_at': r.createdAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertRuleTriggers() async {
-    final rows = await db.select(db.ruleTriggers).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('rule_triggers').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'trigger_date': r.triggerDate,
-                    'rule_code': r.ruleCode,
-                    'triggered': r.triggered,
-                    'details_json': r.detailsJson,
-                    'created_at': r.createdAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertAiAudit() async {
-    final rows = await db.select(db.aiAudit).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('ai_audit').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'requested_at': r.requestedAt,
-                    'date_window_start': r.dateWindowStart,
-                    'date_window_end': r.dateWindowEnd,
-                    'input_snapshot_json': r.inputSnapshotJson,
-                    'response_json': r.responseJson,
-                    'schema_valid': r.schemaValid,
-                    'notes': r.notes,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertPlanCycles() async {
-    final rows = await db.select(db.planCycles).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    final cycleIdsWithContent = await _localPlanCycleIdsWithPrescribedContent();
-    final filteredRows =
-        rows.where((row) => cycleIdsWithContent.contains(row.id)).toList();
-    if (filteredRows.isEmpty) {
-      return;
-    }
-    await client.from('plan_cycles').upsert(
-          filteredRows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'cycle_key': r.cycleKey,
-                    'week_start': r.weekStart,
-                    'week_end': r.weekEnd,
-                    'source': r.source,
-                    'created_at': r.createdAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertPlanDays() async {
-    final rows = await db.select(db.planDays).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    final cycleIdsWithContent = await _localPlanCycleIdsWithPrescribedContent();
-    final filteredRows = rows
-        .where((row) => cycleIdsWithContent.contains(row.planCycleId))
+  Future<List<SyncConflict>> _conflicts() async {
+    final rows = await db.customSelect(
+        'SELECT * FROM sync_state WHERE scope=? AND conflict=1',
+        variables: [Variable.withString(_scope)]).get();
+    return rows
+        .map((r) => SyncConflict(
+            r.data['table_name'] as String,
+            r.data['row_key'] as String,
+            jsonDecode(r.data['local_json'] as String) as Map<String, dynamic>?,
+            jsonDecode(r.data['cloud_json'] as String)
+                as Map<String, dynamic>?))
         .toList();
-    if (filteredRows.isEmpty) {
-      return;
-    }
-    await client.from('plan_days').upsert(
-          filteredRows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'plan_cycle_id': r.planCycleId,
-                    'day_number': r.dayNumber,
-                    'sheet_name': r.sheetName,
-                    'estimated_date': r.estimatedDate,
-                    'session_type': r.sessionType,
-                    'shift_reason': r.shiftReason,
-                    'created_at': r.createdAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
   }
 
-  Future<void> _upsertExerciseSubstitutions() async {
-    final rows = await db.select(db.exerciseSubstitutions).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('exercise_substitutions').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'workout_day_id': r.workoutDayId,
-                    'plan_day_id': r.planDayId,
-                    'prescribed_exercise_canonical':
-                        r.prescribedExerciseCanonical,
-                    'substitute_exercise_canonical':
-                        r.substituteExerciseCanonical,
-                    'reason_code': r.reasonCode,
-                    'reason_notes': r.reasonNotes,
-                    'selected_at': r.selectedAt,
-                    'selected_by': r.selectedBy,
-                    'match_score': r.matchScore,
-                    'match_explanation_json': r.matchExplanationJson,
-                    'warning_acknowledged': r.warningAcknowledged,
-                    'created_at': r.createdAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertPlanPrescribedStrengthSets() async {
-    final rows = await db.select(db.planPrescribedStrengthSets).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('plan_prescribed_strength_sets').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'plan_day_id': r.planDayId,
-                    'exercise_canonical': r.exerciseCanonical,
-                    'set_index': r.setIndex,
-                    'weight': r.weight,
-                    'reps': r.reps,
-                    'rir': r.rir,
-                    'unit': r.unit,
-                    'raw_set_string': r.rawSetString,
-                    'created_at': r.createdAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertPlanPrescribedRuns() async {
-    final rows = await db.select(db.planPrescribedRuns).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('plan_prescribed_runs').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'plan_day_id': r.planDayId,
-                    'day_label': r.dayLabel,
-                    'lift_focus': r.liftFocus,
-                    'run_type': r.runType,
-                    'duration_text': r.durationText,
-                    'target_pace': r.targetPace,
-                    'effort_hr_guardrails': r.effortHrGuardrails,
-                    'notes': r.notes,
-                    'created_at': r.createdAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertPlanExerciseAlternatives() async {
-    final rows = await db.select(db.planExerciseAlternatives).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('plan_exercise_alternatives').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'plan_day_id': r.planDayId,
-                    'prescribed_exercise_canonical':
-                        r.prescribedExerciseCanonical,
-                    'alternative_exercise_canonical':
-                        r.alternativeExerciseCanonical,
-                    'priority': r.priority,
-                    'notes': r.notes,
-                    'created_at': r.createdAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertPlanSummarySnapshots() async {
-    final rows = await db.select(db.planSummarySnapshots).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('plan_summary_snapshots').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'plan_cycle_id': r.planCycleId,
-                    'tab_name': r.tabName,
-                    'snapshot_json': r.snapshotJson,
-                    'created_at': r.createdAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertPlanImportAudit() async {
-    final rows = await db.select(db.planImportAudit).get();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('plan_import_audit').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'imported_at': r.importedAt,
-                    'file_name': r.fileName,
-                    'success': r.success,
-                    'details_json': r.detailsJson,
-                    'conflict_report_path': r.conflictReportPath,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-
-  Future<void> _upsertAthletePlanningProfiles() async {
-    final rows = (await db.select(db.athletePlanningProfiles).get())
-        .where((r) =>
-            r.workspaceId == _context.workspaceId &&
-            r.athleteProfileId == _context.athleteProfileId)
-        .toList();
-    if (rows.isEmpty) {
-      return;
-    }
-    Future<void> upsertRows({required bool includeBiometrics}) async {
-      await client.from('athlete_planning_profiles').upsert(
-            rows
-                .map(
-                  (r) => _athletePlanningProfileCloudRow(
-                    r,
-                    includeBiometrics: includeBiometrics,
-                  ),
-                )
-                .toList(),
-            onConflict: 'id',
-          );
-    }
-
-    try {
-      await upsertRows(includeBiometrics: true);
-    } on PostgrestException catch (error) {
-      if (!_isMissingRemoteColumn(
-        error,
-        table: 'athlete_planning_profiles',
-        column: 'biometrics_json',
-      )) {
-        rethrow;
+  Future<void> resolve(SyncConflict conflict,
+      {required bool keepDevice}) async {
+    await _initialize();
+    await db.transaction(() async {
+      final current = (await _localRows(conflict.table))[conflict.key];
+      if (!_same(conflict.table, current, conflict.local)) {
+        throw StateError(
+            'This device record changed. Sync again to refresh the comparison.');
       }
-      await upsertRows(includeBiometrics: false);
-    }
-  }
-
-  Map<String, dynamic> _athletePlanningProfileCloudRow(
-    AthletePlanningProfile row, {
-    required bool includeBiometrics,
-  }) {
-    final payload = _scopedRow({
-      'id': row.id,
-      'primary_goal': row.primaryGoal,
-      'goal_target_json': row.goalTargetJson,
-      'experience_level': row.experienceLevel,
-      'preferred_split': row.preferredSplit,
-      'days_per_week': row.daysPerWeek,
-      'available_equipment_json': row.availableEquipmentJson,
-      'contraindications_json': row.contraindicationsJson,
-      'schedule_constraints_json': row.scheduleConstraintsJson,
-      'created_at': row.createdAt,
-      'updated_at': row.updatedAt,
+      if (!keepDevice) {
+        await _applyLocal(conflict.table, conflict.key, conflict.cloud);
+      }
+      // Keeping the device copy is an explicit decision against this cloud snapshot.
+      // A later cloud change will produce a new conflict instead of being overwritten.
+      await _saveState(conflict.table, conflict.key, conflict.cloud,
+          restore: keepDevice && conflict.cloud == null);
     });
-    if (includeBiometrics) {
-      payload['biometrics_json'] = row.biometricsJson;
-    }
-    return payload;
   }
-
-  String _resolvedPlanningProfileBiometricsJson(
-    Map<String, dynamic> row, {
-    String? fallback,
-  }) {
-    if (row.containsKey('biometrics_json')) {
-      return row['biometrics_json']?.toString() ?? '{}';
-    }
-    return fallback ?? '{}';
-  }
-
-  bool _isMissingRemoteColumn(
-    PostgrestException error, {
-    required String table,
-    required String column,
-  }) {
-    final message = error.message.toLowerCase();
-    return error.code == 'PGRST204' &&
-        message.contains("'${table.toLowerCase()}'") &&
-        message.contains("'${column.toLowerCase()}'");
-  }
-
-  Future<void> _upsertWeeklyPlanBuildRequests() async {
-    final rows = (await db.select(db.weeklyPlanBuildRequests).get())
-        .where((r) =>
-            r.workspaceId == _context.workspaceId &&
-            r.athleteProfileId == _context.athleteProfileId)
-        .toList();
-    if (rows.isEmpty) {
-      return;
-    }
-    await client.from('weekly_plan_build_requests').upsert(
-          rows
-              .map((r) => _scopedRow({
-                    'id': r.id,
-                    'week_start': r.weekStart,
-                    'week_end': r.weekEnd,
-                    'split_type': r.splitType,
-                    'modifier': r.modifier,
-                    'mode': r.mode,
-                    'prompt_snapshot': r.promptSnapshot,
-                    'request_payload_json': r.requestPayloadJson,
-                    'response_payload_json': r.responsePayloadJson,
-                    'success': r.success,
-                    'error_text': r.errorText,
-                    'created_at': r.createdAt,
-                  }))
-              .toList(),
-          onConflict: 'id',
-        );
-  }
-}
-
-class _ScopedSyncContext {
-  const _ScopedSyncContext({
-    required this.workspaceId,
-    required this.athleteProfileId,
-  });
-
-  final String workspaceId;
-  final String athleteProfileId;
 }

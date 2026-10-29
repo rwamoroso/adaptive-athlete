@@ -280,7 +280,12 @@ class WorkspaceService {
     required String workspaceId,
     required String profileId,
     bool clearLocalData = true,
+    bool cloudSyncConfirmed = false,
   }) async {
+    if (clearLocalData && !cloudSyncConfirmed) {
+      throw StateError(
+          'Sync the current profile successfully before switching.');
+    }
     final context = await requireContext();
     final allowedProfileIds = context.assignments
         .where(

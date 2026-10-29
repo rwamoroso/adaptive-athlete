@@ -14,6 +14,7 @@ import '../training/exercise_substitution_service.dart';
 import '../ui/clinical_widgets.dart';
 import '../sync/sync_service.dart';
 import 'biometrics_profile.dart';
+import 'planner_issue.dart';
 import 'biometrics_profile_screen.dart';
 import 'plan_builder_walkthrough_screen.dart';
 import 'ppl_template_service.dart';
@@ -329,6 +330,42 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   DateTime _startDate = DateTime.now();
   SplitType _selectedSplit = SplitType.runOnly;
   WeeklyPlanModifier _selectedModifier = WeeklyPlanModifier.followLongTerm;
+  PlannerIssue? _plannerIssue;
+  String? _validationDetails;
+  String? _responseCheck;
+
+  void _showPlannerFailure(Object error) {
+    if (!mounted) return;
+    setState(() {
+      _plannerIssue = PlannerIssue.from(error);
+      _validationDetails = error.toString();
+      _responseCheck = null;
+      if (error is PlannerGenerationFailure &&
+          (error.generatedText?.isNotEmpty ?? false)) {
+        _manualAiResponseController.text = error.generatedText!;
+        ref.read(aiWeeklyPlanResponseProvider.notifier).state =
+            error.generatedText!;
+      }
+    });
+    _showMessage(_plannerIssue!.message);
+  }
+
+  void _checkPastedResponse() {
+    _manualResponseAutoApplyDebounce?.cancel();
+    try {
+      final result = ref.read(weeklyPlannerServiceProvider).checkResponse(
+          request: _buildPlanRequest(mode: PlannerGenerationMode.manualAssist),
+          text: _manualAiResponseController.text.trim());
+      setState(() {
+        _responseCheck = result;
+        _plannerIssue = null;
+        _validationDetails = null;
+      });
+    } catch (e) {
+      _showPlannerFailure(e);
+    }
+  }
+
   bool _propagateLongTerm = false;
 
   PlannerGenerationMode _generationMode = PlannerGenerationMode.manualAssist;
@@ -1107,7 +1144,11 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   }
 
   Future<void> _runOneTapAiBuild() async {
-    setState(() => _oneTapGenerating = true);
+    setState(() {
+      _oneTapGenerating = true;
+      _plannerIssue = null;
+      _validationDetails = null;
+    });
     try {
       _warnIfBiometricsMissing();
       await ref
@@ -1132,21 +1173,12 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
             : 'One-tap AI build applied: ${result.importResult!.pretty()}';
       });
       _refreshSchedulePreview();
-      _showMessage('One-tap AI build complete.');
+      final synced = await _syncAfterPlanApply(reason: 'one_tap_plan');
+      _showMessage(synced
+          ? 'Plan saved on this device and synced to cloud.'
+          : 'Plan saved on this device. Cloud sync is pending; see Settings.');
     } catch (e) {
-      final raw = e.toString();
-      final normalized = raw.toLowerCase();
-      if (normalized.contains('invalid jwt') || normalized.contains('401')) {
-        _showMessage(
-          'One-tap AI auth failed (Invalid JWT). Please sign out, sign back in, then try again.',
-        );
-      } else if (normalized.contains('no ai provider available') ||
-          normalized.contains('provider is unavailable') ||
-          normalized.contains('openai/provider generation failed')) {
-        _showMessage('One-tap AI provider failed: $e');
-      } else {
-        _showMessage('One-tap AI build failed: $e');
-      }
+      _showPlannerFailure(e);
     } finally {
       if (mounted) {
         setState(() => _oneTapGenerating = false);
@@ -1213,15 +1245,15 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     );
   }
 
-  Future<void> _syncAfterPlanApply({required String reason}) async {
+  Future<bool> _syncAfterPlanApply({required String reason}) async {
     final bootstrap = ref.read(supabaseBootstrapProvider);
     final settings = ref.read(settingsProvider);
     if (!bootstrap.initialized || settings.localOnly) {
-      return;
+      return false;
     }
     final client = Supabase.instance.client;
     if (client.auth.currentSession == null) {
-      return;
+      return false;
     }
     ref.read(syncStatusProvider.notifier).setSyncing(reason: reason);
     try {
@@ -1231,18 +1263,20 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         workspaceService: ref.read(workspaceServiceProvider),
       ).syncNow();
       if (!mounted) {
-        return;
+        return false;
       }
       ref.read(syncStatusProvider.notifier).setResult(status, reason: reason);
+      return SyncService.succeeded(status);
     } catch (e) {
       if (!mounted) {
-        return;
+        return false;
       }
       ref.read(syncStatusProvider.notifier).setError(
             label: 'Sync failed',
             detail: 'Automatic sync ($reason) failed: $e',
           );
     }
+    return false;
   }
 
   Future<bool> _applyManualAiResponseInternal(
@@ -1263,7 +1297,11 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     }
     ref.read(aiWeeklyPlanResponseProvider.notifier).state = rawText;
 
-    setState(() => _manualApplying = true);
+    setState(() {
+      _manualApplying = true;
+      _plannerIssue = null;
+      _validationDetails = null;
+    });
     try {
       await ref
           .read(weeklyPlannerServiceProvider)
@@ -1283,17 +1321,15 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       });
       _refreshSchedulePreview();
       _lastAppliedManualResponseText = text;
-      await _syncAfterPlanApply(
+      final synced = await _syncAfterPlanApply(
         reason: autoTriggeredByPaste ? 'manual_paste' : 'manual_apply',
       );
-      if (autoTriggeredByPaste) {
-        _showMessage('Pasted AI weekly plan auto-applied and synced.');
-      } else {
-        _showMessage('Manual AI weekly plan applied and synced.');
-      }
+      _showMessage(synced
+          ? 'Plan saved on this device and synced to cloud.'
+          : 'Plan saved on this device. Cloud sync is pending; see Settings.');
       return true;
     } catch (e) {
-      _showMessage('Manual AI apply failed: $e');
+      _showPlannerFailure(e);
       return false;
     } finally {
       if (mounted) {
@@ -1345,30 +1381,35 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   Future<void> _pickStartDate() async {
     _startDatePickerActive = true;
     try {
-      final selected = Platform.isWindows
-          ? await Navigator.of(context).push<DateTime>(
-              PageRouteBuilder<DateTime>(
-                pageBuilder: (_, __, ___) => _WindowsCalendarDateScreen(
-                  title: 'Select Week Start Date',
-                  initialDate: _startDate,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2100),
-                ),
-                transitionDuration: Duration.zero,
-                reverseTransitionDuration: Duration.zero,
-              ),
-            )
-          : await showDatePicker(
-              context: context,
+      if (!context.mounted) return;
+      final DateTime? selected;
+      if (Platform.isWindows) {
+        selected = await Navigator.of(context).push<DateTime>(
+          PageRouteBuilder<DateTime>(
+            pageBuilder: (_, __, ___) => _WindowsCalendarDateScreen(
+              title: 'Select Week Start Date',
               initialDate: _startDate,
               firstDate: DateTime(2020),
               lastDate: DateTime(2100),
-              // ExcludeSemantics prevents the dialog's nodes from entering the Flutter
-              // Windows accessibility bridge during the open/close animation, which
-              // otherwise causes an AX-tree CHECK failure that crashes the process.
-              builder: (ctx, child) => ExcludeSemantics(child: child!),
-            );
+            ),
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+          ),
+        );
+      } else {
+        selected = await showDatePicker(
+          context: context,
+          initialDate: _startDate,
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2100),
+          // ExcludeSemantics prevents the dialog's nodes from entering the Flutter
+          // Windows accessibility bridge during the open/close animation, which
+          // otherwise causes an AX-tree CHECK failure that crashes the process.
+          builder: (ctx, child) => ExcludeSemantics(child: child!),
+        );
+      }
       if (selected == null || !mounted) return;
+      final confirmedDate = selected;
       if (Platform.isWindows) {
         await Future.delayed(const Duration(milliseconds: 900));
       } else {
@@ -1380,7 +1421,11 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       }
       if (!mounted) return;
       setState(() {
-        _startDate = DateTime(selected.year, selected.month, selected.day);
+        _startDate = DateTime(
+          confirmedDate.year,
+          confirmedDate.month,
+          confirmedDate.day,
+        );
         _schedulePreviewFuture = _loadSchedulePreview();
       });
     } finally {
@@ -1906,7 +1951,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               DropdownButtonFormField<String>(
-                value: _primaryGoal,
+                initialValue: _primaryGoal,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration: _dropdownDecoration(context, 'Primary Goal'),
@@ -2004,7 +2049,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _experienceLevel,
+                initialValue: _experienceLevel,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration: _dropdownDecoration(context, 'Experience Level'),
@@ -2022,7 +2067,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<SplitType>(
-                value: _preferredSplit,
+                initialValue: _preferredSplit,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration: _dropdownDecoration(context, 'Preferred Split'),
@@ -2150,7 +2195,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<SplitType>(
-                value: _selectedSplit,
+                initialValue: _selectedSplit,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration: _dropdownDecoration(context, 'Weekly Split Type'),
@@ -2216,7 +2261,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                 ),
               const SizedBox(height: 8),
               DropdownButtonFormField<WeeklyPlanModifier>(
-                value: _selectedModifier,
+                initialValue: _selectedModifier,
                 dropdownColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 decoration: _dropdownDecoration(context, 'Weekly Modifier'),
@@ -2368,6 +2413,8 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                   onChanged: (value) {
                     ref.read(aiWeeklyPlanResponseProvider.notifier).state =
                         value;
+                    _responseCheck = null;
+                    _plannerIssue = null;
                     _scheduleAutoApplyFromPastedResponse(value);
                     setState(() {});
                   },
@@ -2378,6 +2425,34 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                   ),
                   style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                    onPressed: _manualApplying ? null : _checkPastedResponse,
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: const Text('Check Response')),
+                if (_responseCheck != null) Text(_responseCheck!),
+                if (_plannerIssue != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_plannerIssue!.message,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(_plannerIssue!.recovery),
+                  if (_validationDetails != null)
+                    ExpansionTile(
+                        title: const Text('Validation details'),
+                        children: [SelectableText(_validationDetails!)]),
+                  Wrap(spacing: 8, children: [
+                    if (_plannerIssue!.retryable)
+                      OutlinedButton(
+                          onPressed: _oneTapGenerating || _manualApplying
+                              ? null
+                              : _runOneTapAiBuild,
+                          child: const Text('Retry One-tap AI')),
+                    TextButton(
+                        onPressed: () => setState(() => _generationMode =
+                            PlannerGenerationMode.manualAssist),
+                        child: const Text('Use Copy-and-Paste Planning')),
+                  ]),
+                ],
                 const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,

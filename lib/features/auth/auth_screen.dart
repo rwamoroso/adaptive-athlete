@@ -26,24 +26,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     super.dispose();
   }
 
-  void _refreshScopedProviders() {
-    ref.invalidate(currentAuthUserIdProvider);
-    ref.invalidate(appStorageScopeProvider);
-    ref.invalidate(appDbProvider);
-    ref.invalidate(activeWorkspaceContextProvider);
-  }
-
   Future<void> _continueAfterAuth() async {
-    _refreshScopedProviders();
-    final settings = ref.read(settingsProvider);
-    if (!settings.localOnly) {
-      await ref.read(workspaceServiceProvider).bootstrapAndGetContext();
-    }
     if (!mounted) {
       return;
     }
     final pendingToken =
-        await ref.read(workspaceServiceProvider).getPendingInviteToken();
+        await ref.read(deviceScopedStoreProvider).getPendingInviteToken();
     if (!mounted) {
       return;
     }
@@ -81,6 +69,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       );
       await _continueAfterAuth();
     } catch (e) {
+      if (!mounted) return;
       setState(() => _message = e.toString());
     } finally {
       if (mounted) {
@@ -112,7 +101,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       }
 
       final pendingToken =
-          await ref.read(workspaceServiceProvider).getPendingInviteToken();
+          await ref.read(deviceScopedStoreProvider).getPendingInviteToken();
       if (!mounted) {
         return;
       }
@@ -121,6 +110,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               'sign in again to finish accepting the invite.'
           : 'Account created. Check your email confirmation if enabled.');
     } catch (e) {
+      if (!mounted) return;
       setState(() => _message = e.toString());
     } finally {
       if (mounted) {
@@ -185,7 +175,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Center(
-        child: ConstrainedBox(
+        child: SingleChildScrollView(
+            child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Card(
             child: Padding(
@@ -253,7 +244,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
             ),
           ),
-        ),
+        )),
       ),
     );
   }
