@@ -51,6 +51,23 @@ WeeklyPlanBuildRequest request({bool propagate = false}) =>
         overridePromptText: null);
 
 void main() {
+  test('selected November 1 week uses calendar end date November 7', () {
+    final novemberRequest = WeeklyPlanBuildRequest(
+      workspaceId: 'local_workspace',
+      athleteProfileId: 'local_profile',
+      splitStartDate: DateTime(2026, 11, 1),
+      splitType: SplitType.customHybrid,
+      modifier: WeeklyPlanModifier.followLongTerm,
+      mode: PlannerGenerationMode.manualAssist,
+      propagateLongTermChanges: true,
+      additionalInstructions: null,
+      overridePromptText: null,
+    );
+
+    expect(novemberRequest.weekStart, '2026-11-01');
+    expect(novemberRequest.weekEnd, '2026-11-07');
+  });
+
   test(
       'response checks validate dates and propagation without changing a saved plan',
       () async {
@@ -75,7 +92,11 @@ void main() {
     expect(
         () => service.checkResponse(
             request: request(propagate: true), text: recoveryWeek()),
-        throwsStateError);
+        throwsA(isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('TEN_WEEK_PLAN_UPDATE_V1 is missing'),
+        )));
     expect((await db.select(db.planCycles).getSingle()).id, before);
     expect((await db.select(db.planImportAudit).get()).length, audits);
   });

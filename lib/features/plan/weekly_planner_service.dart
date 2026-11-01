@@ -262,7 +262,7 @@ class WeeklyPlanBuildRequest {
   final String? overridePromptText;
 
   String get weekStart => toYmd(splitStartDate);
-  String get weekEnd => toYmd(splitStartDate.add(const Duration(days: 6)));
+  String get weekEnd => toYmd(addCalendarDateDays(splitStartDate, 6));
 }
 
 class WeeklyPlanBuildResult {
@@ -1042,8 +1042,19 @@ $extraBlock
   List<_GeneratedTenWeekRowDiagnostics> _extractTenWeekRows(String text) {
     final lines = const LineSplitter().convert(text);
     final rows = <_GeneratedTenWeekRowDiagnostics>[];
+    var inTenWeekSection = false;
     for (var i = 0; i < lines.length; i++) {
       final trimmed = lines[i].trim();
+      if (trimmed == 'TEN_WEEK_PLAN_UPDATE_V1') {
+        inTenWeekSection = true;
+        continue;
+      }
+      if (trimmed == 'END_TEN_WEEK_PLAN_UPDATE_V1') {
+        break;
+      }
+      if (!inTenWeekSection) {
+        continue;
+      }
       if (!trimmed.startsWith('TEN_WEEK_ROW:')) {
         continue;
       }
