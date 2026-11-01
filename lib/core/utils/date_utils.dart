@@ -17,4 +17,20 @@ DateTime parseYmd(String value) {
   );
 }
 
+/// Adds whole calendar days to a YYYY-MM-DD value without using local elapsed
+/// time. UTC is used only as a stable calendar representation, so daylight
+/// saving transitions cannot move the result onto an adjacent date.
+String addCalendarDays(String value, int days) {
+  final parts = value.split('-');
+  if (parts.length != 3) {
+    throw FormatException('Invalid YYYY-MM-DD: $value');
+  }
+  final date = DateTime.utc(
+    int.parse(parts[0]),
+    int.parse(parts[1]),
+    int.parse(parts[2]),
+  );
+  return toYmd(date.add(Duration(days: days)));
+}
+
 int unixMsNow() => DateTime.now().millisecondsSinceEpoch;

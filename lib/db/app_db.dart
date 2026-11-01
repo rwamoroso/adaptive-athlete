@@ -4709,9 +4709,18 @@ class AppDb extends _$AppDb {
   _AiParsedPlanImportBundle _parseAiPlanImportBundleText(String text) {
     final lines = _normalizeAiPlanImportInputLines(text);
     final candidateTexts = _buildAiPlanImportCandidateTexts(lines);
+    final hasTenWeekSection = lines.any(
+      (line) => line.trim() == 'TEN_WEEK_PLAN_UPDATE_V1',
+    );
     StateError? firstParseError;
 
     for (final candidate in candidateTexts) {
+      if (hasTenWeekSection &&
+          candidate.trimLeft().startsWith('WEEK_PLAN_V1')) {
+        // A malformed ten-week section must not be silently discarded by
+        // retrying the embedded weekly plan on its own.
+        continue;
+      }
       try {
         return _parseAiPlanImportBundleTextStrict(candidate);
       } on StateError catch (e) {
@@ -4992,9 +5001,17 @@ class AppDb extends _$AppDb {
   }
 
   void _validateAiTenWeekPlanRows(List<_AiParsedTenWeekPlanRow> rows) {
+    if (rows.length != 10) {
+      throw StateError(
+        'TEN_WEEK_PLAN_UPDATE_V1 must contain exactly 10 TEN_WEEK_ROW entries; '
+        'found ${rows.length}.',
+      );
+    }
     final seenWeekLabels = <String>{};
     final seenDateRanges = <String>{};
-    for (final row in rows) {
+    final firstWeekStart = rows.first.weekStart;
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
       final weekLabelKey = row.weekLabel.trim().toLowerCase();
       if (!seenWeekLabels.add(weekLabelKey)) {
         throw StateError('Duplicate TEN_WEEK_ROW.week "${row.weekLabel}".');
@@ -5005,14 +5022,18 @@ class AppDb extends _$AppDb {
           'Duplicate TEN_WEEK_ROW date range ${row.weekStart}..${row.weekEnd}.',
         );
       }
-      final start = DateTime.tryParse('${row.weekStart}T00:00:00');
-      final end = DateTime.tryParse('${row.weekEnd}T00:00:00');
-      if (start == null || end == null) {
-        throw StateError('Invalid TEN_WEEK_ROW dates for "${row.weekLabel}".');
-      }
-      if (toYmd(start.add(const Duration(days: 6))) != row.weekEnd) {
+      final expectedStart = addCalendarDays(firstWeekStart, i * 7);
+      if (row.weekStart != expectedStart) {
         throw StateError(
-          'TEN_WEEK_ROW ${row.weekLabel}: week_end must be exactly 6 days after week_start.',
+          'TEN_WEEK_ROW ${row.weekLabel}: week_start must be consecutive. '
+          'Expected $expectedStart, found ${row.weekStart}.',
+        );
+      }
+      final expectedEnd = addCalendarDays(expectedStart, 6);
+      if (row.weekEnd != expectedEnd) {
+        throw StateError(
+          'TEN_WEEK_ROW ${row.weekLabel}: week_end must be exactly 6 calendar '
+          'days after week_start. Expected $expectedEnd, found ${row.weekEnd}.',
         );
       }
     }
@@ -5197,12 +5218,7 @@ class AppDb extends _$AppDb {
       throw StateError('WEEK_START and WEEK_END are required.');
     }
 
-    final parsedWeekStart = DateTime.tryParse('${weekStart}T00:00:00');
-    final parsedWeekEnd = DateTime.tryParse('${weekEnd}T00:00:00');
-    if (parsedWeekStart == null || parsedWeekEnd == null) {
-      throw StateError('WEEK_START/WEEK_END must be valid YYYY-MM-DD dates.');
-    }
-    if (toYmd(parsedWeekStart.add(const Duration(days: 6))) != weekEnd) {
+    if (addCalendarDays(weekStart, 6) != weekEnd) {
       throw StateError('WEEK_END must be exactly 6 days after WEEK_START.');
     }
 
