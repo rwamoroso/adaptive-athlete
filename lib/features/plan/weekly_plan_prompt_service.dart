@@ -15,11 +15,13 @@ class WeeklyPlanPromptService {
   static const String _fallbackPromptTemplate = '''
 ADAPTIVE ATHLETE WEEKLY PLAN PROMPT (FALLBACK)
 
-You are generating WEEK_PLAN_V1 output for the Adaptive Athlete app.
+You are generating an Adaptive Athlete weekly-plan import payload.
 Return exactly one 7-day plan that is safe, practical, and progression-aware.
 
 Formatting requirements:
-- Use the app's expected WEEK_PLAN_V1 structure with 7 ordered days.
+- Use the app's expected WEEK_PLAN_V1 structure with 7 ordered days. When the
+  request enables long-term propagation, put TEN_WEEK_PLAN_UPDATE_V1 and its
+  10 rows before WEEK_PLAN_V1.
 - Keep prescription language concise and actionable.
 - Include recovery-aware loading decisions when fatigue or poor sleep is implied.
 - Maintain consistency between run/cardio and strength prescriptions.

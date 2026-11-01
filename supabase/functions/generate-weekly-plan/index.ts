@@ -139,13 +139,13 @@ async function callConfiguredProvider(input: Required<RequestBody>) {
 
 function defaultUserPrompt(input: Required<RequestBody>): string {
   return [
-    "Build a single week plan using WEEK_PLAN_V1 format.",
+    "Build an Adaptive Athlete weekly-plan import payload.",
     `WEEK_START: ${input.week_start}`,
     `WEEK_END: ${input.week_end}`,
     `SPLIT_TYPE: ${input.split_type}`,
     `MODIFIER: ${input.modifier}`,
     "",
-    "Return only the WEEK_PLAN_V1 payload text. No markdown fences.",
+    "Return only the import payload text. It may begin with TEN_WEEK_PLAN_UPDATE_V1 when the request requires long-term propagation; otherwise begin with WEEK_PLAN_V1. No markdown fences.",
   ].join("\n");
 }
 
@@ -190,7 +190,7 @@ async function callOpenAiDirect(input: Required<RequestBody>) {
         {
           role: "system",
           content:
-            "You are a weekly training planner. Return only valid plain text in WEEK_PLAN_V1 format. Do not include markdown code fences.",
+            "You are a weekly training planner. Return only valid Adaptive Athlete import text. Preserve a requested TEN_WEEK_PLAN_UPDATE_V1 section before WEEK_PLAN_V1. Do not include markdown code fences.",
         },
         { role: "user", content: userPrompt },
       ],
