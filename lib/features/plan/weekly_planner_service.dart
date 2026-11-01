@@ -1008,10 +1008,9 @@ $extraBlock
       );
     }
 
-    final startAnchor = parseYmd(expectedFirstWeekStart);
     for (var i = 0; i < rows.length; i++) {
       final row = rows[i];
-      final expectedStart = toYmd(startAnchor.add(Duration(days: i * 7)));
+      final expectedStart = addCalendarDays(expectedFirstWeekStart, i * 7);
       if (row.weekStart != expectedStart) {
         throw StateError(
           'TEN_WEEK_ROW line ${row.lineNo}: week_start must be contiguous and '
@@ -1019,8 +1018,7 @@ $extraBlock
           '${row.weekStart}.',
         );
       }
-      final expectedEnd =
-          toYmd(parseYmd(expectedStart).add(const Duration(days: 6)));
+      final expectedEnd = addCalendarDays(expectedStart, 6);
       if (row.weekEnd != expectedEnd) {
         throw StateError(
           'TEN_WEEK_ROW line ${row.lineNo}: week_end must be 6 days after '

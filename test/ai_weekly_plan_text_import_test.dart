@@ -6,12 +6,20 @@ import 'package:drift/native.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-String _buildAiPlanTextWithTenWeekBlock({bool includeRuleLines = false}) {
+String _buildAiPlanTextWithTenWeekBlock({
+  bool includeRuleLines = false,
+  DateTime? tenWeekStart,
+  int tenWeekCount = 10,
+  int? gapBeforeWeekIndex,
+}) {
   final b = StringBuffer();
   b.writeln('TEN_WEEK_PLAN_UPDATE_V1');
-  final start = DateTime(2026, 2, 9);
-  for (var i = 0; i < 10; i++) {
-    final weekStart = start.add(Duration(days: i * 7));
+  final start = tenWeekStart ?? DateTime.utc(2026, 2, 9);
+  for (var i = 0; i < tenWeekCount; i++) {
+    final gapDays =
+        gapBeforeWeekIndex != null && i >= gapBeforeWeekIndex ? 7 : 0;
+    final weekStart =
+        DateTime.utc(start.year, start.month, start.day + i * 7 + gapDays);
     final weekEnd = weekStart.add(const Duration(days: 6));
     final weekNo = i + 1;
     final deload = (weekNo == 4 || weekNo == 8 || weekNo == 10) ? 'yes' : 'no';
@@ -171,6 +179,60 @@ String _cellText(Data? cell) {
 }
 
 void main() {
+  for (final transition in <({String name, DateTime start})>[
+    (name: 'fall DST transition', start: DateTime.utc(2026, 10, 31)),
+    (name: 'spring DST transition', start: DateTime.utc(2027, 3, 13)),
+  ]) {
+    test('AI ten-week import uses calendar dates across ${transition.name}',
+        () async {
+      final db = AppDb.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+
+      await db.importAiWeeklyPlanText(
+        text: _buildAiPlanTextWithTenWeekBlock(
+          tenWeekStart: transition.start,
+        ),
+        splitStartDate: DateTime(2026, 2, 23),
+      );
+
+      final weeks = await db.select(db.planLongRangeWeeks).get();
+      final firstWeek = weeks.firstWhere((week) => week.weekNumber == 1);
+      expect(weeks, hasLength(10));
+      expect(firstWeek.weekStart,
+          transition.name.startsWith('fall') ? '2026-10-31' : '2027-03-13');
+      expect(firstWeek.weekEnd,
+          transition.name.startsWith('fall') ? '2026-11-06' : '2027-03-19');
+    });
+  }
+
+  test('AI ten-week import requires exactly ten consecutive weeks', () async {
+    final db = AppDb.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    await expectLater(
+      db.importAiWeeklyPlanText(
+        text: _buildAiPlanTextWithTenWeekBlock(tenWeekCount: 9),
+        splitStartDate: DateTime(2026, 2, 23),
+      ),
+      throwsA(isA<StateError>().having(
+        (error) => error.message,
+        'message',
+        contains('exactly 10'),
+      )),
+    );
+    await expectLater(
+      db.importAiWeeklyPlanText(
+        text: _buildAiPlanTextWithTenWeekBlock(gapBeforeWeekIndex: 5),
+        splitStartDate: DateTime(2026, 2, 23),
+      ),
+      throwsA(isA<StateError>().having(
+        (error) => error.message,
+        'message',
+        contains('week_start must be consecutive'),
+      )),
+    );
+  });
+
   test(
       'AI weekly text import persists 10 week plan snapshot and export marks week',
       () async {
