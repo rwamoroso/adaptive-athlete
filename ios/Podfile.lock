@@ -1,6 +1,8 @@
 PODS:
   - app_links (6.4.1):
     - Flutter
+  - device_info_plus (0.0.1):
+    - Flutter
   - DKImagePickerController/Core (4.3.9):
     - DKImagePickerController/ImageDataManager
     - DKImagePickerController/Resource
@@ -36,6 +38,8 @@ PODS:
     - DKImagePickerController/PhotoGallery
     - Flutter
   - Flutter (1.0.0)
+  - health (13.2.1):
+    - Flutter
   - package_info_plus (0.4.5):
     - Flutter
   - path_provider_foundation (0.0.1):
@@ -82,8 +86,10 @@ PODS:
 
 DEPENDENCIES:
   - app_links (from `.symlinks/plugins/app_links/ios`)
+  - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
   - file_picker (from `.symlinks/plugins/file_picker/ios`)
   - Flutter (from `Flutter`)
+  - health (from `.symlinks/plugins/health/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - SDWebImage (= 5.18.10)
@@ -104,10 +110,14 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   app_links:
     :path: ".symlinks/plugins/app_links/ios"
+  device_info_plus:
+    :path: ".symlinks/plugins/device_info_plus/ios"
   file_picker:
     :path: ".symlinks/plugins/file_picker/ios"
   Flutter:
     :path: Flutter
+  health:
+    :path: ".symlinks/plugins/health/ios"
   package_info_plus:
     :path: ".symlinks/plugins/package_info_plus/ios"
   path_provider_foundation:
@@ -125,10 +135,12 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   app_links: 3dbc685f76b1693c66a6d9dd1e9ab6f73d97dc0a
+  device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
   DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60
   file_picker: a0560bc09d61de87f12d246fc47d2119e6ef37be
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  health: e310387222e199d4b3261337490a67aaff6d18eb
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   SDWebImage: fc8f2d48bbfd72ef39d70e981bd24a3f3be53fec
@@ -140,6 +152,6 @@ SPEC CHECKSUMS:
   url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
   wakelock_plus: e29112ab3ef0b318e58cfa5c32326458be66b556
 
-PODFILE CHECKSUM: 77ef1c261453edfef003e90173b661554df86477
+PODFILE CHECKSUM: dd756836c988a16a09aa96c6e609fbc7a25974e1
 
 COCOAPODS: 1.17.0

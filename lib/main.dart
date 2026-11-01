@@ -16,6 +16,7 @@ import 'core/utils/supabase_session_storage.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/auth/join_workspace_screen.dart';
 import 'features/auth/reset_password_screen.dart';
+import 'features/health/healthkit_service.dart';
 import 'features/sync/sync_service.dart';
 import 'features/training/home_shell.dart';
 
@@ -193,6 +194,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   bool _autoSyncInFlight = false;
   String? _pendingAutoSyncReason;
   DateTime? _lastAutoSyncAt;
+  bool _healthKitSyncInFlight = false;
 
   Future<void> _initDeepLinks() async {
     final appLinks = AppLinks();
@@ -252,6 +254,47 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       }
       unawaited(_triggerAutoSync(reason: reason, force: force));
     });
+  }
+
+  void _scheduleHealthKitThenCloud({
+    required String reason,
+    bool forceCloud = false,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_syncHealthKitThenCloud(
+        reason: reason,
+        forceCloud: forceCloud,
+      ));
+    });
+  }
+
+  Future<void> _syncHealthKitThenCloud({
+    required String reason,
+    bool forceCloud = false,
+  }) async {
+    if (_healthKitSyncInFlight) {
+      return;
+    }
+    _healthKitSyncInFlight = true;
+    try {
+      final workspaceContext =
+          await ref.read(activeWorkspaceContextProvider.future);
+      final result = await HealthKitService(
+        db: ref.read(appDbProvider),
+        preferences: ref.read(preferencesProvider),
+        workspaceId: workspaceContext?.workspaceId ?? 'local_workspace',
+        athleteProfileId: workspaceContext?.profileId ?? 'local_profile',
+      ).syncIfEnabled();
+      if (result.enabled) {
+        debugPrint('Apple Health sync ($reason): ${result.message}');
+      }
+    } finally {
+      _healthKitSyncInFlight = false;
+    }
+    if (mounted) {
+      _scheduleAutoSync(reason: reason, force: forceCloud);
+    }
   }
 
   void _scheduleSyncStatusReset() {
@@ -350,7 +393,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           return;
         }
         if (event.event == AuthChangeEvent.signedIn) {
-          _scheduleAutoSync(reason: 'signed_in', force: true);
+          _scheduleHealthKitThenCloud(
+            reason: 'signed_in',
+            forceCloud: true,
+          );
           unawaited(_resumePendingInvite());
           return;
         }
@@ -360,17 +406,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       }, onError: (Object error, StackTrace stackTrace) {
         debugPrint('Auth state stream ignored auth error: $error');
       });
-
-      if (Supabase.instance.client.auth.currentSession != null) {
-        _scheduleAutoSync(reason: 'app_open', force: true);
-      }
     }
+    _scheduleHealthKitThenCloud(reason: 'app_open', forceCloud: true);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _scheduleAutoSync(reason: 'resume');
+      _scheduleHealthKitThenCloud(reason: 'resume');
     }
   }
 

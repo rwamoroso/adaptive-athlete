@@ -11,7 +11,9 @@ create function auth.jwt() returns jsonb language sql stable as $$select '{}'::j
 grant usage on schema auth, public to authenticated, anon;
 grant execute on all functions in schema auth to authenticated, anon;`);
 await db.exec(fs.readFileSync(root+'/supabase/schema.sql','utf8').replace(/create extension if not exists pgcrypto;/i,''));
-await db.exec(fs.readFileSync(root+'/supabase/migrations/'+fs.readdirSync(root+'/supabase/migrations').find(name=>name.endsWith('_reliable_sync_and_long_range_backup.sql')),'utf8'));
+for (const migration of fs.readdirSync(root+'/supabase/migrations').sort()) {
+  await db.exec(fs.readFileSync(root+'/supabase/migrations/'+migration,'utf8'));
+}
 await db.exec(`insert into public.workspaces(id,name,created_by_user_id) values
 ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','Review A','11111111-1111-1111-1111-111111111111'),
 ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','Review B','22222222-2222-2222-2222-222222222222');
@@ -21,7 +23,6 @@ insert into public.workspace_memberships(workspace_id,user_id,user_email,role,st
 insert into public.athlete_profiles(id,workspace_id,name,created_by_user_id) values
 ('aaaaaaaa-1111-1111-1111-111111111111','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','Athlete A','11111111-1111-1111-1111-111111111111'),
 ('bbbbbbbb-2222-2222-2222-222222222222','bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','Athlete B','22222222-2222-2222-2222-222222222222');
-grant select,insert,update,delete on all tables in schema public to authenticated;
 set role authenticated;
 set request.jwt.claim.sub='11111111-1111-1111-1111-111111111111';`);
 const workspace='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',profile='aaaaaaaa-1111-1111-1111-111111111111';
@@ -36,7 +37,8 @@ assert.equal((await apply(null,row)).applied,false);
 assert.equal((await apply(null,row,true)).applied,true);
 let denied=false;try{await apply(null,{...row,workspace_id:'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',athlete_profile_id:'bbbbbbbb-2222-2222-2222-222222222222'},false,'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','bbbbbbbb-2222-2222-2222-222222222222');}catch(e){denied=e.code==='42501'}assert.equal(denied,true);
 let mismatch=false;try{await apply(null,{...row,athlete_profile_id:'bbbbbbbb-2222-2222-2222-222222222222'})}catch(e){mismatch=e.code==='22023'}assert.equal(mismatch,true);
-await db.query(`insert into public.plan_long_range_weeks(id,week_label,week_start,week_end,deload,source,created_at,updated_at,workspace_id,athlete_profile_id) values('week','Week 1','2026-10-26','2026-11-01',false,'review',1,1,$1,$2)`,[workspace,profile]);
+const week={id:'week',week_label:'Week 1',week_start:'2026-10-26',week_end:'2026-11-01',run_focus:null,strength_focus:null,strength_progression_expectation:null,primary_progression_target:null,recovery_emphasis:null,deload:false,notes:null,source:'review',created_at:1,updated_at:1,workspace_id:workspace,athlete_profile_id:profile};
+assert.equal((await apply(null,week,false,workspace,profile,'plan_long_range_weeks','week')).applied,true);
 await db.exec(`set request.jwt.claim.sub='22222222-2222-2222-2222-222222222222'`);
 assert.equal((await db.query('select * from public.plan_long_range_weeks')).rows.length,0);
 await db.exec('reset role; set role anon');

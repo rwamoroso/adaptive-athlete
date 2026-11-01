@@ -43,6 +43,14 @@ and the `sync_apply_change` RPC. The legacy bootstrap includes this upgrade too.
 The migration directory is not yet a complete baseline for rebuilding older tables;
 follow the baseline procedure above before using `supabase db reset` on a new stack.
 
+`migrations/20261029225153_security_planner_incremental_sync.sql` is the
+follow-up security and incremental-sync upgrade. It removes direct domain-table
+mutation grants, makes the compare-and-set RPC the authenticated write boundary,
+adds a metadata-only change cursor, restricts profile/bootstrap visibility,
+hardens invite and email-binding RPCs, and adds per-user planner reservations and
+rate limits. The matching planner Edge Function uses authenticated structured
+generation and stores no prompt or generated-plan body in the quota table.
+
 The RPC is `security invoker` with an empty search path. It accepts an allowlist of
 collections, verifies record/profile identity and edit permissions, locks the record,
 and checks the expected cloud snapshot before changing it. New tables enable RLS
@@ -63,5 +71,6 @@ node scripts/verify_sync_database.mjs /tmp/adaptive-db-check/node_modules/@elect
 ```
 
 This uses an in-memory PostgreSQL instance, creates local auth test helpers, runs
-the bootstrap and additive migration, and exercises the permission and merge checks.
+the bootstrap and every checked-in migration, and exercises the permission,
+incremental cursor, quota, and merge checks.
 It never reads database credentials or connects to the hosted project.

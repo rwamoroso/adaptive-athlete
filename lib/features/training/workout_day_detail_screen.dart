@@ -48,9 +48,14 @@ Map<int, String> _manualSegmentLabelsByIdx(String? rawMetricsJson) {
 }
 
 class WorkoutDayDetailScreen extends ConsumerStatefulWidget {
-  const WorkoutDayDetailScreen({super.key, required this.date});
+  const WorkoutDayDetailScreen({
+    super.key,
+    required this.date,
+    this.startFocused = false,
+  });
 
   final String date;
+  final bool startFocused;
 
   @override
   ConsumerState<WorkoutDayDetailScreen> createState() =>
@@ -70,12 +75,15 @@ class _WorkoutDayDetailScreenState
   final Map<String, bool> _expandedByExercise = <String, bool>{};
   final Map<String, GlobalKey> _cardKeysByExercise = <String, GlobalKey>{};
   bool _addingExercise = false;
+  late bool _focusedMode;
+  bool _undoingSet = false;
   String? _pendingScrollExercise;
   int _tilesEpoch = 0;
 
   @override
   void initState() {
     super.initState();
+    _focusedMode = widget.startFocused;
     _detailFuture = _loadDetail();
   }
 
@@ -88,6 +96,7 @@ class _WorkoutDayDetailScreenState
       _expandedByExercise.clear();
       _pendingScrollExercise = null;
       _tilesEpoch = 0;
+      _focusedMode = widget.startFocused;
       _detailFuture = _loadDetail();
     }
   }
@@ -833,6 +842,352 @@ class _WorkoutDayDetailScreenState
     _refreshDetail();
   }
 
+  List<_FocusedSetTarget> _focusedTargets(WorkoutDayDetail detail) {
+    final targets = <_FocusedSetTarget>[];
+    for (final group in detail.groups) {
+      final sets = _editableSetsForGroup(group);
+      for (final set in sets) {
+        final matchingActual = group.actual
+            .where((candidate) => candidate.setIndex == set.setIndex);
+        final actual = matchingActual.isEmpty ? null : matchingActual.first;
+        targets.add(
+          _FocusedSetTarget(
+            group: group,
+            prescribed: set,
+            actual: actual,
+          ),
+        );
+      }
+    }
+    return targets;
+  }
+
+  Future<void> _undoLastActualSet(WorkoutDayDetail detail) async {
+    final actual = detail.groups
+        .expand((group) => group.actual)
+        .where((set) => set.source != 'manual_skip')
+        .toList(growable: false);
+    if (actual.isEmpty || _undoingSet) {
+      return;
+    }
+    final sorted = [...actual]..sort((a, b) {
+        final aTime = a.performedAt ?? a.createdAt;
+        final bTime = b.performedAt ?? b.createdAt;
+        final byTime = bTime.compareTo(aTime);
+        return byTime != 0 ? byTime : b.createdAt.compareTo(a.createdAt);
+      });
+    setState(() => _undoingSet = true);
+    try {
+      final removed = await ref
+          .read(appDbProvider)
+          .deleteActualStrengthSetById(sorted.first.id);
+      if (!mounted) {
+        return;
+      }
+      if (removed) {
+        _dismissRestCountdown();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Last set undone.')),
+        );
+        _refreshDetail();
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not undo the last set: $error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _undoingSet = false);
+      }
+    }
+  }
+
+  Widget _buildFocusedWorkout(
+    BuildContext context,
+    WorkoutDayDetail detail,
+  ) {
+    final targets = _focusedTargets(detail);
+    final completed = targets.where((target) => target.actual != null).length;
+    final remaining = targets.where((target) => target.actual == null).toList();
+    final active = remaining.isEmpty ? null : remaining.first;
+    final progress = targets.isEmpty ? 0.0 : completed / targets.length;
+    final anyActual = detail.groups
+        .expand((group) => group.actual)
+        .any((set) => set.source != 'manual_skip');
+
+    if (targets.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        children: [
+          Text(
+            'Workout',
+            style: Theme.of(context)
+                .textTheme
+                .headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 12),
+          const GlassCard(
+            child: Text(
+              'There are no strength sets for this day yet. Add an exercise or return to the full workout details.',
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed:
+                _addingExercise ? null : () => _promptAddExercise(detail),
+            icon: const Icon(Icons.add),
+            label: const Text('Add Exercise'),
+          ),
+          TextButton(
+            onPressed: () => setState(() => _focusedMode = false),
+            child: const Text('View Full Details'),
+          ),
+        ],
+      );
+    }
+
+    if (active == null) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 120),
+        children: [
+          Icon(
+            Icons.check_circle_rounded,
+            size: 72,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Workout complete',
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$completed of ${targets.length} sets logged',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.done),
+            label: const Text('Finish Workout'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: anyActual && !_undoingSet
+                ? () => _undoLastActualSet(detail)
+                : null,
+            icon: const Icon(Icons.undo_rounded),
+            label: Text(_undoingSet ? 'Undoing...' : 'Undo Last Set'),
+          ),
+          TextButton(
+            onPressed: () => setState(() => _focusedMode = false),
+            child: const Text('View Full Details'),
+          ),
+        ],
+      );
+    }
+
+    final group = active.group;
+    final set = active.prescribed;
+    final key = _setKey(group.exercise, set.setIndex);
+    final edited = _editedByKey[key]!;
+    final performedExercise =
+        group.substitution?.substituteExerciseCanonical ?? group.exercise;
+    final saving = _savingKeys.contains(key);
+    final groupTargets = targets
+        .where((target) => target.group.exercise == group.exercise)
+        .toList(growable: false);
+    final groupPosition = groupTargets.indexOf(active) + 1;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Workout in progress',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$completed of ${targets.length} sets complete',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _focusedMode = false),
+              child: const Text('All Details'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        LinearProgressIndicator(
+          value: progress,
+          minHeight: 7,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        const SizedBox(height: 22),
+        Text(
+          group.displayExercise,
+          style: Theme.of(context)
+              .textTheme
+              .headlineSmall
+              ?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        if (performedExercise != group.exercise) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Substitute: $performedExercise',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          'Set $groupPosition of ${groupTargets.length}',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 16),
+        GlassCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              _FocusedNumberField(
+                key: ValueKey('focused-weight-$key'),
+                label: 'Weight (lb)',
+                initialValue: edited.weight,
+                allowDecimal: true,
+                onChanged: (value) {
+                  final current = _editedByKey[key];
+                  if (current != null) {
+                    _editedByKey[key] = _EditableSetState(
+                      weight: value,
+                      reps: current.reps,
+                      rir: current.rir,
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _FocusedNumberField(
+                      key: ValueKey('focused-reps-$key'),
+                      label: 'Reps',
+                      initialValue: edited.reps?.toDouble(),
+                      onChanged: (value) {
+                        final current = _editedByKey[key];
+                        if (current != null) {
+                          _editedByKey[key] = _EditableSetState(
+                            weight: current.weight,
+                            reps: value?.round(),
+                            rir: current.rir,
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _FocusedNumberField(
+                      key: ValueKey('focused-rir-$key'),
+                      label: 'RIR',
+                      initialValue: edited.rir?.toDouble(),
+                      onChanged: (value) {
+                        final current = _editedByKey[key];
+                        if (current != null) {
+                          _editedByKey[key] = _EditableSetState(
+                            weight: current.weight,
+                            reps: current.reps,
+                            rir: value?.round(),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 58,
+          child: FilledButton.icon(
+            key: ValueKey('focused-complete-$key'),
+            onPressed: saving
+                ? null
+                : () => _confirmActualSet(
+                      performedExerciseCanonical: performedExercise,
+                      prescribedExerciseCanonical: group.exercise,
+                      substitutionId: group.substitution?.id,
+                      prescribed: set,
+                      hadExistingActual: false,
+                      currentExercise: group.exercise,
+                      nextExercise: null,
+                      advanceCard: false,
+                      restSeconds: _resolveRestSecondsForSet(
+                        group: group,
+                        set: set,
+                      ),
+                    ),
+            icon: const Icon(Icons.check_rounded),
+            label: Text(saving ? 'Saving Set...' : 'Complete Set'),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: anyActual && !_undoingSet
+                    ? () => _undoLastActualSet(detail)
+                    : null,
+                icon: const Icon(Icons.undo_rounded),
+                label: Text(_undoingSet ? 'Undoing...' : 'Undo Last Set'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _savingExercises.contains(group.exercise)
+                    ? null
+                    : () => _skipExercise(
+                          performedExerciseCanonical: performedExercise,
+                          prescribedExerciseCanonical: group.exercise,
+                          substitutionId: group.substitution?.id,
+                          prescribedSets: groupTargets
+                              .where((target) => target.actual == null)
+                              .map((target) => target.prescribed)
+                              .toList(growable: false),
+                        ),
+                icon: const Icon(Icons.skip_next_rounded),
+                label: const Text('Skip Exercise'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildRestCountdownOverlay(
     BuildContext context,
     RestCountdownState countdown,
@@ -907,7 +1262,9 @@ class _WorkoutDayDetailScreenState
     return Theme(
       data: buildClinicalTheme(),
       child: Scaffold(
-        appBar: AppBar(title: Text('Workout Day Detail ${widget.date}')),
+        appBar: AppBar(
+          title: Text(_focusedMode ? 'Workout' : 'Workout Details'),
+        ),
         body: Stack(
           children: [
             const Positioned.fill(child: _WorkoutDetailPageBackground()),
@@ -924,6 +1281,9 @@ class _WorkoutDayDetailScreenState
                 }
 
                 _ensureEditableRows(detail);
+                if (_focusedMode) {
+                  return _buildFocusedWorkout(context, detail);
+                }
                 final pendingScroll = _pendingScrollExercise;
                 if (pendingScroll != null) {
                   _pendingScrollExercise = null;
@@ -953,6 +1313,17 @@ class _WorkoutDayDetailScreenState
                       widget.date,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
+                    if (detail.groups.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () => setState(() => _focusedMode = true),
+                          icon: const Icon(Icons.play_arrow_rounded),
+                          label: const Text('Start Focused Workout'),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     SectionHeader(text: splitHeaderTitle),
                     const SizedBox(height: 8),
@@ -1368,6 +1739,67 @@ class _WorkoutDayDetailScreenState
           ],
         ),
       ),
+    );
+  }
+}
+
+class _FocusedSetTarget {
+  const _FocusedSetTarget({
+    required this.group,
+    required this.prescribed,
+    required this.actual,
+  });
+
+  final ExerciseSetGroup group;
+  final PlannedStrengthSetView prescribed;
+  final ActualStrengthSet? actual;
+}
+
+class _FocusedNumberField extends StatelessWidget {
+  const _FocusedNumberField({
+    super.key,
+    required this.label,
+    required this.initialValue,
+    required this.onChanged,
+    this.allowDecimal = false,
+  });
+
+  final String label;
+  final double? initialValue;
+  final ValueChanged<double?> onChanged;
+  final bool allowDecimal;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = initialValue == null
+        ? ''
+        : allowDecimal
+            ? initialValue!.toStringAsFixed(
+                initialValue! % 1 == 0 ? 0 : 1,
+              )
+            : initialValue!.round().toString();
+    return TextFormField(
+      initialValue: value,
+      keyboardType: TextInputType.numberWithOptions(
+        decimal: allowDecimal,
+        signed: false,
+      ),
+      textInputAction: TextInputAction.next,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      onChanged: (raw) {
+        final trimmed = raw.trim();
+        if (trimmed.isEmpty) {
+          onChanged(null);
+          return;
+        }
+        final parsed = double.tryParse(trimmed);
+        if (parsed != null && parsed >= 0) {
+          onChanged(parsed);
+        }
+      },
     );
   }
 }

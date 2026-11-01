@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/app_providers.dart';
+import '../health/healthkit_service.dart';
 import '../plan/weekly_plan_prompt_service.dart';
 import '../sync/sync_service.dart';
 import '../training/exercise_substitution_service.dart';
@@ -26,29 +28,43 @@ class SettingsScreen extends ConsumerWidget {
     final plannerService = ref.watch(weeklyPlannerServiceProvider);
     final syncStatus = ref.watch(syncStatusProvider);
 
-    String? userId;
-    if (bootstrap.initialized) {
-      userId = Supabase.instance.client.auth.currentUser?.id;
-    }
+    final currentUser = bootstrap.initialized
+        ? Supabase.instance.client.auth.currentUser
+        : null;
+    final userId = currentUser?.id;
+    final metadataName = currentUser?.userMetadata?['full_name'] ??
+        currentUser?.userMetadata?['name'] ??
+        currentUser?.userMetadata?['display_name'];
+    final displayName = metadataName is String && metadataName.trim().isNotEmpty
+        ? metadataName.trim()
+        : null;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
       children: [
         Text(
-          'SYSTEM & CLINICAL CONFIG',
+          'Settings',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                letterSpacing: 1,
                 fontWeight: FontWeight.w800,
               ),
         ),
         const SizedBox(height: 12),
         const AppReleaseCard(),
         const SizedBox(height: 12),
+        GlassCard(
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.account_circle_outlined, size: 32),
+            title: Text(displayName ??
+                (currentUser == null ? 'No account signed in' : 'Signed in')),
+            subtitle: Text(currentUser?.email ??
+                'Sign in to see the account email used in this app.'),
+          ),
+        ),
+        const SizedBox(height: 12),
         const SyncReviewCard(),
         const SizedBox(height: 12),
-        const ClinicalBanner(
-          text: 'Clinical Focus: Reliable Local State & Sync Integrity',
-        ),
+        const ClinicalBanner(text: 'Your preferences, connections, and data'),
         const SizedBox(height: 12),
         GridView.count(
           crossAxisCount: 2,
@@ -149,6 +165,34 @@ class SettingsScreen extends ConsumerWidget {
                           settingsNotifier.toggleContraindication(flag),
                     ),
                 ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const SectionHeader(text: 'Apple Health'),
+        const SizedBox(height: 8),
+        const _HealthKitSettingsCard(),
+        const SizedBox(height: 12),
+        const SectionHeader(text: 'Privacy & Data'),
+        const SizedBox(height: 8),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'How your data is used',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                settings.localOnly
+                    ? 'Local-only mode keeps training records on this device. Apple Health access is read-only.'
+                    : 'Training records sync to your authenticated Supabase workspace. Access is limited to your workspace and assigned athlete profiles.',
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'One-tap planning sends only the planning profile and training context shown in Plan to OpenAI through the app server. Provider response storage is disabled. Apple Health data is never written back to HealthKit.',
               ),
             ],
           ),
@@ -375,6 +419,162 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HealthKitSettingsCard extends ConsumerStatefulWidget {
+  const _HealthKitSettingsCard();
+
+  @override
+  ConsumerState<_HealthKitSettingsCard> createState() =>
+      _HealthKitSettingsCardState();
+}
+
+class _HealthKitSettingsCardState
+    extends ConsumerState<_HealthKitSettingsCard> {
+  bool _busy = false;
+  String? _message;
+
+  HealthKitService _service() => HealthKitService(
+        db: ref.read(appDbProvider),
+        preferences: ref.read(preferencesProvider),
+        workspaceId:
+            ref.read(activeWorkspaceContextProvider).valueOrNull?.workspaceId ??
+                'local_workspace',
+        athleteProfileId:
+            ref.read(activeWorkspaceContextProvider).valueOrNull?.profileId ??
+                'local_profile',
+      );
+
+  Future<void> _connectOrSync({required bool connect}) async {
+    setState(() {
+      _busy = true;
+      _message = connect
+          ? 'Waiting for Apple Health permission…'
+          : 'Checking Apple Health for changes…';
+    });
+    final service = _service();
+    final result = connect
+        ? await service.connectAndSync()
+        : await service.syncIfEnabled();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _message = result.message;
+    });
+  }
+
+  Future<void> _disconnect() async {
+    await _service().disconnect();
+    if (!mounted) return;
+    setState(() {
+      _message =
+          'Automatic Apple Health import is off. Existing imported records remain.';
+    });
+  }
+
+  Future<String?> _latestHealthWeightLabel() async {
+    final ctx = ref.read(activeWorkspaceContextProvider).valueOrNull;
+    final profile = await ref.read(appDbProvider).getAthletePlanningProfile(
+          workspaceId: ctx?.workspaceId ?? 'local_workspace',
+          athleteProfileId: ctx?.profileId ?? 'local_profile',
+        );
+    if (profile == null) return null;
+    try {
+      final biometrics = jsonDecode(profile.biometricsJson) as Map;
+      final weight = (biometrics['healthkit_weight_lb'] as num?)?.toDouble();
+      final measuredAt = DateTime.tryParse(
+        biometrics['healthkit_weight_at']?.toString() ?? '',
+      )?.toLocal();
+      if (weight == null || measuredAt == null) return null;
+      final day = '${measuredAt.month}/${measuredAt.day}/${measuredAt.year}';
+      return '${weight.toStringAsFixed(1)} lb ($day)';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final service = _service();
+    final enabled = service.isEnabled;
+    final lastSync = service.lastSuccessfulSync;
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.favorite_outline,
+                color: enabled ? Colors.redAccent.shade100 : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  enabled ? 'Apple Health connected' : 'Connect Apple Health',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Read-only import for workouts, workout heart rate, sleep, and the latest body-weight measurement. '
+            'Adaptive Athlete imports only after you connect it and checks for changes when the app resumes. If already connected, turn import off and connect again to approve body-weight access.',
+          ),
+          FutureBuilder<String?>(
+            future: _latestHealthWeightLabel(),
+            builder: (context, snapshot) {
+              final label = snapshot.data;
+              if (label == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Latest Apple Health weight: $label'),
+              );
+            },
+          ),
+          if (lastSync != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Last checked: ${lastSync.toLocal().toString().split('.').first}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (_message != null) ...[
+            const SizedBox(height: 8),
+            Text(_message!, style: Theme.of(context).textTheme.bodySmall),
+          ],
+          if (_busy) ...[
+            const SizedBox(height: 10),
+            const LinearProgressIndicator(minHeight: 2),
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: _busy || !service.isAvailable
+                    ? null
+                    : () => _connectOrSync(connect: !enabled),
+                icon: Icon(enabled ? Icons.sync : Icons.favorite_outline),
+                label: Text(enabled ? 'Sync Now' : 'Connect'),
+              ),
+              if (enabled)
+                TextButton(
+                  onPressed: _busy ? null : _disconnect,
+                  child: const Text('Turn Off Import'),
+                ),
+            ],
+          ),
+          if (!service.isAvailable) ...[
+            const SizedBox(height: 8),
+            const Text('Apple Health import is available on iPhone.'),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -860,6 +1060,15 @@ Future<void> _syncFromSettings(BuildContext context, WidgetRef ref) async {
       client: Supabase.instance.client,
       workspaceService: ref.read(workspaceServiceProvider));
   notifier.setSyncing(reason: 'manual');
+  final workspaceContext =
+      ref.read(activeWorkspaceContextProvider).valueOrNull;
+  await HealthKitService(
+    db: ref.read(appDbProvider),
+    preferences: ref.read(preferencesProvider),
+    workspaceId: workspaceContext?.workspaceId ?? 'local_workspace',
+    athleteProfileId: workspaceContext?.profileId ?? 'local_profile',
+  ).syncIfEnabled();
+  if (!context.mounted) return;
   final status = await service.syncNow();
   if (!context.mounted) return;
   if (notifier.mounted) notifier.setResult(status, reason: 'manual');

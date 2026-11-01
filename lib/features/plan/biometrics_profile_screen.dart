@@ -98,7 +98,7 @@ class _BiometricsProfileScreenState extends State<BiometricsProfileScreen> {
     final chipTheme = Theme.of(context).chipTheme;
     final entries = <({String label, String value})>[
       (
-        label: 'Body Fat',
+        label: 'Body composition',
         value: '${preview['body_fat_percent'] ?? '--'}%',
       ),
       (
@@ -278,13 +278,14 @@ class _BiometricsProfileScreenState extends State<BiometricsProfileScreen> {
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: _buildType,
-                  decoration: const InputDecoration(labelText: 'Build Type'),
+                  decoration: const InputDecoration(labelText: 'General build'),
                   items: kBiometricsBuildTypes
                       .map(
                         (value) => DropdownMenuItem<String>(
                           value: value,
-                          child:
-                              Text(BiometricsCalculator.titleCaseLabel(value)),
+                          child: Text(
+                            BiometricsCalculator.buildTypeDisplayLabel(value),
+                          ),
                         ),
                       )
                       .toList(),
@@ -309,7 +310,7 @@ class _BiometricsProfileScreenState extends State<BiometricsProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'When the inputs are valid, this computed payload is what the planner can include in `BIOMETRICS_V1` for weekly generation.',
+                  'These rough planning estimates help scale training suggestions. They are not medical measurements or diagnoses.',
                   style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
                 ),
                 if (preview != null) ...[
@@ -333,7 +334,7 @@ class _BiometricsProfileScreenState extends State<BiometricsProfileScreen> {
                   ),
                   child: preview == null
                       ? Text(
-                          'Enter valid fields to preview computed body fat, lean mass, BMI, BMR, and TDEE.',
+                          'Enter valid fields to preview body-composition and energy estimates.',
                           style: theme.textTheme.bodyMedium,
                         )
                       : SelectableText(

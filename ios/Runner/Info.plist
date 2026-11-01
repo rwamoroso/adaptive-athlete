@@ -41,6 +41,10 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Adaptive Athlete may access your photo library when you choose to import photos or files for training-related records.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Adaptive Athlete reads workouts, heart rate, and sleep you choose to share to fill your training log and recovery view.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Adaptive Athlete does not write health data to Apple Health. This description is required by the HealthKit plugin used for read-only imports.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

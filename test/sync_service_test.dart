@@ -38,9 +38,14 @@ class _Workspace extends WorkspaceService {
 class FakeCloud {
   final tables = <String, Map<String, Map<String, dynamic>>>{};
   final deleted = <String, Set<String>>{};
+  final _seen = <String, String>{};
+  final _journal = <Map<String, dynamic>>[];
+  var _changeVersion = 0;
   Future<void> Function(String table, String key)? beforeWrite;
   Future<void> Function(String table)? beforeRead;
+  final readCounts = <String, int>{};
   bool fail = false;
+  bool roundHeartRateOnWrite = false;
   Map<String, Map<String, dynamic>> rows(String table) =>
       tables.putIfAbsent(table, () => {});
   http.Response response(http.Request request, Object? value,
@@ -48,13 +53,79 @@ class FakeCloud {
       http.Response(jsonEncode(value), status,
           request: request, headers: {'content-type': 'application/json'});
 
+  void _recordCurrent(String table, String key) {
+    final row = rows(table)[key];
+    final isDeleted = deleted[table]?.contains(key) == true;
+    final marker = row != null
+        ? 'upsert:${_canonical(row)}'
+        : isDeleted
+            ? 'delete'
+            : 'missing';
+    _seen['$table/$key'] = marker;
+    if (row == null && !isDeleted) return;
+    _changeVersion++;
+    _journal.add({
+      'change_version': _changeVersion,
+      'table_name': table,
+      'row_key': key,
+      'operation': row == null ? 'delete' : 'upsert',
+      'row_data': row == null ? null : Map<String, dynamic>.from(row),
+    });
+  }
+
+  void _captureExternalChanges() {
+    final tableNames = <String>{...tables.keys, ...deleted.keys};
+    for (final seenKey in _seen.keys) {
+      tableNames.add(seenKey.split('/').first);
+    }
+    for (final table in tableNames) {
+      final keys = <String>{
+        ...rows(table).keys,
+        ...?deleted[table],
+        for (final seenKey in _seen.keys)
+          if (seenKey.startsWith('$table/'))
+            seenKey.substring(table.length + 1),
+      };
+      for (final key in keys) {
+        final row = rows(table)[key];
+        final isDeleted = deleted[table]?.contains(key) == true;
+        final marker = row != null
+            ? 'upsert:${_canonical(row)}'
+            : isDeleted
+                ? 'delete'
+                : 'missing';
+        final seenKey = '$table/$key';
+        if (_seen[seenKey] == marker) continue;
+        _recordCurrent(table, key);
+      }
+    }
+  }
+
   Future<http.Response> handle(http.Request request) async {
     if (fail) return response(request, {'message': 'Network unavailable'}, 503);
+    if (request.url.path.endsWith('/rpc/sync_change_cursor')) {
+      _captureExternalChanges();
+      return response(request, _changeVersion);
+    }
+    if (request.url.path.endsWith('/rpc/sync_changes_since')) {
+      _captureExternalChanges();
+      final params = jsonDecode(request.body) as Map<String, dynamic>;
+      final after = (params['p_after'] as num?)?.toInt() ?? 0;
+      final limit = (params['p_limit'] as num?)?.toInt() ?? 500;
+      return response(
+        request,
+        _journal
+            .where((entry) => (entry['change_version'] as int) > after)
+            .take(limit)
+            .toList(growable: false),
+      );
+    }
     if (request.url.path.endsWith('/rpc/sync_apply_change')) {
       final params = jsonDecode(request.body) as Map<String, dynamic>;
       final table = params['p_table'] as String,
           key = params['p_key'] as String;
       await beforeWrite?.call(table, key);
+      _captureExternalChanges();
       final current = rows(table)[key];
       final expected = params['p_expected'];
       final matches = _canonical(current) == _canonical(expected);
@@ -71,11 +142,18 @@ class FakeCloud {
         (deleted[table] ??= {}).add(key);
       } else {
         rows(table)[key] = Map<String, dynamic>.from(params['p_next'] as Map);
+        final avgHr = rows(table)[key]!['avg_hr'];
+        if (roundHeartRateOnWrite && table == 'run_sessions' && avgHr is num) {
+          rows(table)[key]!['avg_hr'] =
+              double.parse(avgHr.toDouble().toStringAsPrecision(15));
+        }
         deleted[table]?.remove(key);
       }
+      _recordCurrent(table, key);
       return response(request, {'applied': true, 'row': rows(table)[key]});
     }
     final table = request.url.pathSegments.last;
+    readCounts[table] = (readCounts[table] ?? 0) + 1;
     await beforeRead?.call(table);
     if (table == 'sync_tombstones') {
       final collection =
@@ -176,9 +254,42 @@ void main() {
     expect(cloud.rows('workout_days')['day']!['notes'], 'new local edit');
   });
 
-  test(
-      'first sync preserves both conflicting copies and allows keeping device edits',
-      () async {
+  test('heart rate JSON precision does not cause repeated uploads', () async {
+    cloud.roundHeartRateOnWrite = true;
+    var runWrites = 0;
+    cloud.beforeWrite = (table, _) async {
+      if (table == 'run_sessions') runWrites++;
+    };
+    const heartRate = 138.12345678901234;
+    await fixture.db.into(fixture.db.runSessions).insert(
+          RunSessionsCompanion.insert(
+            id: 'health-run',
+            source: 'apple_health',
+            avgHr: const Value(heartRate),
+          ),
+        );
+
+    expect(SyncService.succeeded(await fixture.service.syncNow()), isTrue);
+    expect(runWrites, 1);
+    expect((await fixture.db.select(fixture.db.runSessions).getSingle()).avgHr,
+        heartRate);
+    expect(SyncService.succeeded(await fixture.service.syncNow()), isTrue);
+    expect(runWrites, 1);
+
+    await (fixture.db.update(fixture.db.runSessions)
+          ..where((run) => run.id.equals('health-run')))
+        .write(const RunSessionsCompanion(avgHr: Value(139.0)));
+    expect(SyncService.succeeded(await fixture.service.syncNow()), isTrue);
+    expect(runWrites, 2);
+    expect(cloud.rows('run_sessions')['health-run']!['avg_hr'], 139.0);
+
+    cloud.rows('run_sessions')['health-run']!['avg_hr'] = 140.0;
+    expect(SyncService.succeeded(await fixture.service.syncNow()), isTrue);
+    expect((await fixture.db.select(fixture.db.runSessions).getSingle()).avgHr,
+        140.0);
+  });
+
+  test('first sync keeps device edits when both copies differ', () async {
     cloud.rows('workout_days')['day'] = day();
     await fixture.db.into(fixture.db.workoutDays).insert(
         WorkoutDaysCompanion.insert(
@@ -186,14 +297,39 @@ void main() {
             workoutDate: '2026-10-29',
             createdAt: 1,
             notes: const Value('unsynced local edit')));
-    expect(await fixture.service.syncNow(), startsWith('Sync needs review:'));
+    expect(SyncService.succeeded(await fixture.service.syncNow()), isTrue);
     expect(await fixture.notes, 'unsynced local edit');
-    expect(cloud.rows('workout_days')['day']!['notes'], 'cloud original');
-    final conflicts = await fixture.service.conflicts();
-    expect(conflicts, hasLength(1));
-    await fixture.service.resolve(conflicts.single, keepDevice: true);
+    expect(cloud.rows('workout_days')['day']!['notes'], 'unsynced local edit');
+    expect(await fixture.service.conflicts(), isEmpty);
     expect(SyncService.succeeded(await fixture.service.syncNow()), true);
     expect(cloud.rows('workout_days')['day']!['notes'], 'unsynced local edit');
+  });
+
+  test('first sync keeps device edits across nine differing records', () async {
+    for (var index = 0; index < 9; index++) {
+      final id = 'day-$index';
+      final date = '2026-10-${(10 + index).toString().padLeft(2, '0')}';
+      cloud.rows('workout_days')[id] = {
+        ...day('cloud-$index'),
+        'id': id,
+        'workout_date': date,
+      };
+      await fixture.db.into(fixture.db.workoutDays).insert(
+            WorkoutDaysCompanion.insert(
+              id: id,
+              workoutDate: date,
+              createdAt: index + 10,
+              notes: Value('device-$index'),
+            ),
+          );
+    }
+
+    expect(SyncService.succeeded(await fixture.service.syncNow()), isTrue);
+    expect(await fixture.service.conflicts(), isEmpty);
+    expect(
+      cloud.rows('workout_days').values.map((row) => row['notes']).toSet(),
+      containsAll(List.generate(9, (index) => 'device-$index')),
+    );
   });
 
   test('a cloud edit replaces an unchanged local copy', () async {
@@ -204,23 +340,54 @@ void main() {
     expect(await fixture.notes, 'edited on another device');
   });
 
-  test('both devices changing a record produces a durable resolvable conflict',
+  test('initial sync aligns workout day IDs by date before applying cloud rows',
       () async {
+    cloud.rows('workout_days')['cloud-day'] = {
+      ...day(),
+      'id': 'cloud-day',
+      'notes': null,
+    };
+    await fixture.db.into(fixture.db.workoutDays).insert(
+          WorkoutDaysCompanion.insert(
+            id: 'device-day',
+            workoutDate: '2026-10-29',
+            createdAt: 2,
+          ),
+        );
+
+    expect(SyncService.succeeded(await fixture.service.syncNow()), isTrue);
+    final days = await fixture.db.select(fixture.db.workoutDays).get();
+    expect(days, hasLength(1));
+    expect(days.single.id, 'cloud-day');
+  });
+
+  test('later syncs use the change cursor instead of full table downloads',
+      () async {
+    cloud.rows('workout_days')['day'] = day();
+    expect(SyncService.succeeded(await fixture.service.syncNow()), true);
+    cloud.readCounts.clear();
+
+    expect(SyncService.succeeded(await fixture.service.syncNow()), true);
+
+    expect(cloud.readCounts['workout_days'] ?? 0, 0);
+    expect(cloud.readCounts['sync_tombstones'] ?? 0, 0);
+  });
+
+  test('both devices changing a record keeps the local change', () async {
     cloud.rows('workout_days')['day'] = day();
     await fixture.service.syncNow();
     await fixture.edit('local change');
     cloud.rows('workout_days')['day'] = day('cloud change');
-    expect(await fixture.service.syncNow(), startsWith('Sync needs review:'));
+    expect(SyncService.succeeded(await fixture.service.syncNow()), isTrue);
     expect(await fixture.notes, 'local change');
-    // A new service instance sees the persisted conflict after a restart.
+    expect(cloud.rows('workout_days')['day']!['notes'], 'local change');
     final service = SyncService(
         db: fixture.db,
         client: fixture.client,
         workspaceService: _Workspace(fixture.db, fixture.client));
-    final conflict = (await service.conflicts()).single;
-    await service.resolve(conflict, keepDevice: false);
+    expect(await service.conflicts(), isEmpty);
     expect(SyncService.succeeded(await service.syncNow()), true);
-    expect(await fixture.notes, 'cloud change');
+    expect(await fixture.notes, 'local change');
   });
 
   test('compare-and-set rejects a cloud edit arriving during upload', () async {
@@ -231,13 +398,14 @@ void main() {
       cloud.rows(table)[key] = day('concurrent remote change');
       cloud.beforeWrite = null;
     };
-    expect(await fixture.service.syncNow(), startsWith('Sync needs review:'));
+    expect(SyncService.succeeded(await fixture.service.syncNow()), isTrue);
     expect(await fixture.notes, 'local change');
-    expect(cloud.rows('workout_days')['day']!['notes'],
-        'concurrent remote change');
+    expect(cloud.rows('workout_days')['day']!['notes'], 'local change');
+    expect(await fixture.service.conflicts(), isEmpty);
   });
 
-  test('deletions sync without resurrecting stale offline copies', () async {
+  test('deletions sync and a stale device copy is restored by device wins',
+      () async {
     cloud.rows('workout_days')['day'] = day();
     await fixture.service.syncNow();
     await fixture.db.delete(fixture.db.workoutDays).go();
@@ -252,8 +420,9 @@ void main() {
             workoutDate: '2026-10-29',
             createdAt: 1,
             notes: const Value('stale offline copy')));
-    expect(await offline.service.syncNow(), startsWith('Sync needs review:'));
-    expect(cloud.rows('workout_days'), isEmpty);
+    expect(SyncService.succeeded(await offline.service.syncNow()), isTrue);
+    expect(cloud.rows('workout_days')['day']!['notes'], 'stale offline copy');
+    expect(await offline.service.conflicts(), isEmpty);
   });
 
   test('ten-week plan and performance restore on a fresh device', () async {
@@ -299,8 +468,7 @@ void main() {
         16);
   });
 
-  test('edits made during an upload stay pending and upload on the next sync',
-      () async {
+  test('edits made during an upload are saved before sync completes', () async {
     cloud.rows('workout_days')['day'] = day();
     await fixture.service.syncNow();
     await fixture.edit('edit before sync');
@@ -308,9 +476,8 @@ void main() {
       await fixture.edit('edit during sync');
       cloud.beforeWrite = null;
     };
-    expect(await fixture.service.syncNow(), startsWith('Sync pending:'));
+    expect(SyncService.succeeded(await fixture.service.syncNow()), isTrue);
     expect(await fixture.notes, 'edit during sync');
-    expect(SyncService.succeeded(await fixture.service.syncNow()), true);
     expect(cloud.rows('workout_days')['day']!['notes'], 'edit during sync');
   });
 
@@ -320,9 +487,8 @@ void main() {
     cloud.rows('workout_days')['day'] = day();
     await fixture.service.syncNow();
     await fixture.edit('local change');
-    cloud.rows('workout_days')['day'] = day('remote change');
-    await fixture.service.syncNow();
-    final oldConflict = (await fixture.service.conflicts()).single;
+    final oldConflict = SyncConflict(
+        'workout_days', 'day', day('local change'), day('remote change'));
     await fixture.edit('newer local change');
     await expectLater(fixture.service.resolve(oldConflict, keepDevice: false),
         throwsStateError);
@@ -370,14 +536,18 @@ void main() {
       };
       final result = await fixture.service.syncNow();
       if (substituted) {
-        expect(result, startsWith('Sync needs review:'));
-        expect((await fixture.service.conflicts()).single.table,
-            'actual_strength_sets');
+        expect(SyncService.succeeded(result), true);
+        expect(await fixture.service.conflicts(), isEmpty);
+        expect(
+            cloud.rows('actual_strength_sets')['strength']![
+                'prescribed_exercise_canonical'],
+            'push_up');
       } else {
         expect(SyncService.succeeded(result), true);
         expect(await fixture.service.conflicts(), isEmpty);
         // A fresh cache restores the same default instead of restoring null.
         await fixture.db.customStatement('delete from sync_state');
+        await fixture.db.customStatement('delete from sync_cursor');
         await fixture.db.delete(fixture.db.actualStrengthSets).go();
         expect(SyncService.succeeded(await fixture.service.syncNow()), true);
         expect(

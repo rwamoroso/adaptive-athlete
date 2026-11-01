@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -351,13 +350,14 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   }
 
   void _checkPastedResponse() {
-    _manualResponseAutoApplyDebounce?.cancel();
+    final text = _manualAiResponseController.text.trim();
     try {
       final result = ref.read(weeklyPlannerServiceProvider).checkResponse(
           request: _buildPlanRequest(mode: PlannerGenerationMode.manualAssist),
-          text: _manualAiResponseController.text.trim());
+          text: text);
       setState(() {
         _responseCheck = result;
+        _validatedManualResponseText = text;
         _plannerIssue = null;
         _validationDetails = null;
       });
@@ -405,9 +405,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   bool _legacyAiImporting = false;
   bool _legacyStandardImporting = false;
   bool _startDatePickerActive = false;
-  Timer? _manualResponseAutoApplyDebounce;
-  String _lastAppliedManualResponseText = '';
-  String _lastAutoApplyAttemptText = '';
+  String? _validatedManualResponseText;
 
   late Future<List<_PlanSchedulePreviewDay>> _schedulePreviewFuture;
   String? _loadedScopeKey;
@@ -423,13 +421,11 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     _selectedEquipment.addAll(settings.availableEquipment);
     _selectedContraindications.addAll(settings.movementContraindications);
     _manualAiResponseController.text = ref.read(aiWeeklyPlanResponseProvider);
-    _lastAppliedManualResponseText = _manualAiResponseController.text.trim();
     _schedulePreviewFuture = _loadSchedulePreview();
   }
 
   @override
   void dispose() {
-    _manualResponseAutoApplyDebounce?.cancel();
     _goalTargetController.dispose();
     _runGoalDistanceController.dispose();
     _runGoalPaceController.dispose();
@@ -972,20 +968,60 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   }
 
   Future<void> _loadPlanningProfileIfNeeded() async {
-    final scopeKey = '${_scopeWorkspaceId()}|${_scopeProfileId()}';
+    final workspaceId = _scopeWorkspaceId();
+    final athleteProfileId = _scopeProfileId();
+    final scopeKey = '$workspaceId|$athleteProfileId';
     if (_loadedScopeKey == scopeKey) {
       return;
     }
     _loadedScopeKey = scopeKey;
 
     final service = ref.read(weeklyPlannerServiceProvider);
-    final profile = await service.getPlanningProfile(
-      workspaceId: _scopeWorkspaceId(),
-      athleteProfileId: _scopeProfileId(),
+    var profile = await service.getPlanningProfile(
+      workspaceId: workspaceId,
+      athleteProfileId: athleteProfileId,
     );
-    if (!mounted || profile == null) {
+    if (!mounted) {
       return;
     }
+
+    // Before cloud workspaces were introduced, planning profiles were saved
+    // under the local scope. The legacy database is copied into the signed-in
+    // user's database, so recover valid biometrics into the active athlete
+    // profile when that profile has none yet.
+    if (workspaceId != 'local_workspace' ||
+        athleteProfileId != 'local_profile') {
+      final hasCurrentBiometrics =
+          BiometricsCalculator.normalizeInputMap(profile?.biometrics) != null;
+      if (!hasCurrentBiometrics) {
+        final legacy = await service.getPlanningProfile(
+          workspaceId: 'local_workspace',
+          athleteProfileId: 'local_profile',
+        );
+        final legacyBiometrics =
+            BiometricsCalculator.normalizeInputMap(legacy?.biometrics);
+        if (legacy != null && legacyBiometrics != null) {
+          profile = profile == null
+              ? AthletePlanningProfile(
+                  workspaceId: workspaceId,
+                  athleteProfileId: athleteProfileId,
+                  primaryGoal: legacy.primaryGoal,
+                  goalTarget: legacy.goalTarget,
+                  experienceLevel: legacy.experienceLevel,
+                  preferredSplit: legacy.preferredSplit,
+                  daysPerWeek: legacy.daysPerWeek,
+                  availableEquipment: legacy.availableEquipment,
+                  contraindications: legacy.contraindications,
+                  scheduleConstraints: legacy.scheduleConstraints,
+                  biometrics: legacyBiometrics,
+                )
+              : profile.copyWith(biometrics: legacyBiometrics);
+          await service.upsertPlanningProfile(profile);
+          if (!mounted) return;
+        }
+      }
+    }
+    if (profile == null) return;
 
     if (_startDatePickerActive) {
       _pendingProfileDuringDatePicker = profile;
@@ -1203,46 +1239,8 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       _manualAiResponseController.text = text;
     }
     ref.read(aiWeeklyPlanResponseProvider.notifier).state = text;
-    _scheduleAutoApplyFromPastedResponse(text);
-  }
-
-  bool _looksLikeWeeklyPlanResponse(String text) {
-    final normalized = text.toUpperCase();
-    return normalized.contains('WEEK_PLAN_V1');
-  }
-
-  void _scheduleAutoApplyFromPastedResponse(String rawText) {
-    final trimmed = rawText.trim();
-    if (trimmed.isEmpty || !_looksLikeWeeklyPlanResponse(trimmed)) {
-      _manualResponseAutoApplyDebounce?.cancel();
-      return;
-    }
-    if (_manualApplying || _oneTapGenerating) {
-      return;
-    }
-    if (trimmed == _lastAppliedManualResponseText ||
-        trimmed == _lastAutoApplyAttemptText) {
-      return;
-    }
-    _manualResponseAutoApplyDebounce?.cancel();
-    _manualResponseAutoApplyDebounce = Timer(
-      const Duration(milliseconds: 700),
-      () async {
-        if (!mounted || _manualApplying || _oneTapGenerating) {
-          return;
-        }
-        final latestTrimmed = _manualAiResponseController.text.trim();
-        if (latestTrimmed != trimmed ||
-            !_looksLikeWeeklyPlanResponse(latestTrimmed)) {
-          return;
-        }
-        _lastAutoApplyAttemptText = latestTrimmed;
-        await _applyManualAiResponseInternal(
-          _manualAiResponseController.text,
-          autoTriggeredByPaste: true,
-        );
-      },
-    );
+    _validatedManualResponseText = null;
+    _responseCheck = null;
   }
 
   Future<bool> _syncAfterPlanApply({required String reason}) async {
@@ -1279,23 +1277,29 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     return false;
   }
 
-  Future<bool> _applyManualAiResponseInternal(
-    String rawText, {
-    bool autoTriggeredByPaste = false,
-  }) async {
+  Future<bool> _applyManualAiResponseInternal(String rawText) async {
     final text = rawText.trim();
     if (text.isEmpty) {
       _showMessage('Paste AI weekly plan text before applying.');
       return false;
     }
-    if (autoTriggeredByPaste && text == _lastAppliedManualResponseText) {
-      return true;
+    if (_validatedManualResponseText != text) {
+      _showMessage('Check the response before applying it.');
+      return false;
     }
 
     if (_manualAiResponseController.text != rawText) {
       _manualAiResponseController.text = rawText;
     }
     ref.read(aiWeeklyPlanResponseProvider.notifier).state = rawText;
+
+    final confirmed = await _confirmPlanCycleOverrideIfNeeded(
+      splitStartDate: _startDate,
+      actionLabel: 'Apply plan',
+    );
+    if (!confirmed) {
+      return false;
+    }
 
     setState(() {
       _manualApplying = true;
@@ -1320,10 +1324,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
         _status = 'Manual AI plan applied: ${result.pretty()}';
       });
       _refreshSchedulePreview();
-      _lastAppliedManualResponseText = text;
-      final synced = await _syncAfterPlanApply(
-        reason: autoTriggeredByPaste ? 'manual_paste' : 'manual_apply',
-      );
+      final synced = await _syncAfterPlanApply(reason: 'manual_apply');
       _showMessage(synced
           ? 'Plan saved on this device and synced to cloud.'
           : 'Plan saved on this device. Cloud sync is pending; see Settings.');
@@ -1684,7 +1685,14 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     setState(() {
       _biometrics = result;
     });
-    _showMessage('Biometrics saved in plan intake.');
+    try {
+      await ref
+          .read(weeklyPlannerServiceProvider)
+          .upsertPlanningProfile(_buildPlanningProfileFromForm());
+      if (mounted) _showMessage('Biometrics saved for the active athlete.');
+    } catch (error) {
+      if (mounted) _showMessage('Biometrics could not be saved: $error');
+    }
   }
 
   void _warnIfBiometricsMissing() {
@@ -2384,6 +2392,13 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
+                if (_generationMode == PlannerGenerationMode.oneTapAi) ...[
+                  Text(
+                    'Privacy: One-tap planning sends the profile, training context, and instructions shown here to OpenAI through the Adaptive Athlete server. The request is authenticated and provider response storage is disabled.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -2414,8 +2429,8 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                     ref.read(aiWeeklyPlanResponseProvider.notifier).state =
                         value;
                     _responseCheck = null;
+                    _validatedManualResponseText = null;
                     _plannerIssue = null;
-                    _scheduleAutoApplyFromPastedResponse(value);
                     setState(() {});
                   },
                   decoration: const InputDecoration(
@@ -2461,7 +2476,11 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                         ? 'Applying...'
                         : 'Apply Pasted Weekly Plan Text',
                     variant: PillButtonVariant.tonal,
-                    onPressed: _manualApplying ? null : _applyManualAiResponse,
+                    onPressed: _manualApplying ||
+                            _validatedManualResponseText !=
+                                _manualAiResponseController.text.trim()
+                        ? null
+                        : _applyManualAiResponse,
                   ),
                 ),
                 if (_generatedPrompt != null) ...[

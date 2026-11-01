@@ -55,6 +55,19 @@ class BiometricsCalculator {
     'muscular': -3.0,
   };
 
+  static const Map<String, String> _buildTypeDisplayLabels = <String, String>{
+    'skinny': 'Naturally light build',
+    'lean': 'Lean build',
+    'athletic': 'Athletic build',
+    'average': 'Balanced build',
+    'fluffy': 'Higher body-fat estimate',
+    'stocky': 'Broad build',
+    'muscular': 'Muscular build',
+  };
+
+  static String buildTypeDisplayLabel(String value) =>
+      _buildTypeDisplayLabels[value] ?? titleCaseLabel(value);
+
   static BiometricsInput? parseInput(Map<String, dynamic>? raw) {
     if (raw == null || raw.isEmpty) {
       return null;

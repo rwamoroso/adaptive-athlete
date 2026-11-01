@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/utils/date_utils.dart';
 import '../../db/app_db.dart';
@@ -670,6 +671,7 @@ $extraBlock
         : await buildPromptText(context);
 
     final requestPayload = {
+      'request_id': const Uuid().v4(),
       'week_start': request.weekStart,
       'week_end': request.weekEnd,
       'split_type': request.splitType.code,

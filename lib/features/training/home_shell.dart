@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/app_providers.dart';
-import '../ai/ai_weekly_explanation_screen.dart';
 import '../ui/clinical_theme.dart';
 import '../plan/plan_screen.dart';
 import '../settings/settings_screen.dart';
@@ -24,10 +23,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   Widget build(BuildContext context) {
     final syncStatus = ref.watch(syncStatusProvider);
     final pages = [
-      DailyScreen(resetToken: _dailyResetToken),
-      const HistoryScreen(),
+      DailyScreen(
+        resetToken: _dailyResetToken,
+        onOpenPlan: () => setState(() => _index = 1),
+      ),
       const PlanScreen(),
-      const AiWeeklyExplanationScreen(),
+      const HistoryScreen(),
       const SettingsScreen(),
     ];
     return Theme(
@@ -66,7 +67,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   child: Align(
                     alignment: Alignment.topRight,
                     child: GestureDetector(
-                      onTap: () => setState(() => _index = 4),
+                      onTap: () => setState(() => _index = 3),
                       child: Semantics(
                           button: true,
                           label: 'Open cloud sync settings',
@@ -92,13 +93,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               }),
               destinations: const [
                 NavigationDestination(
-                    icon: Icon(Icons.today_outlined), label: 'Daily'),
-                NavigationDestination(
-                    icon: Icon(Icons.history), label: 'History'),
+                    icon: Icon(Icons.today_outlined), label: 'Today'),
                 NavigationDestination(
                     icon: Icon(Icons.event_note_outlined), label: 'Plan'),
                 NavigationDestination(
-                    icon: Icon(Icons.auto_awesome_outlined), label: 'AI'),
+                    icon: Icon(Icons.insights_outlined), label: 'Progress'),
                 NavigationDestination(
                     icon: Icon(Icons.settings_outlined), label: 'Settings'),
               ],

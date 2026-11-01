@@ -505,6 +505,7 @@ class WorkoutDayDetail {
     required this.planDayId,
     required this.planDayNumber,
     required this.planSessionType,
+    this.planShiftReason,
     required this.isPplCompatibleCycle,
     required this.prescribedRun,
     required this.sleepNights,
@@ -521,6 +522,7 @@ class WorkoutDayDetail {
   final String? planDayId;
   final int? planDayNumber;
   final String? planSessionType;
+  final String? planShiftReason;
   final bool isPplCompatibleCycle;
   final PrescribedRunPlan? prescribedRun;
   final List<SleepNight> sleepNights;
@@ -2041,6 +2043,102 @@ class AppDb extends _$AppDb {
     return _skipSessionTypes.where(available.contains).toList();
   }
 
+  Future<void> shiftPlanForwardOneDay({required String dateYmd}) async {
+    await transaction(() async {
+      final selected = await _getPreferredPlanDayByEstimatedDate(dateYmd);
+      if (selected == null) {
+        throw StateError('There is no planned workout on $dateYmd to shift.');
+      }
+      final selectedType =
+          _normalizeSessionType(selected.sessionType ?? selected.sheetName);
+      if (selectedType == 'rest') {
+        throw StateError('$dateYmd is already a no-workout day.');
+      }
+
+      final futureDays = await (select(planDays)
+            ..where((day) => day.estimatedDate.isBiggerOrEqualValue(dateYmd))
+            ..orderBy([
+              (day) => OrderingTerm.asc(day.estimatedDate),
+              (day) => OrderingTerm.asc(day.createdAt),
+              (day) => OrderingTerm.asc(day.dayNumber),
+            ]))
+          .get();
+      if (!futureDays.any((day) => day.id == selected.id)) {
+        throw StateError('Could not find the selected workout in the plan.');
+      }
+
+      for (final day in futureDays.reversed) {
+        final currentDate = day.estimatedDate;
+        if (currentDate == null) {
+          continue;
+        }
+        await (update(planDays)..where((row) => row.id.equals(day.id))).write(
+          PlanDaysCompanion(
+            estimatedDate: Value(
+              toYmd(parseYmd(currentDate).add(const Duration(days: 1))),
+            ),
+          ),
+        );
+      }
+
+      final cycleDays = await (select(planDays)
+            ..where((day) => day.planCycleId.equals(selected.planCycleId)))
+          .get();
+      final nextDayNumber = cycleDays.fold<int>(0, (maxValue, day) {
+            return day.dayNumber > maxValue ? day.dayNumber : maxValue;
+          }) +
+          1;
+      await into(planDays).insert(
+        PlanDaysCompanion.insert(
+          id: _uuid.v4(),
+          planCycleId: selected.planCycleId,
+          dayNumber: nextDayNumber,
+          sheetName: 'No Workout',
+          estimatedDate: Value(dateYmd),
+          sessionType: const Value('rest'),
+          shiftReason: const Value('busy_schedule'),
+          createdAt: unixMsNow(),
+        ),
+      );
+    });
+  }
+
+  Future<void> undoPlanForwardShift({required String dateYmd}) async {
+    await transaction(() async {
+      final marker = await (select(planDays)
+            ..where((day) => day.estimatedDate.equals(dateYmd))
+            ..where((day) => day.shiftReason.equals('busy_schedule'))
+            ..orderBy([(day) => OrderingTerm.desc(day.createdAt)]))
+          .getSingleOrNull();
+      if (marker == null) {
+        throw StateError('No shifted no-workout day was found on $dateYmd.');
+      }
+
+      await (delete(planDays)..where((day) => day.id.equals(marker.id))).go();
+      final futureDays = await (select(planDays)
+            ..where((day) => day.estimatedDate.isBiggerThanValue(dateYmd))
+            ..orderBy([
+              (day) => OrderingTerm.asc(day.estimatedDate),
+              (day) => OrderingTerm.asc(day.createdAt),
+              (day) => OrderingTerm.asc(day.dayNumber),
+            ]))
+          .get();
+      for (final day in futureDays) {
+        final currentDate = day.estimatedDate;
+        if (currentDate == null) {
+          continue;
+        }
+        await (update(planDays)..where((row) => row.id.equals(day.id))).write(
+          PlanDaysCompanion(
+            estimatedDate: Value(
+              toYmd(parseYmd(currentDate).subtract(const Duration(days: 1))),
+            ),
+          ),
+        );
+      }
+    });
+  }
+
   Future<void> markRestDayAndPushSplit({
     required String dateYmd,
     String? skipSessionType,
@@ -2779,6 +2877,17 @@ class AppDb extends _$AppDb {
     );
   }
 
+  Future<bool> deleteActualStrengthSetById(String id) async {
+    final normalizedId = id.trim();
+    if (normalizedId.isEmpty) {
+      return false;
+    }
+    final deleted = await (delete(actualStrengthSets)
+          ..where((row) => row.id.equals(normalizedId)))
+        .go();
+    return deleted > 0;
+  }
+
   Future<void> upsertExerciseSubstitutionForDate({
     required String dateYmd,
     required String prescribedExerciseCanonical,
@@ -3032,6 +3141,30 @@ class AppDb extends _$AppDb {
       athleteProfileId: athleteProfileId,
     );
 
+    // Keep the HealthKit measurement metadata when the profile form saves its
+    // own validated biometrics map, which intentionally contains only fields
+    // the athlete edits there.
+    var mergedBiometricsJson = biometricsJson;
+    if (existing != null) {
+      try {
+        final incoming =
+            Map<String, dynamic>.from(jsonDecode(biometricsJson) as Map);
+        final previous = Map<String, dynamic>.from(
+            jsonDecode(existing.biometricsJson) as Map);
+        for (final key in const [
+          'healthkit_weight_lb',
+          'healthkit_weight_at'
+        ]) {
+          if (!incoming.containsKey(key) && previous.containsKey(key)) {
+            incoming[key] = previous[key];
+          }
+        }
+        mergedBiometricsJson = jsonEncode(incoming);
+      } catch (_) {
+        // Preserve existing behavior for malformed legacy JSON.
+      }
+    }
+
     final companion = AthletePlanningProfilesCompanion(
       primaryGoal: Value(primaryGoal),
       goalTargetJson: Value(goalTargetJson),
@@ -3041,7 +3174,7 @@ class AppDb extends _$AppDb {
       availableEquipmentJson: Value(availableEquipmentJson),
       contraindicationsJson: Value(contraindicationsJson),
       scheduleConstraintsJson: Value(scheduleConstraintsJson),
-      biometricsJson: Value(biometricsJson),
+      biometricsJson: Value(mergedBiometricsJson),
       updatedAt: Value(now),
     );
 
@@ -3059,7 +3192,7 @@ class AppDb extends _$AppDb {
           availableEquipmentJson: availableEquipmentJson,
           contraindicationsJson: contraindicationsJson,
           scheduleConstraintsJson: scheduleConstraintsJson,
-          biometricsJson: Value(biometricsJson),
+          biometricsJson: Value(mergedBiometricsJson),
           createdAt: now,
           updatedAt: now,
         ),
@@ -3070,6 +3203,45 @@ class AppDb extends _$AppDb {
     await (update(athletePlanningProfiles)
           ..where((t) => t.id.equals(existing.id)))
         .write(companion);
+  }
+
+  Future<bool> saveAppleHealthBodyWeight({
+    required String workspaceId,
+    required String athleteProfileId,
+    required double kilograms,
+    required DateTime measuredAt,
+  }) async {
+    if (!kilograms.isFinite || kilograms < 20 || kilograms > 400) {
+      return false;
+    }
+    final profile = await getAthletePlanningProfile(
+      workspaceId: workspaceId,
+      athleteProfileId: athleteProfileId,
+    );
+    if (profile == null) return false;
+    try {
+      final biometrics = Map<String, dynamic>.from(
+        jsonDecode(profile.biometricsJson) as Map,
+      );
+      final weightLb =
+          double.parse((kilograms * 2.2046226218).toStringAsFixed(1));
+      final measuredAtIso = measuredAt.toUtc().toIso8601String();
+      if (biometrics['healthkit_weight_lb'] == weightLb &&
+          biometrics['healthkit_weight_at'] == measuredAtIso) {
+        return false;
+      }
+      biometrics['healthkit_weight_lb'] = weightLb;
+      biometrics['healthkit_weight_at'] = measuredAtIso;
+      await (update(athletePlanningProfiles)
+            ..where((t) => t.id.equals(profile.id)))
+          .write(AthletePlanningProfilesCompanion(
+        biometricsJson: Value(jsonEncode(biometrics)),
+        updatedAt: Value(unixMsNow()),
+      ));
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> insertWeeklyPlanBuildRequest({
@@ -3611,6 +3783,153 @@ class AppDb extends _$AppDb {
     await (update(runSessions)..where((r) => r.id.equals(existing.id)))
         .write(companion);
 
+    return RunUpsertOutcome(
+      runSessionId: existing.id,
+      inserted: false,
+      updated: true,
+      overriddenManual: overriddenManual,
+      preservedGarmin: false,
+    );
+  }
+
+  Future<RunUpsertOutcome> upsertAppleHealthWorkout({
+    required String healthKitUuid,
+    required DateTime start,
+    required DateTime end,
+    required String activityType,
+    required String title,
+    required double? distanceM,
+    required double? avgHr,
+    required double? maxHr,
+    required int? calories,
+    required Map<String, dynamic> rawMetrics,
+  }) async {
+    final dateString = toYmd(start);
+    final workoutDayId = await createOrGetWorkoutDayByDate(dateString);
+    final mappedPlanDayId = await _resolvePlanDayIdForDate(dateString);
+    final startMs = start.millisecondsSinceEpoch;
+    final endMs = end.millisecondsSinceEpoch;
+    final durationS = end.isBefore(start) ? 0 : end.difference(start).inSeconds;
+    final runKey = GarminCsvImportService.runKeyFromDateTime(start);
+    final stableId = 'apple_health_$healthKitUuid';
+
+    final byId = await (select(runSessions)
+          ..where((r) => r.id.equals(stableId))
+          ..limit(1))
+        .getSingleOrNull();
+    final byStart = byId == null
+        ? await (select(runSessions)
+              ..where((r) => r.runKey.equals(runKey))
+              ..orderBy([
+                (r) => OrderingTerm(
+                      expression: r.sourcePriority,
+                      mode: OrderingMode.desc,
+                    ),
+              ])
+              ..limit(1))
+            .getSingleOrNull()
+        : null;
+    final existing = byId ?? byStart;
+
+    if (existing != null &&
+        existing.id != stableId &&
+        existing.sourcePriority > 90) {
+      return RunUpsertOutcome(
+        runSessionId: existing.id,
+        inserted: false,
+        updated: false,
+        overriddenManual: false,
+        preservedGarmin: true,
+      );
+    }
+
+    final companion = RunSessionsCompanion(
+      runKey: Value(runKey),
+      workoutDayId: Value(workoutDayId),
+      planDayId: Value(mappedPlanDayId),
+      startTime: Value(startMs),
+      endTime: Value(endMs),
+      durationS: Value(durationS),
+      distanceM: Value(distanceM),
+      avgHr: Value(avgHr),
+      maxHr: Value(maxHr),
+      treadmill: Value(activityType.toLowerCase().contains('treadmill')),
+      title: Value(title),
+      activityType: Value(activityType),
+      calories: Value(calories),
+      movingTimeS: Value(durationS),
+      elapsedTimeS: Value(durationS),
+      sourcePriority: const Value(90),
+      importFileName: const Value(null),
+      rawMetricsJson: Value(jsonEncode(rawMetrics)),
+      source: const Value('apple_health'),
+    );
+    final metricsJson = jsonEncode(rawMetrics);
+
+    if (existing == null) {
+      await into(runSessions).insert(companion.copyWith(id: Value(stableId)));
+      return RunUpsertOutcome(
+        runSessionId: stableId,
+        inserted: true,
+        updated: false,
+        overriddenManual: false,
+        preservedGarmin: false,
+      );
+    }
+
+    final overriddenManual = existing.sourcePriority < 90;
+    final treadmill = activityType.toLowerCase().contains('treadmill');
+    final unchanged = existing.runKey == runKey &&
+        existing.workoutDayId == workoutDayId &&
+        existing.planDayId == mappedPlanDayId &&
+        existing.startTime == startMs &&
+        existing.endTime == endMs &&
+        existing.durationS == durationS &&
+        existing.distanceM == distanceM &&
+        existing.avgHr == avgHr &&
+        existing.maxHr == maxHr &&
+        existing.treadmill == treadmill &&
+        existing.title == title &&
+        existing.activityType == activityType &&
+        existing.calories == calories &&
+        existing.movingTimeS == durationS &&
+        existing.elapsedTimeS == durationS &&
+        existing.sourcePriority == 90 &&
+        existing.importFileName == null &&
+        existing.rawMetricsJson == metricsJson &&
+        existing.source == 'apple_health';
+    if (unchanged) {
+      return RunUpsertOutcome(
+        runSessionId: existing.id,
+        inserted: false,
+        updated: false,
+        overriddenManual: false,
+        preservedGarmin: false,
+      );
+    }
+
+    if (overriddenManual) {
+      await insertRunOverrideAudit(
+        runKey: existing.runKey,
+        workoutDayId: workoutDayId,
+        oldSource: existing.source,
+        newSource: 'apple_health',
+        oldSnapshot: _snapshotFromRun(existing),
+        newSnapshot: {
+          'healthkit_uuid': healthKitUuid,
+          'run_key': runKey,
+          'start_time': startMs,
+          'duration_s': durationS,
+          'distance_m': distanceM,
+          'avg_hr': avgHr,
+          'max_hr': maxHr,
+          'source': 'apple_health',
+        },
+        reason: 'apple_health_overrides_manual',
+      );
+    }
+    await (update(runSessions)..where((r) => r.id.equals(existing.id)))
+        .write(companion.copyWith(rawMetricsJson: Value(metricsJson)));
     return RunUpsertOutcome(
       runSessionId: existing.id,
       inserted: false,
@@ -6579,6 +6898,7 @@ class AppDb extends _$AppDb {
         planDayId: matchedPlanDayId,
         planDayNumber: matchedPlanDay?.dayNumber,
         planSessionType: resolvedPlanSessionType,
+        planShiftReason: matchedPlanDay?.shiftReason,
         isPplCompatibleCycle: isPplCompatibleCycle,
         prescribedRun: prescribedRunView,
         sleepNights: sleeps,
@@ -6657,6 +6977,7 @@ class AppDb extends _$AppDb {
       planDayId: matchedPlanDayId,
       planDayNumber: matchedPlanDay?.dayNumber,
       planSessionType: resolvedPlanSessionType,
+      planShiftReason: matchedPlanDay?.shiftReason,
       isPplCompatibleCycle: isPplCompatibleCycle,
       prescribedRun: prescribedRunView,
       sleepNights: sleeps,
@@ -8149,6 +8470,9 @@ class AppDb extends _$AppDb {
       await delete(planLongRangeWeeks).go();
       if (await _doesTableExist('sync_state')) {
         await customStatement('DELETE FROM sync_state');
+      }
+      if (await _doesTableExist('sync_cursor')) {
+        await customStatement('DELETE FROM sync_cursor');
       }
     });
   }

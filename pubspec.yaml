@@ -30,6 +30,7 @@ dependencies:
   spreadsheet_decoder: ^2.3.0
   wakelock_plus: 1.4.0
   package_info_plus: ^9.0.1
+  health: 13.2.1
 
 dev_dependencies:
   flutter_test:

@@ -13,7 +13,6 @@ import '../../core/rules/treadmill_artifact_detector.dart';
 import '../../core/utils/app_providers.dart';
 import '../../core/utils/date_utils.dart';
 import '../../db/app_db.dart';
-import '../ai/ai_analyze_service.dart';
 import '../ui/clinical_theme.dart';
 import '../ui/clinical_widgets.dart';
 import 'run_inputs_screen.dart';
@@ -278,9 +277,11 @@ class DailyScreen extends ConsumerStatefulWidget {
   const DailyScreen({
     super.key,
     this.resetToken = 0,
+    this.onOpenPlan,
   });
 
   final int resetToken;
+  final VoidCallback? onOpenPlan;
 
   @override
   ConsumerState<DailyScreen> createState() => _DailyScreenState();
@@ -438,64 +439,6 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     }
   }
 
-  Future<void> _runMockAi(WorkoutDayDetail detail, int treadmillExcluded,
-      RecoveryGateResult gate) async {
-    final aiService = ref.read(aiAnalyzeServiceProvider);
-    final db = ref.read(appDbProvider);
-
-    final runPlan = detail.prescribedRun;
-    final runScheduled = ((runPlan?.runType ?? '').trim().isNotEmpty) ||
-        ((runPlan?.durationText ?? '').trim().isNotEmpty) ||
-        ((runPlan?.targetPace ?? '').trim().isNotEmpty);
-    final strengthScheduled =
-        detail.groups.any((group) => group.prescribed.isNotEmpty);
-
-    final actualCount =
-        detail.groups.fold<int>(0, (sum, group) => sum + group.actual.length);
-    final sleepMin = detail.sleepNights.isEmpty
-        ? null
-        : detail.sleepNights.first.totalSleepMin;
-
-    final request = AiAnalyzeRequest(
-      date: _selectedDate,
-      runScheduled: runScheduled,
-      runsCount: detail.runSessions.length,
-      sleepMinutes: sleepMin,
-      strengthScheduled: strengthScheduled,
-      strengthSetsCount: actualCount,
-      treadmillExcludedSegments: treadmillExcluded,
-      progressionAllowed: gate.progressionAllowed,
-      progressionReasoning: gate.reasoning,
-      dataUsedIds: [
-        if (detail.workoutDay != null) detail.workoutDay!.id,
-        ...detail.runSessions.map((r) => r.session.id),
-        ...detail.sleepNights.map((s) => s.id),
-      ],
-      rulesTriggered: [
-        if (!gate.progressionAllowed) 'RECOVERY_GATE_BLOCK',
-        if (treadmillExcluded > 0) 'TREADMILL_ARTIFACT_EXCLUDED',
-      ],
-    );
-
-    final response = await aiService.analyze(request);
-
-    await db.insertAiAudit(
-      requestedAt: unixMsNow(),
-      dateWindowStart: _selectedDate,
-      dateWindowEnd: _selectedDate,
-      inputSnapshot: request.toSnapshotJson(),
-      response: response.toJson(),
-      schemaValid: true,
-      notes: 'mocked AI service',
-    );
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mock AI analysis saved to audit.')));
-      setState(() => _refresh++);
-    }
-  }
-
   Future<void> _openSleepEditor(SleepNight? existing) async {
     await showDialog<void>(
       context: context,
@@ -510,22 +453,20 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
   }
 
   Future<String?> _pickSkipTypeDialog(List<String> options) async {
-    if (options.isEmpty) {
-      return null;
-    }
+    if (options.isEmpty) return null;
     return showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('No Future Rest Day'),
         content: const Text('Choose a day type to skip to push the split.'),
         actions: [
           for (final type in options)
             TextButton(
-              onPressed: () => Navigator.of(context).pop(type),
+              onPressed: () => Navigator.of(dialogContext).pop(type),
               child: Text('Skip ${_sessionTypeLabel(type)}'),
             ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
           ),
         ],
@@ -533,12 +474,10 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     );
   }
 
-  Future<String?> _pickShiftReasonDialog() async {
-    return showDialog<String>(
-      context: context,
-      builder: (context) => const RecoveryReasonDialog(),
-    );
-  }
+  Future<String?> _pickShiftReasonDialog() => showDialog<String>(
+        context: context,
+        builder: (_) => const RecoveryReasonDialog(),
+      );
 
   String _shiftReasonLabel(String reason) {
     switch (reason) {
@@ -553,54 +492,36 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     }
   }
 
-  Future<void> _markRestDayAndPush(WorkoutDayDetail detail,
-      {String shiftReason = 'manual_rest'}) async {
+  Future<void> _markRestDayAndPush({required String shiftReason}) async {
     final db = ref.read(appDbProvider);
-    if ((detail.planSessionType ?? '').toLowerCase().contains('rest')) {
-      _showSnack('Selected day is already marked as rest.');
-      return;
-    }
     final reasonLabel = _shiftReasonLabel(shiftReason);
-    final insertedDayLabel = '$reasonLabel day';
-
     try {
       await db.markRestDayAndPushSplit(
         dateYmd: _selectedDate,
         shiftReason: shiftReason,
       );
-      if (!mounted) {
-        return;
-      }
-      _showSnack(
-          'Split updated. $insertedDayLabel inserted and future days shifted.');
+      if (!mounted) return;
+      _showSnack('$reasonLabel day added and the split updated.');
       setState(() => _refresh++);
-    } on StateError catch (e) {
-      final message = e.message.toString();
+    } on StateError catch (error) {
+      final message = error.message.toString();
       if (!shouldShowSkipTypePickerForPushError(message)) {
         _showSnack(message);
         return;
       }
       final options = await db.getAvailableSkipDayTypesForDate(_selectedDate);
-      if (options.isEmpty) {
-        _showSnack(
-            'No future Push/Pull/Legs day is available to skip in this split.');
-        return;
-      }
       final selected = await _pickSkipTypeDialog(options);
-      if (selected == null) {
-        return;
-      }
+      if (selected == null) return;
       try {
         await db.markRestDayAndPushSplit(
           dateYmd: _selectedDate,
           skipSessionType: selected,
           shiftReason: shiftReason,
         );
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         _showSnack(
-            'Split updated. $insertedDayLabel inserted and ${_sessionTypeLabel(selected)} skipped.');
+          '$reasonLabel day added. ${_sessionTypeLabel(selected)} was skipped.',
+        );
         setState(() => _refresh++);
       } on StateError catch (inner) {
         _showSnack(inner.message.toString());
@@ -609,11 +530,50 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
   }
 
   Future<void> _markRestDayAndPushFromChoice(WorkoutDayDetail detail) async {
-    final shiftReason = await _pickShiftReasonDialog();
-    if (shiftReason == null) {
+    final reason = await _pickShiftReasonDialog();
+    if (reason == null) return;
+    await _markRestDayAndPush(shiftReason: reason);
+  }
+
+  Future<void> _shiftPlanFromChoice(WorkoutDayDetail detail) async {
+    if ((detail.planSessionType ?? '').toLowerCase().contains('rest')) {
+      _showSnack('Selected day is already a no-workout day.');
       return;
     }
-    await _markRestDayAndPush(detail, shiftReason: shiftReason);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('No workout on ${_formatHeaderDate(_selectedDate)}?'),
+        content: const Text(
+          'This moves this workout and every later workout one day forward. No planned workout is removed. You can undo this shift from the same date.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Shift Plan'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    try {
+      await ref.read(appDbProvider).shiftPlanForwardOneDay(
+            dateYmd: _selectedDate,
+          );
+      if (!mounted) {
+        return;
+      }
+      _showSnack('No-workout day added. The plan moved forward one day.');
+      setState(() => _refresh++);
+    } on StateError catch (error) {
+      _showSnack(error.message.toString());
+    }
   }
 
   Future<void> _undoRestDayPush(WorkoutDayDetail detail) async {
@@ -623,6 +583,15 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
       return;
     }
     try {
+      if (detail.planShiftReason == 'busy_schedule') {
+        await db.undoPlanForwardShift(dateYmd: _selectedDate);
+        if (!mounted) {
+          return;
+        }
+        _showSnack('Plan shift undone. Workout dates were restored.');
+        setState(() => _refresh++);
+        return;
+      }
       await db.undoRestDayAndPullSplit(dateYmd: _selectedDate);
       if (!mounted) {
         return;
@@ -641,26 +610,6 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
     }
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  AiAnalyzeResponse? _latestAiSummary(WorkoutDayDetail detail) {
-    if (detail.aiAudits.isEmpty) {
-      return null;
-    }
-    try {
-      final decoded = jsonDecode(detail.aiAudits.first.responseJson);
-      if (decoded is Map<String, dynamic>) {
-        return AiAnalyzeResponse.fromJson(decoded);
-      }
-      if (decoded is Map) {
-        return AiAnalyzeResponse.fromJson(
-          decoded.map((key, value) => MapEntry(key.toString(), value)),
-        );
-      }
-      return null;
-    } catch (_) {
-      return null;
-    }
   }
 
   DateTime _startOfWeek(DateTime date) {
@@ -1070,7 +1019,6 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
           excluded += detectorResult.excludedCount;
         }
 
-        final aiSummary = _latestAiSummary(safeDetail);
         final runMileageSummary = loaded?.runMileageSummary ??
             const _RunMileageCardSummary(
               weeklyPoints: <_WeeklyMileagePoint>[
@@ -1154,7 +1102,6 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
           sleepMin: sleepMin,
           gate: gate,
           excluded: excluded,
-          aiSummary: aiSummary,
           runMileageSummary: runMileageSummary,
           strengthLoadSummary: strengthLoadSummary,
           sleepTrendSummary: sleepTrendSummary,
@@ -1173,17 +1120,23 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
           onOpenWorkoutDetail: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => WorkoutDayDetailScreen(date: _selectedDate),
+                builder: (_) => WorkoutDayDetailScreen(
+                  date: _selectedDate,
+                  startFocused: true,
+                ),
               ),
             );
           },
           onMarkRest: safeDetail.planDayNumber == null
               ? null
               : () => _markRestDayAndPushFromChoice(safeDetail),
+          onShiftPlan: safeDetail.planDayNumber == null
+              ? null
+              : () => _shiftPlanFromChoice(safeDetail),
           onUndoRest: safeDetail.planDayNumber == null
               ? null
               : () => _undoRestDayPush(safeDetail),
-          onRunMockAi: () => _runMockAi(safeDetail, excluded, gate),
+          onOpenPlan: widget.onOpenPlan,
           onRefresh: () async => setState(() => _refresh++),
         );
       },
@@ -1199,7 +1152,6 @@ class _DailyClinicalContent extends StatelessWidget {
     required this.sleepMin,
     required this.gate,
     required this.excluded,
-    required this.aiSummary,
     required this.runMileageSummary,
     required this.strengthLoadSummary,
     required this.sleepTrendSummary,
@@ -1213,8 +1165,9 @@ class _DailyClinicalContent extends StatelessWidget {
     required this.onRunInputs,
     required this.onOpenWorkoutDetail,
     required this.onMarkRest,
+    required this.onShiftPlan,
     required this.onUndoRest,
-    required this.onRunMockAi,
+    required this.onOpenPlan,
     required this.onRefresh,
   });
 
@@ -1224,7 +1177,6 @@ class _DailyClinicalContent extends StatelessWidget {
   final int? sleepMin;
   final RecoveryGateResult gate;
   final int excluded;
-  final AiAnalyzeResponse? aiSummary;
   final _RunMileageCardSummary runMileageSummary;
   final _StrengthLoadCardSummary strengthLoadSummary;
   final _SleepTrendCardSummary sleepTrendSummary;
@@ -1238,8 +1190,9 @@ class _DailyClinicalContent extends StatelessWidget {
   final VoidCallback onRunInputs;
   final VoidCallback onOpenWorkoutDetail;
   final VoidCallback? onMarkRest;
+  final VoidCallback? onShiftPlan;
   final VoidCallback? onUndoRest;
-  final VoidCallback onRunMockAi;
+  final VoidCallback? onOpenPlan;
   final Future<void> Function() onRefresh;
 
   String? _dailyGoalTitle() {
@@ -1268,12 +1221,12 @@ class _DailyClinicalContent extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(context),
+            const SizedBox(height: 12),
+            _buildTodayHero(context),
+            const SizedBox(height: 18),
+            const SectionHeader(text: 'This Week'),
             const SizedBox(height: 14),
-            const ClinicalBanner(
-              text: 'AI Monitored Progressive Overload Strategy',
-            ),
-            const SizedBox(height: 14),
-            const SectionHeader(text: 'Cardio Progress'),
+            const SectionHeader(text: 'Cardio'),
             const SizedBox(height: 8),
             RunsTrack(value: runProgress),
             const SizedBox(height: 6),
@@ -1291,7 +1244,7 @@ class _DailyClinicalContent extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
-            const SectionHeader(text: 'Strength Progress'),
+            const SectionHeader(text: 'Strength'),
             const SizedBox(height: 8),
             RunsTrack(
               value: strengthProgress,
@@ -1313,10 +1266,6 @@ class _DailyClinicalContent extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             _buildMetricGrid(context),
-            const SizedBox(height: 14),
-            _buildAiSummary(context),
-            const SizedBox(height: 12),
-            _buildPrimaryLargeActions(context),
             const SizedBox(height: 10),
             _buildSecondaryActionRow(context),
             const SizedBox(height: 16),
@@ -1351,7 +1300,7 @@ class _DailyClinicalContent extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: Text(
-            'AI Athlete',
+            'Today',
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1375,6 +1324,163 @@ class _DailyClinicalContent extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildTodayHero(BuildContext context) {
+    final normalizedSession =
+        (safeDetail.planSessionType ?? '').trim().toLowerCase();
+    final isRest = normalizedSession.contains('rest');
+    final hasStrength = safeDetail.groups.isNotEmpty;
+    final cardioType = _formatCardioTypeLabel(
+      safeDetail.prescribedRun?.runType,
+      includeRunSuffix: true,
+    );
+    final hasCardio = <String?>[
+      safeDetail.prescribedRun?.runType,
+      safeDetail.prescribedRun?.durationText,
+      safeDetail.prescribedRun?.targetPace,
+    ].any((value) => (value ?? '').trim().isNotEmpty);
+    final noPlan = safeDetail.planDayNumber == null &&
+        !hasStrength &&
+        !hasCardio &&
+        !isRest;
+    final focus = (safeDetail.prescribedRun?.liftFocus ?? '').trim();
+    final title = noPlan
+        ? 'No workout planned yet'
+        : isRest
+            ? (safeDetail.planShiftReason == 'busy_schedule'
+                ? 'No workout scheduled'
+                : 'Recovery day')
+            : focus.isNotEmpty
+                ? focus
+                : hasStrength
+                    ? '${sessionTypeLabel(safeDetail.planSessionType)} workout'
+                    : cardioType.isNotEmpty
+                        ? cardioType
+                        : 'Today\'s workout';
+    final readinessDetail = switch (gate.readiness) {
+      RecoveryReadiness.ready => 'Your logged recovery supports normal effort.',
+      RecoveryReadiness.caution =>
+        'Keep today controlled and adjust if effort feels unusually high.',
+      RecoveryReadiness.insufficientData =>
+        'Add sleep or sync Apple Health for a recovery check.',
+    };
+
+    final actions = <Widget>[];
+    if (noPlan) {
+      actions.add(
+        _buildActionButton(
+          text: 'Build My Plan',
+          icon: Icons.event_note_outlined,
+          variant: PillButtonVariant.filled,
+          onPressed: onOpenPlan,
+        ),
+      );
+      actions.add(
+        _buildActionButton(
+          text: 'Log Cardio',
+          icon: Icons.directions_run_outlined,
+          onPressed: onRunInputs,
+        ),
+      );
+    } else if (hasStrength && !isRest) {
+      actions.add(
+        _buildActionButton(
+          text: 'Start Workout',
+          icon: Icons.play_arrow_rounded,
+          variant: PillButtonVariant.filled,
+          onPressed: onOpenWorkoutDetail,
+        ),
+      );
+      if (hasCardio) {
+        actions.add(
+          _buildActionButton(
+            text: 'Log Cardio',
+            icon: Icons.directions_run_outlined,
+            onPressed: onRunInputs,
+          ),
+        );
+      }
+    } else if (hasCardio && !isRest) {
+      actions.add(
+        _buildActionButton(
+          text: 'Log Cardio',
+          icon: Icons.play_arrow_rounded,
+          variant: PillButtonVariant.filled,
+          onPressed: onRunInputs,
+        ),
+      );
+    } else {
+      actions.add(
+        _buildActionButton(
+          text: 'View Plan',
+          icon: Icons.event_note_outlined,
+          onPressed: onOpenPlan,
+        ),
+      );
+    }
+
+    return GlassCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  isRest
+                      ? Icons.self_improvement_outlined
+                      : hasStrength
+                          ? Icons.fitness_center_outlined
+                          : Icons.directions_run_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${gate.label} • $readinessDetail',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            LayoutBuilder(
+              builder: (context, constraints) => _buildActionGrid(
+                context,
+                compact: constraints.maxWidth < 520,
+                buttons: actions,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -1608,12 +1714,12 @@ class _DailyClinicalContent extends StatelessWidget {
             ),
             _buildDashboardMetricCard(
               context: context,
-              title: 'Health Alerts',
+              title: 'Recovery Check',
               leadingIcon: Icons.health_and_safety_outlined,
-              valueText: gate.progressionAllowed
-                  ? 'Recovery stable'
-                  : 'Needs recovery',
-              subtitleText: '${gate.reasoning}; artifacts: $excluded',
+              valueText: gate.label,
+              subtitleText: excluded == 0
+                  ? gate.reasoning
+                  : '${gate.reasoning}; $excluded cardio artifact${excluded == 1 ? '' : 's'} excluded',
               expandedContent: Align(
                 alignment: Alignment.centerLeft,
                 child: _AlertIconStrip(
@@ -1629,90 +1735,16 @@ class _DailyClinicalContent extends StatelessWidget {
     );
   }
 
-  Widget _buildAiSummary(BuildContext context) {
-    return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              const Icon(Icons.analytics_outlined, size: 18),
-              Text(
-                'Adaptation AI Snapshot',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (aiSummary == null)
-            Text(
-              'No AI audits yet. Run Mock AI Analysis to generate a summary.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            )
-          else ...[
-            Text(
-              aiSummary!.reasoning,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _FlagChip(
-                  label: aiSummary!.progressionAllowed
-                      ? 'Progression allowed'
-                      : 'Progression held',
-                  color: aiSummary!.progressionAllowed
-                      ? ClinicalPalette.accentSecondary
-                      : ClinicalPalette.warningMuted,
-                ),
-                if (aiSummary!.flags.lowSleep)
-                  const _FlagChip(
-                    label: 'Low sleep',
-                    color: ClinicalPalette.warningMuted,
-                  ),
-                if (aiSummary!.flags.treadmillArtifactsDetected)
-                  const _FlagChip(
-                    label: 'Treadmill artifacts',
-                    color: ClinicalPalette.warningMuted,
-                  ),
-                if (aiSummary!.flags.missingMetrics)
-                  const _FlagChip(
-                    label: 'Missing metrics',
-                    color: ClinicalPalette.warningMuted,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Cardio: ${aiSummary!.extractedDataSummary.runsSummary} | '
-              'Sleep: ${aiSummary!.extractedDataSummary.sleepSummary} | '
-              'Strength: ${aiSummary!.extractedDataSummary.strengthSummary}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPrimaryLargeActions(BuildContext context) {
-    return const SizedBox.shrink();
-  }
-
   Widget _buildSecondaryActionRow(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final canUseSplitAction = onMarkRest != null || onUndoRest != null;
         final isCurrentRest =
             (safeDetail.planSessionType ?? '').toLowerCase().contains('rest');
+        final isScheduleShift = safeDetail.planShiftReason == 'busy_schedule';
         final splitActionText = isCurrentRest
-            ? 'Undo Rest Day Push'
-            : 'Add Recovery Day + Push Split';
+            ? (isScheduleShift ? 'Undo Plan Shift' : 'Undo Rest Day Push')
+            : 'Recovery Options';
         final splitActionIcon = isCurrentRest
             ? Icons.undo_rounded
             : Icons.playlist_add_check_circle_outlined;
@@ -1726,6 +1758,13 @@ class _DailyClinicalContent extends StatelessWidget {
             variant: PillButtonVariant.outlined,
             onPressed: onPickDate,
           ),
+          if (!isCurrentRest && onShiftPlan != null)
+            _buildActionButton(
+              text: 'No Workout • Shift Plan',
+              icon: Icons.event_busy_outlined,
+              variant: PillButtonVariant.tonal,
+              onPressed: onShiftPlan,
+            ),
           if (canUseSplitAction)
             _buildActionButton(
               text: splitActionText,
@@ -1733,11 +1772,6 @@ class _DailyClinicalContent extends StatelessWidget {
               variant: PillButtonVariant.tonal,
               onPressed: splitActionHandler,
             ),
-          _buildActionButton(
-            text: 'Run Mock AI Analysis',
-            variant: PillButtonVariant.outlined,
-            onPressed: onRunMockAi,
-          ),
         ];
         return _buildActionGrid(
           context,
@@ -2051,26 +2085,6 @@ class _LabeledLine extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _FlagChip extends StatelessWidget {
-  const _FlagChip({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        color: color.withValues(alpha: 0.18),
-        border: Border.all(color: color.withValues(alpha: 0.55)),
-      ),
-      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
     );
   }
 }
