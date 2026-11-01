@@ -543,10 +543,14 @@ Cardio Prescription Compatibility Rules:
 - Use `RUN_DURATION` for the full cardio prescription duration regardless of modality.
 - Leave `RUN_TARGET_PACE` blank when pace or speed is not meaningful for that modality.
 - For non-running cardio, bias `RUN_HR_GUARDRAILS` and `RUN_NOTES` toward effort, cadence, resistance, incline, RPM, or other modality-specific cues.''';
-    const strictImportSchemaBlock = '''
+    final requiredFirstHeader = context.propagateLongTermChanges
+        ? 'TEN_WEEK_PLAN_UPDATE_V1'
+        : 'WEEK_PLAN_V1';
+    final strictImportSchemaBlock = '''
 STRICT_IMPORT_SCHEMA_V1 (NON-NEGOTIABLE):
 - Output plain text only, no markdown wrappers.
-- Header line must be exactly: WEEK_PLAN_V1
+- The first output line must be exactly: $requiredFirstHeader
+- The weekly section header must be exactly: WEEK_PLAN_V1
 - Include both top-level fields before DAY blocks:
   WEEK_START: YYYY-MM-DD
   WEEK_END: YYYY-MM-DD
@@ -994,11 +998,20 @@ $extraBlock
     required String generatedText,
     required String expectedFirstWeekStart,
   }) {
+    final hasHeader = const LineSplitter()
+        .convert(generatedText)
+        .any((line) => line.trim() == 'TEN_WEEK_PLAN_UPDATE_V1');
+    if (!hasHeader) {
+      throw StateError(
+        'Long-term propagation is enabled, but TEN_WEEK_PLAN_UPDATE_V1 '
+        'is missing.',
+      );
+    }
     final rows = _extractTenWeekRows(generatedText);
     if (rows.isEmpty) {
       throw StateError(
         'Long-term propagation is enabled, but TEN_WEEK_PLAN_UPDATE_V1 '
-        'is missing.',
+        'contains no TEN_WEEK_ROW entries.',
       );
     }
     if (rows.length != 10) {
