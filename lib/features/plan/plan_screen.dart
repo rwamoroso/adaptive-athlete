@@ -1454,7 +1454,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
       splitStartDate.day,
     );
     final weekStart = toYmd(normalizedStart);
-    final weekEnd = toYmd(normalizedStart.add(const Duration(days: 6)));
+    final weekEnd = toYmd(addCalendarDateDays(normalizedStart, 6));
     final existing = await ref.read(appDbProvider).findOverlappingPlanCycles(
           rangeStartYmd: weekStart,
           rangeEndYmd: weekEnd,

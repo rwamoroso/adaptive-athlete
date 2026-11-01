@@ -9,12 +9,13 @@ import 'package:flutter_test/flutter_test.dart';
 String _buildAiPlanTextWithTenWeekBlock({
   bool includeRuleLines = false,
   DateTime? tenWeekStart,
+  DateTime? weeklyStart,
   int tenWeekCount = 10,
   int? gapBeforeWeekIndex,
 }) {
   final b = StringBuffer();
   b.writeln('TEN_WEEK_PLAN_UPDATE_V1');
-  final start = tenWeekStart ?? DateTime.utc(2026, 2, 9);
+  final start = tenWeekStart ?? DateTime.utc(2026, 2, 23);
   for (var i = 0; i < tenWeekCount; i++) {
     final gapDays =
         gapBeforeWeekIndex != null && i >= gapBeforeWeekIndex ? 7 : 0;
@@ -40,8 +41,10 @@ String _buildAiPlanTextWithTenWeekBlock({
   b.writeln('END_TEN_WEEK_PLAN_UPDATE_V1');
   b.writeln();
   b.writeln('WEEK_PLAN_V1');
-  b.writeln('WEEK_START: 2026-02-23');
-  b.writeln('WEEK_END: 2026-03-01');
+  final selectedStart = weeklyStart ?? DateTime.utc(2026, 2, 23);
+  final selectedEnd = selectedStart.add(const Duration(days: 6));
+  b.writeln('WEEK_START: ${selectedStart.toIso8601String().split('T').first}');
+  b.writeln('WEEK_END: ${selectedEnd.toIso8601String().split('T').first}');
   b.writeln();
   for (var day = 1; day <= 7; day++) {
     b.writeln('DAY $day');
@@ -180,8 +183,8 @@ String _cellText(Data? cell) {
 
 void main() {
   for (final transition in <({String name, DateTime start})>[
-    (name: 'fall DST transition', start: DateTime.utc(2026, 10, 31)),
-    (name: 'spring DST transition', start: DateTime.utc(2027, 3, 13)),
+    (name: 'fall DST transition', start: DateTime.utc(2026, 11, 1)),
+    (name: 'spring DST transition', start: DateTime.utc(2026, 3, 8)),
   ]) {
     test('AI ten-week import uses calendar dates across ${transition.name}',
         () async {
@@ -191,17 +194,18 @@ void main() {
       await db.importAiWeeklyPlanText(
         text: _buildAiPlanTextWithTenWeekBlock(
           tenWeekStart: transition.start,
+          weeklyStart: transition.start,
         ),
-        splitStartDate: DateTime(2026, 2, 23),
+        splitStartDate: transition.start,
       );
 
       final weeks = await db.select(db.planLongRangeWeeks).get();
       final firstWeek = weeks.firstWhere((week) => week.weekNumber == 1);
       expect(weeks, hasLength(10));
       expect(firstWeek.weekStart,
-          transition.name.startsWith('fall') ? '2026-10-31' : '2027-03-13');
+          transition.name.startsWith('fall') ? '2026-11-01' : '2026-03-08');
       expect(firstWeek.weekEnd,
-          transition.name.startsWith('fall') ? '2026-11-06' : '2027-03-19');
+          transition.name.startsWith('fall') ? '2026-11-07' : '2026-03-14');
     });
   }
 
@@ -229,6 +233,43 @@ void main() {
         (error) => error.message,
         'message',
         contains('week_start must be consecutive'),
+      )),
+    );
+    final wrongEnd = _buildAiPlanTextWithTenWeekBlock().replaceFirst(
+      'week_end=2026-03-01',
+      'week_end=2026-03-02',
+    );
+    await expectLater(
+      db.importAiWeeklyPlanText(
+        text: wrongEnd,
+        splitStartDate: DateTime(2026, 2, 23),
+      ),
+      throwsA(isA<StateError>().having(
+        (error) => error.message,
+        'message',
+        contains('week_end must be exactly 6 calendar days'),
+      )),
+    );
+  });
+
+  test('weekly import rejects a WEEK_END that is not start plus six days',
+      () async {
+    final db = AppDb.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final wrongWeeklyEnd = _buildAiPlanTextWithTenWeekBlock().replaceFirst(
+      'WEEK_END: 2026-03-01',
+      'WEEK_END: 2026-03-02',
+    );
+
+    await expectLater(
+      db.importAiWeeklyPlanText(
+        text: wrongWeeklyEnd,
+        splitStartDate: DateTime(2026, 2, 23),
+      ),
+      throwsA(isA<StateError>().having(
+        (error) => error.message,
+        'message',
+        contains('WEEK_END must be exactly 6 days after WEEK_START'),
       )),
     );
   });
@@ -263,10 +304,10 @@ void main() {
     expect(rows[4][0], 'Week 4');
     final longRangeWeeks = await db.select(db.planLongRangeWeeks).get();
     expect(longRangeWeeks.length, 10);
-    final wk3 = longRangeWeeks.firstWhere((w) => w.weekStart == '2026-02-23');
-    expect(wk3.weekLabel, 'Week 3');
-    expect(wk3.weekNumber, 3);
-    expect(wk3.strengthProgressionExpectation, 'Week 3 strength expectation');
+    final wk1 = longRangeWeeks.firstWhere((w) => w.weekStart == '2026-02-23');
+    expect(wk1.weekLabel, 'Week 1');
+    expect(wk1.weekNumber, 1);
+    expect(wk1.strengthProgressionExpectation, 'Week 1 strength expectation');
 
     final exportPath = await db.exportStandardWorkbookXlsx(
       anchorDate: DateTime(2026, 3, 5),
@@ -278,18 +319,18 @@ void main() {
     final sheet = tenWeek!;
     expect(_cellText(sheet.rows[0][10]), 'Export Context');
     expect(_cellText(sheet.rows[1][10]), 'Exported Week Number');
-    expect(_cellText(sheet.rows[1][11]), '3');
-    expect(_cellText(sheet.rows[2][11]), 'Week 3');
+    expect(_cellText(sheet.rows[1][11]), '1');
+    expect(_cellText(sheet.rows[2][11]), 'Week 1');
     expect(_cellText(sheet.rows[3][11]), '2026-02-23');
     expect(_cellText(sheet.rows[4][11]), '2026-03-01');
     final perfRows = await db.select(db.planLongRangeWeekPerformance).get();
     expect(perfRows.length, 1);
-    expect(perfRows.single.weekNumber, 3);
+    expect(perfRows.single.weekNumber, 1);
     expect(perfRows.single.weekStart, '2026-02-23');
     expect(perfRows.single.evaluationSource, 'standard_workbook_export');
     expect(
       perfRows.single.strengthProgressionExpectation,
-      'Week 3 strength expectation',
+      'Week 1 strength expectation',
     );
     expect(
       perfRows.single.strengthProgressionEvaluation,

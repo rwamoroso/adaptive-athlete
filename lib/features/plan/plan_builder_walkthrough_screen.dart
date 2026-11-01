@@ -1232,8 +1232,7 @@ class _PlanBuilderWalkthroughScreenState
     }
   }
 
-  DateTime get _weekEndDate =>
-      _draft.weekStartDate.add(const Duration(days: 6));
+  DateTime get _weekEndDate => addCalendarDateDays(_draft.weekStartDate, 6);
 
   Future<void> _pickWeekStartDate() async {
     final selected = await showDatePicker(

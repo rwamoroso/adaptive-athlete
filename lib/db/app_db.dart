@@ -4142,7 +4142,7 @@ class AppDb extends _$AppDb {
     final normalizedStart =
         DateTime(startDate.year, startDate.month, startDate.day);
     final weekStart = toYmd(normalizedStart);
-    final weekEnd = toYmd(normalizedStart.add(const Duration(days: 6)));
+    final weekEnd = toYmd(addCalendarDateDays(normalizedStart, 6));
 
     return transaction(() async {
       await _deletePlanCyclesOverlappingDateRange(
@@ -4170,7 +4170,7 @@ class AppDb extends _$AppDb {
         final planDayId = _uuid.v4();
         planDayIdByNumber[dayNumber] = planDayId;
         final estimatedDate =
-            toYmd(normalizedStart.add(Duration(days: dayNumber - 1)));
+            toYmd(addCalendarDateDays(normalizedStart, dayNumber - 1));
         final templateDay = templateDayByNumber[dayNumber];
         final sheetName = templateDay?.sheetName ?? 'Day $dayNumber';
         final sessionType = _deriveSessionType(
@@ -4378,7 +4378,7 @@ class AppDb extends _$AppDb {
       splitStartDate.day,
     );
     final weekStart = toYmd(normalizedSplitStart);
-    final weekEnd = toYmd(normalizedSplitStart.add(const Duration(days: 6)));
+    final weekEnd = toYmd(addCalendarDateDays(normalizedSplitStart, 6));
 
     late int insertedDayCount;
     late int insertedStrengthCount;
@@ -4437,7 +4437,7 @@ class AppDb extends _$AppDb {
         final planDayId = _uuid.v4();
         planDayIdByNumber[day.dayNumber] = planDayId;
         final estimatedDate = toYmd(
-          normalizedSplitStart.add(Duration(days: day.dayNumber - 1)),
+          addCalendarDateDays(normalizedSplitStart, day.dayNumber - 1),
         );
         await into(planDays).insert(
           PlanDaysCompanion.insert(
@@ -4561,9 +4561,15 @@ class AppDb extends _$AppDb {
       throw StateError(
           'WEEK_START does not match selected split start (${toYmd(start)}).');
     }
-    if (bundle.weeklyPlan.weekEnd !=
-        toYmd(start.add(const Duration(days: 6)))) {
+    if (bundle.weeklyPlan.weekEnd != toYmd(addCalendarDateDays(start, 6))) {
       throw StateError('WEEK_END does not match selected split end.');
+    }
+    if (bundle.tenWeekRows.isNotEmpty &&
+        bundle.tenWeekRows.first.weekStart != toYmd(start)) {
+      throw StateError(
+        'The first TEN_WEEK_ROW.week_start must match the selected split start '
+        '(${toYmd(start)}).',
+      );
     }
     return '${bundle.weeklyPlan.days.length} days checked. Ready to apply.';
   }
@@ -4581,8 +4587,7 @@ class AppDb extends _$AppDb {
       splitStartDate.day,
     );
     final expectedWeekStart = toYmd(normalizedSplitStart);
-    final expectedWeekEnd =
-        toYmd(normalizedSplitStart.add(const Duration(days: 6)));
+    final expectedWeekEnd = toYmd(addCalendarDateDays(normalizedSplitStart, 6));
 
     if (parsed.weekStart != expectedWeekStart) {
       throw StateError(
@@ -4592,6 +4597,14 @@ class AppDb extends _$AppDb {
     if (parsed.weekEnd != expectedWeekEnd) {
       throw StateError(
         'WEEK_END (${parsed.weekEnd}) does not match selected split end ($expectedWeekEnd).',
+      );
+    }
+    if (bundle.tenWeekRows.isNotEmpty &&
+        bundle.tenWeekRows.first.weekStart != expectedWeekStart) {
+      throw StateError(
+        'The first TEN_WEEK_ROW.week_start '
+        '(${bundle.tenWeekRows.first.weekStart}) does not match selected split '
+        'start ($expectedWeekStart).',
       );
     }
 
@@ -4652,7 +4665,7 @@ class AppDb extends _$AppDb {
         final planDayId = _uuid.v4();
         planDayIdByNumber[day.dayNumber] = planDayId;
         final estimatedDate = toYmd(
-          normalizedSplitStart.add(Duration(days: day.dayNumber - 1)),
+          addCalendarDateDays(normalizedSplitStart, day.dayNumber - 1),
         );
         final fallbackSheetName = (day.dayLabel?.trim().isNotEmpty ?? false)
             ? 'Day ${day.dayNumber} - ${day.dayLabel!.trim()}'
