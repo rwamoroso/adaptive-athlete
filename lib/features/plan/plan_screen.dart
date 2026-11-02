@@ -689,7 +689,6 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
     });
   }
 
-  // ignore: unused_element
   Widget _buildSchedulePreviewCard(BuildContext context) {
     return GlassCard(
       child: FutureBuilder<List<_PlanSchedulePreviewDay>>(
@@ -709,9 +708,24 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
           }
           final days = snapshot.data ?? const <_PlanSchedulePreviewDay>[];
           if (days.isEmpty) {
-            return Text(
-              'No active weekly plan found for the selected start date.',
-              style: Theme.of(context).textTheme.bodyMedium,
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.calendar_today_outlined,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'No plan is scheduled for this week yet.',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Build or import a weekly plan below and it will appear here.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
             );
           }
           return Column(
@@ -1916,7 +1930,20 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
           text:
               'One guided flow for intake, weekly setup, generation, and apply.',
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            const Expanded(child: SectionHeader(text: 'Upcoming Week')),
+            IconButton(
+              tooltip: 'Refresh upcoming week',
+              onPressed: _refreshSchedulePreview,
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _buildSchedulePreviewCard(context),
+        const SizedBox(height: 18),
         SizedBox(
           width: double.infinity,
           child: PrimaryPillButton(
