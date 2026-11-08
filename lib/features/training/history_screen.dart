@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +26,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final last7Start = today.subtract(const Duration(days: 6));
+    final previous7Start = today.subtract(const Duration(days: 13));
     final last30Start = today.subtract(const Duration(days: 29));
 
     final allDays = await workoutDao.listDays();
@@ -43,16 +46,21 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       order by estimated_date
       ''',
       variables: [
-        Variable.withString(toYmd(last7Start)),
+        Variable.withString(toYmd(previous7Start)),
         Variable.withString(toYmd(today)),
       ],
     ).get();
     final plannedDates = <String>{};
+    final previousPlannedDates = <String>{};
     for (final row in planRows) {
       final date = row.data['estimated_date']?.toString();
       final session = row.data['session_type']?.toString().toLowerCase() ?? '';
       if (date != null && date.isNotEmpty && !session.contains('rest')) {
-        plannedDates.add(date);
+        if (date.compareTo(toYmd(last7Start)) >= 0) {
+          plannedDates.add(date);
+        } else {
+          previousPlannedDates.add(date);
+        }
       }
     }
 
@@ -82,6 +90,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     var cardioSessions30 = 0;
     var runningMeters30 = 0.0;
     var strengthVolume30 = 0.0;
+    var runningMetersLast7 = 0.0;
+    var runningMetersPrevious7 = 0.0;
+    var strengthVolumeLast7 = 0.0;
+    var strengthVolumePrevious7 = 0.0;
     final summaries = <_DayProgress>[];
     for (final detail in details) {
       final strengthSets = detail.groups
@@ -109,6 +121,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       cardioSessions30 += cardioSessions;
       runningMeters30 += distance;
       strengthVolume30 += volume;
+      final detailDate = parseYmd(detail.date);
+      if (!detailDate.isBefore(last7Start) && !detailDate.isAfter(today)) {
+        runningMetersLast7 += distance;
+        strengthVolumeLast7 += volume;
+      } else if (!detailDate.isBefore(previous7Start) &&
+          detailDate.isBefore(last7Start)) {
+        runningMetersPrevious7 += distance;
+        strengthVolumePrevious7 += volume;
+      }
       summaries.add(
         _DayProgress(
           date: detail.date,
@@ -123,22 +144,37 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final last7Completed = completedDates
         .where((date) => !parseYmd(date).isBefore(last7Start))
         .length;
+    final previous7Completed = completedDates.where((date) {
+      final dateValue = parseYmd(date);
+      return !dateValue.isBefore(previous7Start) &&
+          dateValue.isBefore(last7Start);
+    }).length;
     final adherence = plannedDates.isEmpty
         ? null
         : plannedDates.where(completedDates.contains).length /
             plannedDates.length;
+    final previousAdherence = previousPlannedDates.isEmpty
+        ? null
+        : previousPlannedDates.where(completedDates.contains).length /
+            previousPlannedDates.length;
     final averageSleepMinutes = sleepByDate.isEmpty
         ? null
         : sleepByDate.values.reduce((a, b) => a + b) ~/ sleepByDate.length;
 
     return _ProgressSnapshot(
       sessionsLast7: last7Completed,
+      sessionsPrevious7: previous7Completed,
       adherence: adherence,
+      previousAdherence: previousAdherence,
       plannedDates: plannedDates,
       completedDates: completedDates,
       cardioSessions30: cardioSessions30,
       runningMeters30: runningMeters30,
       strengthVolume30: strengthVolume30,
+      runningMetersLast7: runningMetersLast7,
+      runningMetersPrevious7: runningMetersPrevious7,
+      strengthVolumeLast7: strengthVolumeLast7,
+      strengthVolumePrevious7: strengthVolumePrevious7,
       averageSleepMinutes: averageSleepMinutes,
       sleepSamples: sleepByDate.length,
       recent: summaries,
@@ -148,6 +184,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final weeklyResponse =
+        ref.watch(latestAiWeeklyPlanResponseProvider).valueOrNull ?? '';
     return FutureBuilder<_ProgressSnapshot>(
       key: ValueKey(_refresh),
       future: _load(),
@@ -180,9 +218,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Training consistency, workload, cardio, and recovery at a glance.',
+                      'How your recent work is shaping the next training block.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
+                    const SizedBox(height: 16),
+                    _CoachProgressBrief(progress: progress),
+                    const SizedBox(height: 16),
+                    _TrainingReasoningCard(response: weeklyResponse),
                     const SizedBox(height: 16),
                     GridView.count(
                       crossAxisCount: 2,
@@ -325,15 +367,243 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 }
 
+class _CoachProgressBrief extends StatelessWidget {
+  const _CoachProgressBrief({required this.progress});
+
+  final _ProgressSnapshot progress;
+
+  String get _headline {
+    final adherence = progress.adherence;
+    if (adherence == null) return 'Your next step: follow a weekly plan';
+    if (adherence >= 0.85) return 'You’re building a strong training rhythm';
+    if (adherence >= 0.5) return 'You’re keeping the plan moving';
+    return 'A steady reset can get the plan back on track';
+  }
+
+  String get _detail {
+    final delta = progress.sessionsLast7 - progress.sessionsPrevious7;
+    if (delta > 0) {
+      return 'You completed $delta more session${delta == 1 ? '' : 's'} than the week before. Keep the next week aligned with the prescribed recovery and workload.';
+    }
+    if (delta < 0) {
+      final fewer = delta.abs();
+      return 'You completed $fewer fewer session${fewer == 1 ? '' : 's'} than the week before. Review what fit your schedule and use that to guide the next prescription.';
+    }
+    return 'You completed the same number of sessions as the prior week. Compare the run and strength work below to see how the workload shifted.';
+  }
+
+  String _change(double current, double previous, {int decimals = 0}) {
+    final delta = current - previous;
+    final sign = delta > 0 ? '+' : '';
+    return '$sign${delta.toStringAsFixed(decimals)}';
+  }
+
+  Widget _comparison(BuildContext context, String label, String current,
+      String previous, String change) {
+    final style = Theme.of(context).textTheme.bodySmall;
+    return Padding(
+      padding: const EdgeInsets.only(top: 7),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: style)),
+          Text('$current  vs  $previous', style: style),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 44,
+            child: Text(change,
+                textAlign: TextAlign.end,
+                style: style?.copyWith(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final adherence = progress.adherence;
+    final value = adherence?.clamp(0.0, 1.0).toDouble() ?? 0.0;
+    final theme = Theme.of(context);
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.auto_awesome_outlined,
+                    color: theme.colorScheme.primary, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Coach’s read', style: theme.textTheme.labelLarge),
+                    const SizedBox(height: 3),
+                    Text(_headline,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        )),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(_detail, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 12),
+          Text('Last 7 days  vs  previous 7 days',
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              )),
+          _comparison(
+            context,
+            'Sessions',
+            '${progress.sessionsLast7}',
+            '${progress.sessionsPrevious7}',
+            _change(progress.sessionsLast7.toDouble(),
+                progress.sessionsPrevious7.toDouble()),
+          ),
+          _comparison(
+            context,
+            'Running',
+            '${(progress.runningMetersLast7 / 1609.344).toStringAsFixed(1)} mi',
+            '${(progress.runningMetersPrevious7 / 1609.344).toStringAsFixed(1)} mi',
+            '${_change(progress.runningMetersLast7 / 1609.344, progress.runningMetersPrevious7 / 1609.344, decimals: 1)} mi',
+          ),
+          _comparison(
+            context,
+            'Strength volume',
+            _formatVolume(progress.strengthVolumeLast7),
+            _formatVolume(progress.strengthVolumePrevious7),
+            _change(
+                progress.strengthVolumeLast7, progress.strengthVolumePrevious7),
+          ),
+          if (adherence != null) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(value: value, minHeight: 7),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Plan completion ${(adherence * 100).round()}%${progress.previousAdherence == null ? '' : ' • previous week ${(progress.previousAdherence! * 100).round()}%'}',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+Map<String, String> _planRationale(String response) {
+  final lines = const LineSplitter().convert(response);
+  final start = lines.indexWhere(
+    (line) => line.trim().toUpperCase() == 'PLAN_EXPLANATION_V1',
+  );
+  if (start < 0) return const {};
+  final result = <String, String>{};
+  for (var index = start + 1; index < lines.length; index++) {
+    final line = lines[index].trim();
+    if (line.toUpperCase() == 'END_PLAN_EXPLANATION_V1') break;
+    final colon = line.indexOf(':');
+    if (colon <= 0) continue;
+    final key = line.substring(0, colon).trim().toUpperCase();
+    final value = line.substring(colon + 1).trim();
+    if (value.isNotEmpty) result[key] = value;
+  }
+  return result;
+}
+
+class _TrainingReasoningCard extends StatelessWidget {
+  const _TrainingReasoningCard({required this.response});
+
+  final String response;
+
+  @override
+  Widget build(BuildContext context) {
+    final rationale = _planRationale(response);
+    final theme = Theme.of(context);
+    final why = rationale['WHY_THIS_WEEK'];
+    final adaptation = rationale['ADAPTATION_OR_GROWTH'];
+    final logic = rationale['LOGIC_OVERVIEW'];
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.psychology_alt_outlined,
+                  color: theme.colorScheme.primary),
+              const SizedBox(width: 9),
+              Text('Why this training?',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  )),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (why == null && adaptation == null && logic == null)
+            Text(
+              'A written rationale has not been saved with the current plan yet. When the plan includes its explanation, it will appear here.',
+              style: theme.textTheme.bodySmall,
+            )
+          else ...[
+            if (why != null) _reasonParagraph(context, 'Why this week', why),
+            if (adaptation != null)
+              _reasonParagraph(context, 'Training effect', adaptation),
+            if (logic != null)
+              _reasonParagraph(context, 'Load and recovery', logic),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _reasonParagraph(BuildContext context, String heading, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(heading,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  )),
+          const SizedBox(height: 3),
+          Text(body, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProgressSnapshot {
   const _ProgressSnapshot({
     required this.sessionsLast7,
+    required this.sessionsPrevious7,
     required this.adherence,
+    required this.previousAdherence,
     required this.plannedDates,
     required this.completedDates,
     required this.cardioSessions30,
     required this.runningMeters30,
     required this.strengthVolume30,
+    required this.runningMetersLast7,
+    required this.runningMetersPrevious7,
+    required this.strengthVolumeLast7,
+    required this.strengthVolumePrevious7,
     required this.averageSleepMinutes,
     required this.sleepSamples,
     required this.recent,
@@ -341,12 +611,18 @@ class _ProgressSnapshot {
   });
 
   final int sessionsLast7;
+  final int sessionsPrevious7;
   final double? adherence;
+  final double? previousAdherence;
   final Set<String> plannedDates;
   final Set<String> completedDates;
   final int cardioSessions30;
   final double runningMeters30;
   final double strengthVolume30;
+  final double runningMetersLast7;
+  final double runningMetersPrevious7;
+  final double strengthVolumeLast7;
+  final double strengthVolumePrevious7;
   final int? averageSleepMinutes;
   final int sleepSamples;
   final List<_DayProgress> recent;

@@ -387,6 +387,24 @@ class _DailyScreenLoadData {
   final _SleepTrendCardSummary sleepTrendSummary;
 }
 
+class _CoachPlanDay {
+  const _CoachPlanDay({
+    required this.date,
+    required this.sessionType,
+    required this.sheetName,
+    required this.runType,
+    required this.durationText,
+    required this.liftFocus,
+  });
+
+  final String date;
+  final String? sessionType;
+  final String? sheetName;
+  final String? runType;
+  final String? durationText;
+  final String? liftFocus;
+}
+
 class _DailyScreenState extends ConsumerState<DailyScreen> {
   late String _selectedDate;
   int _refresh = 0;
@@ -1109,6 +1127,7 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
           strengthProgress: strengthProgress,
           totalRunDistance: totalRunDistance,
           dailyPrescribedMiles: dailyPrescribedMiles,
+          db: db,
           sessionTypeLabel: _sessionTypeLabel,
           onPickDate: _pickDate,
           onOpenSleepEditor: _openSleepEditor,
@@ -1137,6 +1156,10 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
               ? null
               : () => _undoRestDayPush(safeDetail),
           onOpenPlan: widget.onOpenPlan,
+          onSelectDate: (date) => setState(() {
+            _selectedDate = date;
+            _refresh++;
+          }),
           onRefresh: () async => setState(() => _refresh++),
         );
       },
@@ -1144,9 +1167,172 @@ class _DailyScreenState extends ConsumerState<DailyScreen> {
   }
 }
 
+class _CoachComingUpCard extends StatefulWidget {
+  const _CoachComingUpCard({
+    required this.db,
+    required this.selectedDate,
+    required this.onSelectDate,
+    required this.onOpenPlan,
+  });
+
+  final AppDb db;
+  final String selectedDate;
+  final ValueChanged<String> onSelectDate;
+  final VoidCallback? onOpenPlan;
+
+  @override
+  State<_CoachComingUpCard> createState() => _CoachComingUpCardState();
+}
+
+class _CoachComingUpCardState extends State<_CoachComingUpCard> {
+  late Future<List<_CoachPlanDay>> _days;
+
+  @override
+  void initState() {
+    super.initState();
+    _days = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CoachComingUpCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedDate != widget.selectedDate ||
+        oldWidget.db != widget.db) {
+      _days = _load();
+    }
+  }
+
+  Future<List<_CoachPlanDay>> _load() async {
+    final start = parseYmd(widget.selectedDate);
+    final end = start.add(const Duration(days: 21));
+    final rows = await widget.db.customSelect(
+      '''
+      select pd.estimated_date, pd.session_type, pd.sheet_name,
+             pr.run_type, pr.duration_text, pr.lift_focus
+      from plan_days pd
+      left join plan_prescribed_runs pr on pr.plan_day_id = pd.id
+      where pd.estimated_date > ? and pd.estimated_date <= ?
+      order by pd.estimated_date
+      limit 4
+      ''',
+      variables: [
+        Variable.withString(widget.selectedDate),
+        Variable.withString(toYmd(end)),
+      ],
+    ).get();
+    return rows
+        .map((row) {
+          final data = row.data;
+          return _CoachPlanDay(
+            date: data['estimated_date']?.toString() ?? '',
+            sessionType: data['session_type']?.toString(),
+            sheetName: data['sheet_name']?.toString(),
+            runType: data['run_type']?.toString(),
+            durationText: data['duration_text']?.toString(),
+            liftFocus: data['lift_focus']?.toString(),
+          );
+        })
+        .where((day) => day.date.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  String _title(_CoachPlanDay day) {
+    final liftFocus = day.liftFocus?.trim() ?? '';
+    if (liftFocus.isNotEmpty) return liftFocus;
+    final runType = _formatCardioTypeLabel(day.runType, includeRunSuffix: true);
+    if (runType.isNotEmpty) return runType;
+    final session = _toTitleCaseWords(day.sessionType ?? day.sheetName ?? '');
+    return session.isEmpty ? 'Training session' : session;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.route_outlined, size: 19),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Coming up',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        )),
+              ),
+              TextButton(
+                  onPressed: widget.onOpenPlan, child: const Text('Plan')),
+            ],
+          ),
+          const SizedBox(height: 4),
+          FutureBuilder<List<_CoachPlanDay>>(
+            future: _days,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const LinearProgressIndicator(minHeight: 2);
+              }
+              final days = snapshot.data ?? const <_CoachPlanDay>[];
+              if (days.isEmpty) {
+                return Text(
+                  snapshot.hasError
+                      ? 'Could not load the upcoming prescription.'
+                      : 'No upcoming sessions are scheduled. Open your plan to build or adjust the next week.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                );
+              }
+              return Column(
+                children: [
+                  for (final day in days)
+                    InkWell(
+                      onTap: () => widget.onSelectDate(day.date),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 78,
+                              child: Text(
+                                _formatHeaderDate(day.date),
+                                style: Theme.of(context).textTheme.labelMedium,
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                _title(day),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            if ((day.durationText ?? '').trim().isNotEmpty)
+                              Text(day.durationText!.trim(),
+                                  style: Theme.of(context).textTheme.bodySmall),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.chevron_right, size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DailyClinicalContent extends StatelessWidget {
   const _DailyClinicalContent({
     required this.selectedDate,
+    required this.db,
     required this.safeDetail,
     required this.sleepNight,
     required this.sleepMin,
@@ -1168,10 +1354,12 @@ class _DailyClinicalContent extends StatelessWidget {
     required this.onShiftPlan,
     required this.onUndoRest,
     required this.onOpenPlan,
+    required this.onSelectDate,
     required this.onRefresh,
   });
 
   final String selectedDate;
+  final AppDb db;
   final WorkoutDayDetail safeDetail;
   final SleepNight? sleepNight;
   final int? sleepMin;
@@ -1193,6 +1381,7 @@ class _DailyClinicalContent extends StatelessWidget {
   final VoidCallback? onShiftPlan;
   final VoidCallback? onUndoRest;
   final VoidCallback? onOpenPlan;
+  final ValueChanged<String> onSelectDate;
   final Future<void> Function() onRefresh;
 
   String? _dailyGoalTitle() {
@@ -1223,8 +1412,15 @@ class _DailyClinicalContent extends StatelessWidget {
             _buildHeader(context),
             const SizedBox(height: 12),
             _buildTodayHero(context),
+            const SizedBox(height: 14),
+            _CoachComingUpCard(
+              db: db,
+              selectedDate: selectedDate,
+              onSelectDate: onSelectDate,
+              onOpenPlan: onOpenPlan,
+            ),
             const SizedBox(height: 18),
-            const SectionHeader(text: 'This Week'),
+            const SectionHeader(text: 'Your Week So Far'),
             const SizedBox(height: 14),
             const SectionHeader(text: 'Cardio'),
             const SizedBox(height: 8),
@@ -1300,12 +1496,12 @@ class _DailyClinicalContent extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: Text(
-            'Today',
+            'Training Brief',
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  letterSpacing: 0.8,
+                  letterSpacing: 0.35,
                   fontWeight: FontWeight.w800,
                   height: 1.15,
                 ),

@@ -1,6 +1,6 @@
 # Adaptive Athlete (MVP)
 
-Flutter training app with local Drift storage, optional Supabase authentication, cloud sync, AI-assisted planning, Garmin imports, and workbook export.
+Flutter training app with local Drift storage, optional Supabase authentication, cloud sync, AI-assisted planning, Apple Health and Garmin imports, and workbook export.
 
 ## Setup
 
@@ -24,7 +24,7 @@ Flutter training app with local Drift storage, optional Supabase authentication,
 3. `lib/config/supabase_config.dart` is gitignored.
 4. In Supabase SQL Editor, run `supabase/schema.sql` to create the app tables.
 5. Use `Settings -> Sync Now` to sync device and cloud changes. Conflicts are preserved for review in Settings.
-6. Use `Daily -> Cardio` to log runs, bikes, or stair sessions, or import Garmin `Activities.csv`. Running charts and pace calculations exclude other cardio.
+6. Use `Daily -> Cardio` to log runs, bikes, or stair sessions, or import Garmin `Activities.csv` and Apple Health workouts. Running charts and pace calculations exclude other cardio.
 
 For ongoing database development, follow `supabase/README.md`. The SQL Editor
 bootstrap is retained for the existing MVP, but new schema changes should use
@@ -92,6 +92,9 @@ Do not store the Postgres database password in mobile app code.
 - Planner response checks validate without replacing a plan. Failures preserve
   pasted/generated responses and show actionable recovery guidance. Unauthorized
   generation requests refresh the session and retry once.
+- Apple Health imports and incremental sync use persisted cursors to avoid
+  repeatedly processing older workouts. Ten-week plan date checks handle
+  daylight-saving transitions, and weekly plan propagation validates dates.
 
 On the first sync after upgrading, records that differ without a prior sync
 baseline require a choice in Settings; neither copy is silently discarded.
