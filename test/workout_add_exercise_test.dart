@@ -75,7 +75,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Add To Split').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'Add Exercise').last);
     await tester.pumpAndSettle();
 
     expect(find.text('Add Exercise To Split'), findsOneWidget);
@@ -127,7 +127,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Add To Split').last);
+    await tester.tap(find.widgetWithText(FilledButton, 'Add Exercise').last);
     await tester.pumpAndSettle();
 
     expect(find.text('Add Exercise To Split'), findsOneWidget);
@@ -158,5 +158,160 @@ void main() {
     expect(rows[0].setIndex, 1);
     expect(rows[1].setIndex, 2);
     expect(rows[2].setIndex, 3);
+  });
+
+  testWidgets('user can add and remove a set from a prescribed exercise',
+      (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(1200, 2200);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    const ymd = '2026-02-16';
+    final db = await _seedDbForWorkoutDetail(ymd);
+    addTearDown(db.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appDbProvider.overrideWithValue(db)],
+        child: const MaterialApp(
+          home: WorkoutDayDetailScreen(date: ymd),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Bench Press').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('add-set-Bench Press')));
+    await tester.pumpAndSettle();
+
+    var rows = await (db.select(db.planPrescribedStrengthSets)
+          ..where((s) => s.planDayId.equals('day_1'))
+          ..where((s) => s.exerciseCanonical.equals('Bench Press'))
+          ..orderBy([(s) => OrderingTerm.asc(s.setIndex)]))
+        .get();
+    expect(rows.map((row) => row.setIndex), [1, 2]);
+
+    await tester.tap(find.byKey(const ValueKey('remove-set-Bench Press-2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove Set'));
+    await tester.pumpAndSettle();
+
+    rows = await (db.select(db.planPrescribedStrengthSets)
+          ..where((s) => s.planDayId.equals('day_1'))
+          ..where((s) => s.exerciseCanonical.equals('Bench Press')))
+        .get();
+    expect(rows.map((row) => row.setIndex), [1]);
+  });
+
+  testWidgets('expanded exercise shows the next workout exercise',
+      (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(1200, 2200);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    const ymd = '2026-02-16';
+    final db = await _seedDbForWorkoutDetail(ymd);
+    addTearDown(db.close);
+    await db.into(db.planPrescribedStrengthSets).insert(
+          PlanPrescribedStrengthSetsCompanion.insert(
+            id: 'pss_2',
+            planDayId: 'day_1',
+            exerciseCanonical: 'Lat Pulldown',
+            setIndex: 1,
+            unit: 'lb',
+            createdAt: 2,
+          ),
+        );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appDbProvider.overrideWithValue(db)],
+        child: const MaterialApp(
+          home: WorkoutDayDetailScreen(date: ymd),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Bench Press').first);
+    await tester.pumpAndSettle();
+
+    final upNext = find.byKey(const ValueKey('up-next-Bench Press'));
+    expect(upNext, findsOneWidget);
+    expect(find.descendant(of: upNext, matching: find.text('UP NEXT')),
+        findsOneWidget);
+    expect(find.descendant(of: upNext, matching: find.text('Lat Pulldown')),
+        findsOneWidget);
+  });
+
+  testWidgets('exercise shows the last set performed in the previous week',
+      (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(1200, 2200);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    const ymd = '2026-02-16';
+    final db = await _seedDbForWorkoutDetail(ymd);
+    addTearDown(db.close);
+    final previousDayId = await db.createOrGetWorkoutDayByDate('2026-02-15');
+    await db.insertActualStrengthSet(
+      workoutDayId: previousDayId,
+      exercise: 'Bench Press',
+      setIndex: 1,
+      weight: 175,
+      reps: 8,
+      rir: 2,
+      unit: 'lb',
+      source: 'test',
+      rawSetString: '175x8r2',
+    );
+    await db.insertActualStrengthSet(
+      workoutDayId: previousDayId,
+      exercise: 'Bench Press',
+      setIndex: 2,
+      weight: 165,
+      reps: 10,
+      rir: 2,
+      unit: 'lb',
+      source: 'test',
+      rawSetString: '165x10r2',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appDbProvider.overrideWithValue(db)],
+        child: const MaterialApp(
+          home: WorkoutDayDetailScreen(date: ymd),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bench Press').first);
+    await tester.pumpAndSettle();
+
+    final lastSet = find.byKey(const ValueKey('last-set-Bench Press'));
+    expect(lastSet, findsOneWidget);
+    expect(find.descendant(of: lastSet, matching: find.text('LAST SET')),
+        findsOneWidget);
+    expect(
+        find.descendant(of: lastSet, matching: find.text('165 lb × 10 reps')),
+        findsOneWidget);
+    expect(
+      find.descendant(
+        of: lastSet,
+        matching: find.text('2026-02-15 • set 2'),
+      ),
+      findsOneWidget,
+    );
   });
 }

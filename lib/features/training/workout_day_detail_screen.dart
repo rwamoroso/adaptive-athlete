@@ -72,6 +72,7 @@ class _WorkoutDayDetailScreenState
       <String, _EditableSetState>{};
   final Set<String> _savingKeys = <String>{};
   final Set<String> _savingExercises = <String>{};
+  final Set<String> _editingSetExercises = <String>{};
   final Map<String, bool> _expandedByExercise = <String, bool>{};
   final Map<String, GlobalKey> _cardKeysByExercise = <String, GlobalKey>{};
   bool _addingExercise = false;
@@ -93,6 +94,7 @@ class _WorkoutDayDetailScreenState
     if (oldWidget.date != widget.date) {
       _editedByKey.clear();
       _savingKeys.clear();
+      _editingSetExercises.clear();
       _expandedByExercise.clear();
       _pendingScrollExercise = null;
       _tilesEpoch = 0;
@@ -434,6 +436,87 @@ class _WorkoutDayDetailScreenState
     }
   }
 
+  Future<void> _addSet(String exerciseCanonical) async {
+    setState(() => _editingSetExercises.add(exerciseCanonical));
+    try {
+      final setIndex =
+          await ref.read(appDbProvider).addPlanPrescribedStrengthSetForDate(
+                dateYmd: widget.date,
+                exerciseCanonical: exerciseCanonical,
+              );
+      if (!mounted) return;
+      _expandedByExercise[exerciseCanonical] = true;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Added set $setIndex to $exerciseCanonical.')),
+      );
+      _refreshDetail();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add set: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _editingSetExercises.remove(exerciseCanonical));
+      }
+    }
+  }
+
+  Future<void> _removeSet({
+    required String exerciseCanonical,
+    required int setIndex,
+    required bool hasExistingActual,
+  }) async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Remove set $setIndex?'),
+            content: Text(
+              hasExistingActual
+                  ? 'This removes the prescribed set. Its logged actual result will remain in workout history.'
+                  : 'This removes the set from this workout.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Remove Set'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    setState(() => _editingSetExercises.add(exerciseCanonical));
+    try {
+      final removed =
+          await ref.read(appDbProvider).removePlanPrescribedStrengthSetForDate(
+                dateYmd: widget.date,
+                exerciseCanonical: exerciseCanonical,
+                setIndex: setIndex,
+              );
+      if (!mounted) return;
+      if (removed) {
+        _editedByKey.remove(_setKey(exerciseCanonical, setIndex));
+        _expandedByExercise[exerciseCanonical] = true;
+        _refreshDetail();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to remove set: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _editingSetExercises.remove(exerciseCanonical));
+      }
+    }
+  }
+
   Future<void> _promptAddExercise(WorkoutDayDetail detail) async {
     var workingDetail = detail;
     if (workingDetail.planDayId == null) {
@@ -572,6 +655,15 @@ class _WorkoutDayDetailScreenState
       return 'unset';
     }
     return value.toStringAsFixed(1);
+  }
+
+  String _formatHistoricalWeight(double? value) {
+    if (value == null) {
+      return 'unknown';
+    }
+    return value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toStringAsFixed(1);
   }
 
   int _resolveRestSecondsForSet({
@@ -1393,7 +1485,7 @@ class _WorkoutDayDetailScreenState
                             ? null
                             : () => _promptAddExercise(detail),
                         child: Text(
-                          _addingExercise ? 'Adding...' : 'Add To Split',
+                          _addingExercise ? 'Adding...' : 'Add Exercise',
                         ),
                       ),
                     ),
@@ -1415,12 +1507,22 @@ class _WorkoutDayDetailScreenState
                         final isCustomExercise = group.prescribed.isEmpty;
                         final skippingExercise =
                             _savingExercises.contains(group.exercise);
+                        final editingSets =
+                            _editingSetExercises.contains(group.exercise);
                         final performedExercise =
                             group.substitution?.substituteExerciseCanonical ??
                                 group.exercise;
                         final nextExercise = index < detail.groups.length - 1
                             ? detail.groups[index + 1].exercise
                             : null;
+                        final nextDisplayExercise =
+                            index < detail.groups.length - 1
+                                ? detail.groups[index + 1].displayExercise
+                                : null;
+                        final previousPerformance =
+                            detail.previousPerformanceByExercise[
+                                ExerciseNormalizer.normalize(
+                                    group.displayExercise)];
 
                         return GlassCard(
                           key: _cardKeyForExercise(group.exercise),
@@ -1537,6 +1639,116 @@ class _WorkoutDayDetailScreenState
                                   child: Text('Logging all sets as 0...'),
                                 ),
                               ],
+                              Container(
+                                key: ValueKey<String>(
+                                  'up-next-${group.exercise}',
+                                ),
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(top: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .secondaryContainer
+                                      .withValues(alpha: 0.45),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      nextDisplayExercise == null
+                                          ? Icons.flag_outlined
+                                          : Icons.skip_next,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'UP NEXT',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .labelSmall
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: 0.8,
+                                                ),
+                                          ),
+                                          Text(
+                                            nextDisplayExercise ??
+                                                'Workout complete',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                key: ValueKey<String>(
+                                  'last-set-${group.exercise}',
+                                ),
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(top: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest
+                                      .withValues(alpha: 0.55),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.history),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'LAST SET',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .labelSmall
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: 0.8,
+                                                ),
+                                          ),
+                                          Text(
+                                            previousPerformance == null
+                                                ? 'No previous performance'
+                                                : '${_formatHistoricalWeight(previousPerformance.weight)} ${previousPerformance.unit} × ${previousPerformance.reps} reps',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          if (previousPerformance != null)
+                                            Text(
+                                              '${previousPerformance.workoutDate} • set ${previousPerformance.setIndex}',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                               const SizedBox(height: 8),
                               if (!isCustomExercise &&
                                   normalizedSetIndexes) ...[
@@ -1586,6 +1798,26 @@ class _WorkoutDayDetailScreenState
                                             const Chip(
                                               label: Text(
                                                   'Will overwrite existing actual'),
+                                            ),
+                                          const Spacer(),
+                                          if (prescribedSets.length > 1)
+                                            IconButton(
+                                              key: ValueKey<String>(
+                                                'remove-set-${group.exercise}-${set.setIndex}',
+                                              ),
+                                              tooltip: 'Remove set',
+                                              onPressed: editingSets
+                                                  ? null
+                                                  : () => _removeSet(
+                                                        exerciseCanonical:
+                                                            group.exercise,
+                                                        setIndex: set.setIndex,
+                                                        hasExistingActual:
+                                                            hasExistingActual,
+                                                      ),
+                                              icon: const Icon(
+                                                Icons.remove_circle_outline,
+                                              ),
                                             ),
                                         ],
                                       ),
@@ -1651,6 +1883,20 @@ class _WorkoutDayDetailScreenState
                                   ),
                                 );
                               }),
+                              if (prescribedSets.isNotEmpty)
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: OutlinedButton.icon(
+                                    key: ValueKey<String>(
+                                      'add-set-${group.exercise}',
+                                    ),
+                                    onPressed: editingSets
+                                        ? null
+                                        : () => _addSet(group.exercise),
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Add Set'),
+                                  ),
+                                ),
                               const SizedBox(height: 8),
                               const Align(
                                 alignment: Alignment.centerLeft,

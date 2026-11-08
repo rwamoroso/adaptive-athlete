@@ -83,6 +83,22 @@ class PlannedStrengthSetView {
   final String unit;
 }
 
+class PreviousExercisePerformance {
+  const PreviousExercisePerformance({
+    required this.workoutDate,
+    required this.setIndex,
+    required this.weight,
+    required this.reps,
+    required this.unit,
+  });
+
+  final String workoutDate;
+  final int setIndex;
+  final double? weight;
+  final int? reps;
+  final String unit;
+}
+
 class ExerciseSubstitutionView {
   const ExerciseSubstitutionView({
     required this.id,
@@ -514,6 +530,8 @@ class WorkoutDayDetail {
     required this.ruleTriggers,
     required this.aiAudits,
     required this.runOverrideAudits,
+    this.previousPerformanceByExercise =
+        const <String, PreviousExercisePerformance>{},
   });
 
   final String date;
@@ -531,6 +549,7 @@ class WorkoutDayDetail {
   final List<RuleTrigger> ruleTriggers;
   final List<AiAuditData> aiAudits;
   final List<RunOverrideAuditData> runOverrideAudits;
+  final Map<String, PreviousExercisePerformance> previousPerformanceByExercise;
 }
 
 class ExerciseAlternativeChoice {
@@ -3374,6 +3393,70 @@ class AppDb extends _$AppDb {
         ),
       );
     }
+  }
+
+  Future<int> addPlanPrescribedStrengthSetForDate({
+    required String dateYmd,
+    required String exerciseCanonical,
+  }) async {
+    final planDayId = await _resolvePlanDayIdForDate(dateYmd);
+    if (planDayId == null) {
+      throw StateError('No split day found for $dateYmd.');
+    }
+
+    final canonicalExercise = ExerciseNormalizer.normalize(exerciseCanonical);
+    return transaction(() async {
+      final rows = await (select(planPrescribedStrengthSets)
+            ..where((s) => s.planDayId.equals(planDayId))
+            ..where((s) => s.exerciseCanonical.equals(canonicalExercise))
+            ..orderBy([(s) => OrderingTerm.desc(s.setIndex)]))
+          .get();
+      final nextSetIndex = rows.isEmpty ? 1 : rows.first.setIndex + 1;
+      final template = rows.isEmpty ? null : rows.first;
+      await into(planPrescribedStrengthSets).insert(
+        PlanPrescribedStrengthSetsCompanion.insert(
+          id: _uuid.v4(),
+          planDayId: planDayId,
+          exerciseCanonical: canonicalExercise,
+          setIndex: nextSetIndex,
+          unit: template?.unit ?? 'lb',
+          weight: Value(template?.weight),
+          reps: Value(template?.reps),
+          rir: Value(template?.rir),
+          rawSetString: Value(template?.rawSetString),
+          createdAt: unixMsNow(),
+        ),
+      );
+      return nextSetIndex;
+    });
+  }
+
+  Future<bool> removePlanPrescribedStrengthSetForDate({
+    required String dateYmd,
+    required String exerciseCanonical,
+    required int setIndex,
+  }) async {
+    final planDayId = await _resolvePlanDayIdForDate(dateYmd);
+    if (planDayId == null) {
+      return false;
+    }
+
+    final canonicalExercise = ExerciseNormalizer.normalize(exerciseCanonical);
+    return transaction(() async {
+      final rows = await (select(planPrescribedStrengthSets)
+            ..where((s) => s.planDayId.equals(planDayId))
+            ..where((s) => s.exerciseCanonical.equals(canonicalExercise)))
+          .get();
+      if (rows.length <= 1) {
+        throw StateError('An exercise must keep at least one set.');
+      }
+      final removed = await (delete(planPrescribedStrengthSets)
+            ..where((s) => s.planDayId.equals(planDayId))
+            ..where((s) => s.exerciseCanonical.equals(canonicalExercise))
+            ..where((s) => s.setIndex.equals(setIndex)))
+          .go();
+      return removed > 0;
+    });
   }
 
   Future<RunUpsertOutcome> insertOrUpdateManualRun({
@@ -6920,6 +7003,11 @@ class AppDb extends _$AppDb {
         actualRows: const <ActualStrengthSet>[],
         substitutions: substitutions,
       );
+      final previousPerformance = await _previousExercisePerformance(
+        beforeDateYmd: dateString,
+        exerciseCanonicals:
+            fallbackGroups.map((group) => group.displayExercise),
+      );
       return WorkoutDayDetail(
         date: dateString,
         workoutDay: null,
@@ -6936,6 +7024,7 @@ class AppDb extends _$AppDb {
         ruleTriggers: triggers,
         aiAudits: await _findAiAuditsForDate(dateString),
         runOverrideAudits: const <RunOverrideAuditData>[],
+        previousPerformanceByExercise: previousPerformance,
       );
     }
 
@@ -6998,6 +7087,10 @@ class AppDb extends _$AppDb {
       actualRows: actual,
       substitutions: substitutions,
     );
+    final previousPerformance = await _previousExercisePerformance(
+      beforeDateYmd: dateString,
+      exerciseCanonicals: grouped.map((group) => group.displayExercise),
+    );
 
     return WorkoutDayDetail(
       date: dateString,
@@ -7015,7 +7108,89 @@ class AppDb extends _$AppDb {
       ruleTriggers: triggers,
       aiAudits: await _findAiAuditsForDate(dateString),
       runOverrideAudits: runAudits,
+      previousPerformanceByExercise: previousPerformance,
     );
+  }
+
+  Future<Map<String, PreviousExercisePerformance>>
+      _previousExercisePerformance({
+    required String beforeDateYmd,
+    required Iterable<String> exerciseCanonicals,
+  }) async {
+    final targets =
+        exerciseCanonicals.map(ExerciseNormalizer.normalize).toSet();
+    if (targets.isEmpty) {
+      return const <String, PreviousExercisePerformance>{};
+    }
+
+    final priorDays = await (select(workoutDays)
+          ..where((day) => day.workoutDate.isSmallerThanValue(beforeDateYmd))
+          ..orderBy([
+            (day) => OrderingTerm.desc(day.workoutDate),
+          ]))
+        .get();
+    if (priorDays.isEmpty) {
+      return const <String, PreviousExercisePerformance>{};
+    }
+
+    final dateByDayId = <String, String>{
+      for (final day in priorDays) day.id: day.workoutDate,
+    };
+    final rows = await (select(actualStrengthSets)
+          ..where((set) => set.workoutDayId.isIn(dateByDayId.keys))
+          ..orderBy([
+            (set) => OrderingTerm.desc(set.setIndex),
+            (set) => OrderingTerm.desc(set.createdAt),
+          ]))
+        .get();
+
+    final currentWeekStart = parseYmd(_startOfWeekYmd(beforeDateYmd));
+    final previousWeekStart = toYmd(
+      currentWeekStart.subtract(const Duration(days: 7)),
+    );
+    final previousWeekEnd = toYmd(
+      currentWeekStart.subtract(const Duration(days: 1)),
+    );
+    final byExerciseAndDate = <String, Map<String, ActualStrengthSet>>{};
+    for (final row in rows) {
+      final exercise = ExerciseNormalizer.normalize(row.exerciseCanonical);
+      final workoutDate = dateByDayId[row.workoutDayId];
+      if (!targets.contains(exercise) ||
+          workoutDate == null ||
+          (row.reps ?? 0) <= 0) {
+        continue;
+      }
+      byExerciseAndDate
+          .putIfAbsent(exercise, () => <String, ActualStrengthSet>{})
+          .putIfAbsent(workoutDate, () => row);
+    }
+
+    final result = <String, PreviousExercisePerformance>{};
+    for (final exercise in targets) {
+      final byDate = byExerciseAndDate[exercise];
+      if (byDate == null || byDate.isEmpty) {
+        continue;
+      }
+      final dates = byDate.keys.toList()..sort((a, b) => b.compareTo(a));
+      final previousWeekDates = dates
+          .where(
+            (date) =>
+                date.compareTo(previousWeekStart) >= 0 &&
+                date.compareTo(previousWeekEnd) <= 0,
+          )
+          .toList();
+      final selectedDate =
+          previousWeekDates.isNotEmpty ? previousWeekDates.first : dates.first;
+      final selectedSet = byDate[selectedDate]!;
+      result[exercise] = PreviousExercisePerformance(
+        workoutDate: selectedDate,
+        setIndex: selectedSet.setIndex,
+        weight: selectedSet.weight,
+        reps: selectedSet.reps,
+        unit: selectedSet.unit,
+      );
+    }
+    return result;
   }
 
   Future<List<AiAuditData>> _findAiAuditsForDate(String dateString) async {
