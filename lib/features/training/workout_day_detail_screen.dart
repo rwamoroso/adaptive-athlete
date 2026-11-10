@@ -666,6 +666,53 @@ class _WorkoutDayDetailScreenState
         : value.toStringAsFixed(1);
   }
 
+  String _performanceComparisonText(
+    _EditableSetState current,
+    PreviousExercisePerformance? previous,
+  ) {
+    if (previous == null) {
+      return 'Complete this set to establish your baseline.';
+    }
+    final currentWeight = current.weight;
+    final previousWeight = previous.weight;
+    final currentReps = current.reps;
+    final previousReps = previous.reps;
+    if (currentWeight != null && previousWeight != null) {
+      final weightDelta = currentWeight - previousWeight;
+      if (weightDelta > 0) {
+        return 'You’re aiming ${_formatHistoricalWeight(weightDelta)} ${previous.unit} above last time.';
+      }
+      if (weightDelta == 0 &&
+          currentReps != null &&
+          previousReps != null &&
+          currentReps > previousReps) {
+        final repDelta = currentReps - previousReps;
+        return 'You’re aiming for $repDelta more rep${repDelta == 1 ? '' : 's'} at the same weight.';
+      }
+      if (weightDelta == 0 && currentReps == previousReps) {
+        return 'Match this set to repeat your last performance.';
+      }
+    }
+    return 'Use your last set as a reference and adjust for how you feel today.';
+  }
+
+  bool _improvedOnPrevious(
+    ActualStrengthSet actual,
+    PreviousExercisePerformance previous,
+  ) {
+    final actualWeight = actual.weight;
+    final previousWeight = previous.weight;
+    if (actualWeight != null && previousWeight != null) {
+      if (actualWeight > previousWeight) return true;
+      if (actualWeight == previousWeight &&
+          actual.reps != null &&
+          previous.reps != null) {
+        return actual.reps! > previous.reps!;
+      }
+    }
+    return false;
+  }
+
   int _resolveRestSecondsForSet({
     required ExerciseSetGroup group,
     required PlannedStrengthSetView set,
@@ -1042,6 +1089,23 @@ class _WorkoutDayDetailScreenState
     }
 
     if (active == null) {
+      final completedSets = detail.groups
+          .expand((group) => group.actual)
+          .where((set) => set.source != 'manual_skip')
+          .toList(growable: false);
+      final totalVolume = completedSets.fold<double>(
+        0,
+        (sum, set) => sum + ((set.weight ?? 0) * (set.reps ?? 0)),
+      );
+      final improvedExercises = detail.groups.where((group) {
+        final previous = detail.previousPerformanceByExercise[
+            ExerciseNormalizer.normalize(group.displayExercise)];
+        if (previous == null) return false;
+        return group.actual.any(
+          (set) =>
+              set.source != 'manual_skip' && _improvedOnPrevious(set, previous),
+        );
+      }).length;
       return ListView(
         padding: const EdgeInsets.fromLTRB(16, 24, 16, 120),
         children: [
@@ -1064,6 +1128,56 @@ class _WorkoutDayDetailScreenState
             '$completed of ${targets.length} sets logged',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 20),
+          GlassCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Today’s win',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _WorkoutRecapMetric(
+                        value: '${completedSets.length}',
+                        label: 'sets completed',
+                      ),
+                    ),
+                    Expanded(
+                      child: _WorkoutRecapMetric(
+                        value: _formatHistoricalWeight(totalVolume),
+                        label: 'total training volume',
+                      ),
+                    ),
+                  ],
+                ),
+                if (improvedExercises > 0) ...[
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.trending_up_rounded,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'You improved on your previous performance in $improvedExercises exercise${improvedExercises == 1 ? '' : 's'}.',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
@@ -1212,6 +1326,15 @@ class _WorkoutDayDetailScreenState
             ],
           ),
         ),
+        const SizedBox(height: 8),
+        Text(
+          _performanceComparisonText(edited, previousPerformance),
+          key: ValueKey('focused-comparison-${group.exercise}'),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+        ),
         const SizedBox(height: 16),
         GlassCard(
           padding: const EdgeInsets.all(16),
@@ -1225,11 +1348,13 @@ class _WorkoutDayDetailScreenState
                 onChanged: (value) {
                   final current = _editedByKey[key];
                   if (current != null) {
-                    _editedByKey[key] = _EditableSetState(
-                      weight: value,
-                      reps: current.reps,
-                      rir: current.rir,
-                    );
+                    setState(() {
+                      _editedByKey[key] = _EditableSetState(
+                        weight: value,
+                        reps: current.reps,
+                        rir: current.rir,
+                      );
+                    });
                   }
                 },
               ),
@@ -1244,11 +1369,13 @@ class _WorkoutDayDetailScreenState
                       onChanged: (value) {
                         final current = _editedByKey[key];
                         if (current != null) {
-                          _editedByKey[key] = _EditableSetState(
-                            weight: current.weight,
-                            reps: value?.round(),
-                            rir: current.rir,
-                          );
+                          setState(() {
+                            _editedByKey[key] = _EditableSetState(
+                              weight: current.weight,
+                              reps: value?.round(),
+                              rir: current.rir,
+                            );
+                          });
                         }
                       },
                     ),
@@ -1262,11 +1389,13 @@ class _WorkoutDayDetailScreenState
                       onChanged: (value) {
                         final current = _editedByKey[key];
                         if (current != null) {
-                          _editedByKey[key] = _EditableSetState(
-                            weight: current.weight,
-                            reps: current.reps,
-                            rir: value?.round(),
-                          );
+                          setState(() {
+                            _editedByKey[key] = _EditableSetState(
+                              weight: current.weight,
+                              reps: current.reps,
+                              rir: value?.round(),
+                            );
+                          });
                         }
                       },
                     ),
@@ -2056,6 +2185,32 @@ class _FocusedSetTarget {
   final ExerciseSetGroup group;
   final PlannedStrengthSetView prescribed;
   final ActualStrengthSet? actual;
+}
+
+class _WorkoutRecapMetric extends StatelessWidget {
+  const _WorkoutRecapMetric({
+    required this.value,
+    required this.label,
+  });
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+        ),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    );
+  }
 }
 
 class _FocusedNumberField extends StatelessWidget {

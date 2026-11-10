@@ -8,6 +8,7 @@ import '../../core/utils/app_providers.dart';
 import '../../core/utils/date_utils.dart';
 import '../ui/clinical_widgets.dart';
 import 'cardio_activity.dart';
+import 'weekly_consistency.dart';
 import 'workout_day_detail_screen.dart';
 
 class HistoryScreen extends ConsumerStatefulWidget {
@@ -28,6 +29,16 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final last7Start = today.subtract(const Duration(days: 6));
     final previous7Start = today.subtract(const Duration(days: 13));
     final last30Start = today.subtract(const Duration(days: 29));
+    final currentWeekStart = DateTime(
+      today.year,
+      today.month,
+      today.day - (today.weekday - 1),
+    );
+    final streakWindowStart = DateTime(
+      currentWeekStart.year,
+      currentWeekStart.month,
+      currentWeekStart.day - (7 * 11),
+    );
 
     final allDays = await workoutDao.listDays();
     final recentDays = allDays
@@ -46,23 +57,58 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       order by estimated_date
       ''',
       variables: [
-        Variable.withString(toYmd(previous7Start)),
+        Variable.withString(toYmd(streakWindowStart)),
         Variable.withString(toYmd(today)),
       ],
     ).get();
     final plannedDates = <String>{};
     final previousPlannedDates = <String>{};
+    final streakPlannedDates = <String>{};
     for (final row in planRows) {
       final date = row.data['estimated_date']?.toString();
       final session = row.data['session_type']?.toString().toLowerCase() ?? '';
       if (date != null && date.isNotEmpty && !session.contains('rest')) {
+        streakPlannedDates.add(date);
         if (date.compareTo(toYmd(last7Start)) >= 0) {
           plannedDates.add(date);
-        } else {
+        } else if (date.compareTo(toYmd(previous7Start)) >= 0) {
           previousPlannedDates.add(date);
         }
       }
     }
+
+    final completedDateRows = await db.customSelect(
+      '''
+      select distinct wd.workout_date
+      from workout_days wd
+      where wd.workout_date >= ? and wd.workout_date <= ?
+        and (
+          exists (
+            select 1 from actual_strength_sets sets
+            where sets.workout_day_id = wd.id
+              and sets.source != 'manual_skip'
+              and coalesce(sets.reps, 0) > 0
+          )
+          or exists (
+            select 1 from run_sessions runs
+            where runs.workout_day_id = wd.id
+          )
+        )
+      ''',
+      variables: [
+        Variable.withString(toYmd(streakWindowStart)),
+        Variable.withString(toYmd(today)),
+      ],
+    ).get();
+    final streakCompletedDates = completedDateRows
+        .map((row) => row.data['workout_date']?.toString())
+        .whereType<String>()
+        .toSet();
+    final weeklyConsistencyStreak = calculateWeeklyConsistencyStreak(
+      today: today,
+      plannedDates: streakPlannedDates,
+      completedDates: streakCompletedDates,
+    );
 
     final sleepRows = await db.customSelect(
       '''
@@ -166,6 +212,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       sessionsPrevious7: previous7Completed,
       adherence: adherence,
       previousAdherence: previousAdherence,
+      weeklyConsistencyStreak: weeklyConsistencyStreak,
       plannedDates: plannedDates,
       completedDates: completedDates,
       cardioSessions30: cardioSessions30,
@@ -270,6 +317,41 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     const SectionHeader(text: 'Last 7 Days'),
                     const SizedBox(height: 8),
                     _ConsistencyCard(progress: progress),
+                    if (progress.weeklyConsistencyStreak > 0) ...[
+                      const SizedBox(height: 12),
+                      GlassCard(
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.local_fire_department_rounded,
+                              color: Theme.of(context).colorScheme.primary,
+                              size: 32,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${progress.weeklyConsistencyStreak} week consistency streak',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w800),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'You completed every scheduled session due in ${progress.weeklyConsistencyStreak == 1 ? 'this training week' : 'each of those training weeks'}.',
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     GlassCard(
                       child: Row(
@@ -595,6 +677,7 @@ class _ProgressSnapshot {
     required this.sessionsPrevious7,
     required this.adherence,
     required this.previousAdherence,
+    required this.weeklyConsistencyStreak,
     required this.plannedDates,
     required this.completedDates,
     required this.cardioSessions30,
@@ -614,6 +697,7 @@ class _ProgressSnapshot {
   final int sessionsPrevious7;
   final double? adherence;
   final double? previousAdherence;
+  final int weeklyConsistencyStreak;
   final Set<String> plannedDates;
   final Set<String> completedDates;
   final int cardioSessions30;

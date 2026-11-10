@@ -71,6 +71,18 @@ void main() {
     const ymd = '2026-10-29';
     final db = await _focusedWorkoutDb(ymd);
     addTearDown(db.close);
+    final previousDayId = await db.createOrGetWorkoutDayByDate('2026-10-22');
+    await db.insertActualStrengthSet(
+      workoutDayId: previousDayId,
+      exercise: 'Bench Press',
+      setIndex: 1,
+      weight: 180,
+      reps: 8,
+      rir: 2,
+      unit: 'lb',
+      source: 'test',
+      rawSetString: '180x8r2',
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [appDbProvider.overrideWithValue(db)],
@@ -82,21 +94,35 @@ void main() {
 
     await _pumpUntil(tester, find.text('Workout in progress'));
     expect(find.text('Bench Press'), findsOneWidget);
+    expect(find.text('You’re aiming 5 lb above last time.'), findsOneWidget);
     final fields = find.byType(TextFormField);
     expect(fields, findsNWidgets(3));
     await tester.enterText(fields.at(0), '190');
     await tester.enterText(fields.at(1), '9');
     await tester.enterText(fields.at(2), '1');
+    expect(find.text('You’re aiming 10 lb above last time.'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Complete Set'));
     await _pumpUntil(tester, find.text('Workout complete'));
+    expect(find.text('Today’s win'), findsOneWidget);
+    expect(
+      find.text(
+        'You improved on your previous performance in 1 exercise.',
+      ),
+      findsOneWidget,
+    );
 
-    final logged = await db.select(db.actualStrengthSets).getSingle();
+    final logged = (await (db.select(db.actualStrengthSets)
+              ..where((set) => set.workoutDayId.isNotValue(previousDayId)))
+            .get())
+        .single;
     expect(logged.weight, 190);
     expect(logged.reps, 9);
     expect(logged.rir, 1);
 
     await tester.tap(find.widgetWithText(OutlinedButton, 'Undo Last Set'));
     await _pumpUntil(tester, find.text('Workout in progress'));
-    expect(await db.select(db.actualStrengthSets).get(), isEmpty);
+    final remaining = await db.select(db.actualStrengthSets).get();
+    expect(remaining, hasLength(1));
+    expect(remaining.single.workoutDayId, previousDayId);
   });
 }
