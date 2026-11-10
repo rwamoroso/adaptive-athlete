@@ -1098,6 +1098,9 @@ class _WorkoutDayDetailScreenState
         .where((target) => target.group.exercise == group.exercise)
         .toList(growable: false);
     final groupPosition = groupTargets.indexOf(active) + 1;
+    final previousPerformance = detail.previousPerformanceByExercise[
+        ExerciseNormalizer.normalize(group.displayExercise)];
+    final addingSet = _editingSetExercises.contains(group.exercise);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
@@ -1154,6 +1157,60 @@ class _WorkoutDayDetailScreenState
         Text(
           'Set $groupPosition of ${groupTargets.length}',
           style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            key: ValueKey('focused-add-set-${group.exercise}'),
+            onPressed: addingSet ? null : () => _addSet(group.exercise),
+            icon: const Icon(Icons.add),
+            label: Text(addingSet ? 'Adding Set...' : 'Add Set'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          key: ValueKey('focused-last-set-${group.exercise}'),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest
+                .withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.history),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'LAST SET',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                          ),
+                    ),
+                    Text(
+                      previousPerformance == null
+                          ? 'No previous performance'
+                          : '${_formatHistoricalWeight(previousPerformance.weight)} ${previousPerformance.unit} × ${previousPerformance.reps} reps',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    if (previousPerformance != null)
+                      Text(
+                        '${previousPerformance.workoutDate} • set ${previousPerformance.setIndex}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         GlassCard(
